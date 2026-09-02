@@ -12,6 +12,7 @@ from app.models.ops import ForestJob, MonitoredArea, Notification, AuditLog, Que
 from app.models.risk import RiskSignal, RiskScore, RiskHistory, Alert, Incident, IncidentEvidence, AgentRun, AgentResult, CarbonRecord, CarbonModel, RankingSnapshot, Achievement, TrustScore
 from app.models.farm import Farmer, Farm, Plot, ProcessingFacility, ProductionLot, CollectionPoint, Warehouse, Vehicle, Route, Trip, CarbonInventory
 from app.models.predictive import Forecast, Simulation, ModelMetric, Contributor, EarlyWarning
+from app.models.phase7 import Plan, PlanTask, Mission, LearningRecord, Approval, ModelRegistryEntry, AgentConflictRecord
 
 __all__ = [
     "AdministrativeUnit",
@@ -35,4 +36,5 @@ __all__ = [
     "RiskSignal","RiskScore","RiskHistory","Alert","Incident","IncidentEvidence","AgentRun","AgentResult","CarbonRecord","CarbonModel","RankingSnapshot","Achievement","TrustScore",
     "Farmer","Farm","Plot","ProcessingFacility","ProductionLot","CollectionPoint","Warehouse","Vehicle","Route","Trip","CarbonInventory",
     "Forecast","Simulation","ModelMetric","Contributor","EarlyWarning",
+    "Plan","PlanTask","Mission","LearningRecord","Approval","ModelRegistryEntry","AgentConflictRecord",
 ]

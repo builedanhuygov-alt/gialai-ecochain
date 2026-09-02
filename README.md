@@ -1,6 +1,6 @@
-# ECOGL 2.0 — Phase 6 Predictive Digital Twin + Climate Intelligence
+# ECOGL 3.0 — Phase 7 Autonomous Eco-Operating System
 
-Phase1-5 + Predictive (24h/7d/30d), Digital Twin, What-if Simulation, Investment Prioritization. Đã pass 13 tests (Phase1 8 + Phase2-6 5).
+Phase1-6 + Master Agent, Planning DAG, Event Bus, Approval Gate, Mission System. Đã pass 14 tests (Phase1 8 + Phase2-7 6).
 
 ## Architecture (Section 23)
 
