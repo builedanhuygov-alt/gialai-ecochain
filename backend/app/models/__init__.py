@@ -13,6 +13,7 @@ from app.models.risk import RiskSignal, RiskScore, RiskHistory, Alert, Incident,
 from app.models.farm import Farmer, Farm, Plot, ProcessingFacility, ProductionLot, CollectionPoint, Warehouse, Vehicle, Route, Trip, CarbonInventory
 from app.models.predictive import Forecast, Simulation, ModelMetric, Contributor, EarlyWarning
 from app.models.phase7 import Plan, PlanTask, Mission, LearningRecord, Approval, ModelRegistryEntry, AgentConflictRecord
+from app.models.data_fabric import DataSource, DataProvenanceRecord, DataLineageRecord, DataQualityRecord, DataConflictRecord
 
 __all__ = [
     "AdministrativeUnit",
@@ -37,4 +38,5 @@ __all__ = [
     "Farmer","Farm","Plot","ProcessingFacility","ProductionLot","CollectionPoint","Warehouse","Vehicle","Route","Trip","CarbonInventory",
     "Forecast","Simulation","ModelMetric","Contributor","EarlyWarning",
     "Plan","PlanTask","Mission","LearningRecord","Approval","ModelRegistryEntry","AgentConflictRecord",
+    "DataSource","DataProvenanceRecord","DataLineageRecord","DataQualityRecord","DataConflictRecord",
 ]

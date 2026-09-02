@@ -84,6 +84,7 @@ def create_app() -> FastAPI:
     from app.api.routes.phase5 import router as phase5_router
     from app.api.routes.p6 import router as p6_router
     from app.api.routes.master import router as master_router
+    from app.api.routes.p8 import router as p8_router
 
     app.include_router(health_router, prefix="/api", tags=["Health"])
     app.include_router(admin_router, prefix="/api", tags=["Administrative"])
@@ -95,6 +96,7 @@ def create_app() -> FastAPI:
     app.include_router(phase5_router, prefix="/api", tags=["Phase5"])
     app.include_router(p6_router, prefix="/api", tags=["Phase6"])
     app.include_router(master_router, prefix="/api", tags=["Master"])
+    app.include_router(p8_router, prefix="/api", tags=["Phase8"])
 
     @app.get("/")
     def root():

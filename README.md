@@ -1,6 +1,6 @@
-# ECOGL 3.0 — Phase 7 Autonomous Eco-Operating System
+# ECOGL 4.0 — Phase 8 Provincial Eco Intelligence Network
 
-Phase1-6 + Master Agent, Planning DAG, Event Bus, Approval Gate, Mission System. Đã pass 14 tests (Phase1 8 + Phase2-7 6).
+Phase1-7 + Data Fabric, Knowledge Graph, Event Stream, Incident Fusion, Open Data. Đã pass 15 tests (Phase1 8 + Phase2-8 7).
 
 ## Architecture (Section 23)
 
