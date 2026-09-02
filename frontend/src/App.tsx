@@ -1,8 +1,11 @@
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { AnimatePresence, MotionConfig } from 'framer-motion'
 import AppShell from './components/AppShell'
-import Dashboard from './pages/Dashboard'
+import EcoMap from './pages/EcoMap'
 import MapPage from './pages/MapPage'
+import EventIntelligence, { EventsList } from './pages/EventIntelligence'
+import WhatIfLab from './pages/WhatIfLab'
+import Missions from './pages/Missions'
 import Forest from './pages/Forest'
 import Disaster from './pages/Disaster'
 import Agriculture from './pages/Agriculture'
@@ -61,7 +64,12 @@ function AnimatedRoutes(){
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
-        <Route path="/" element={<PageTransition><Dashboard/></PageTransition>} />
+        <Route path="/" element={<PageTransition><EcoMap/></PageTransition>} />
+        <Route path="/events" element={<PageTransition><EventsList/></PageTransition>} />
+        <Route path="/events/:id" element={<PageTransition><EventIntelligence/></PageTransition>} />
+        <Route path="/what-if" element={<PageTransition><WhatIfLab/></PageTransition>} />
+        <Route path="/missions" element={<PageTransition><Missions/></PageTransition>} />
+        {/* Legacy intelligence kept as hidden capabilities, not primary nav */}
         <Route path="/map" element={<PageTransition><MapPage/></PageTransition>} />
         <Route path="/forest" element={<PageTransition><Forest/></PageTransition>} />
         <Route path="/disaster" element={<PageTransition><Disaster/></PageTransition>} />

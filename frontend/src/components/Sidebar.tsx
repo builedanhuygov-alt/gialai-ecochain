@@ -1,30 +1,16 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Map, Trees, Flame, Sprout, Leaf, FileCheck, Truck, Layers, Users, Trophy, FileText, Bell, ShieldCheck, Settings, HelpCircle, X } from 'lucide-react'
+import { Map, Flame, FileCheck, Truck, Layers, Users, Settings, HelpCircle, X } from 'lucide-react'
 
 const groups = [
-  { label:'TỔNG QUAN', items:[
-    { to:'/', label:'Tổng quan', icon: LayoutDashboard },
-    { to:'/map', label:'Bản đồ trực tiếp', icon: Map },
+  { label:'CHÍNH', items:[
+    { to:'/', label:'Eco Map', icon: Map },
+    { to:'/events', label:'Event Intelligence', icon: Flame },
+    { to:'/what-if', label:'What-if Lab', icon: Layers },
+    { to:'/missions', label:'Missions', icon: FileCheck },
   ]},
-  { label:'TRÍ TUỆ', items:[
-    { to:'/forest', label:'AI Rừng', icon: Trees },
-    { to:'/disaster', label:'AI Thiên tai', icon: Flame },
-    { to:'/agriculture', label:'AI Nông nghiệp', icon: Sprout },
-    { to:'/carbon', label:'Carbon', icon: Leaf },
-    { to:'/eudr', label:'EUDR', icon: FileCheck },
-    { to:'/logistics', label:'Logistics Xanh', icon: Truck },
-  ]},
-  { label:'QUẢN TRỊ', items:[
-    { to:'/twin', label:'Bản sao số', icon: Layers },
-    { to:'/actions', label:'Trung tâm hành động', icon: ShieldCheck },
+  { label:'', items:[
     { to:'/community', label:'Cộng đồng', icon: Users },
-    { to:'/leaderboard', label:'Bảng xếp hạng', icon: Trophy },
-    { to:'/reports', label:'Báo cáo', icon: FileText },
-  ]},
-  { label:'HỆ THỐNG', items:[
-    { to:'/notifications', label:'Thông báo', icon: Bell },
-    { to:'/admin', label:'Quản trị', icon: Settings },
-    { to:'/audit', label:'Nhật ký', icon: FileText },
+    { to:'/twin', label:'Bản sao số', icon: Truck },
   ]},
 ]
 
