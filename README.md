@@ -1,8 +1,8 @@
-# EcoGL 1.0 — AI Environmental & Resilience Governance Platform
+# GIALAI EcoChain 1.0 — AI Environmental & Resilience Governance Platform
 
 > **Provincial Eco-Operating System for Gia Lai** — Observe → Analyze → Predict → Plan → Recommend → Human Approve → Execute → Monitor → Learn
 
-EcoGL is a production-grade GovTech platform that fuses **satellite (Sentinel-2/Landsat via Google Earth Engine), weather, GIS, community intelligence and logistics data** into a unified **Digital Twin** of Gia Lai, orchestrated by a society of specialized AI Agents and governed by a three-tier verification pipeline **AI → Community → Official**.
+GIALAI EcoChain (tiền thân EcoGL) là nền tảng GovTech cấp tỉnh hợp nhất **vệ tinh (Sentinel-2/Landsat qua GEE), thời tiết, GIS, trí tuệ cộng đồng và logistics** thành **Digital Twin** Gia Lai, điều phối bởi hệ AI Agent và quản trị 3 lớp **AI → Cộng đồng → Chính thức**.
 
 **Status:** `v1.0.0` — Final Release — 16/16 tests PASS — Frontend `dist` builds — Backend boots in Demo/Mock mode without GEE credentials.
 

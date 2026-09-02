@@ -42,8 +42,8 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     s = get_settings()
     app = FastAPI(
-        title="ECOGL API",
-        description="ECOGL 1.0 — Final Release — Provincial Eco-Operating System (Fail-safe: AI down → verified data still works)",
+        title="GIALAI EcoChain API",
+        description="GIALAI EcoChain 1.0 — Final Release — Provincial Eco-Operating System (Fail-safe: AI down → verified data still works)",
         version="1.0.0",
         lifespan=lifespan,
     )
@@ -103,7 +103,7 @@ def create_app() -> FastAPI:
     @app.get("/")
     def root():
         return {
-            "name": "ECOGL",
+            "name": "GIALAI EcoChain",
             "version": "1.0.0",
             "docs": "/docs",
             "health": "/api/health",

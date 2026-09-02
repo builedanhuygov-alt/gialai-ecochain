@@ -10,9 +10,12 @@ export default function Dashboard() {
   return (
     <div className="dash">
       <div className="welcome">
-        <div>
-          <h1>EcoGL — Trí tuệ Môi trường Gia Lai</h1>
-          <p>Hiện trạng · Rủi ro ở đâu? · Vì sao? · Cần làm gì?</p>
+        <div style={{display:'flex', gap:12, alignItems:'center'}}>
+          <img src="/logo.svg" alt="GIALAI EcoChain" style={{width:48, height:48, borderRadius:12}} />
+          <div>
+            <h1>GIALAI EcoChain — Trí tuệ Môi trường Gia Lai</h1>
+            <p>Hiện trạng · Rủi ro ở đâu? · Vì sao? · Cần làm gì?</p>
+          </div>
         </div>
         <span className="demo-badge">DỮ LIỆU DEMO</span>
       </div>

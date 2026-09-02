@@ -33,10 +33,10 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
     <>
       <aside className={`sidebar ${mobileOpen?'open':''}`}>
         <div className="brand">
-          <div className="logo">E</div>
+          <img src="/logo.svg" alt="GIALAI EcoChain" className="logo-img" />
           <div>
-            <div className="brand-title">ECOGL</div>
-            <div className="brand-sub">TRÍ TUỆ MÔI TRƯỜNG AI</div>
+            <div className="brand-title">GIALAI</div>
+            <div className="brand-sub">EcoChain</div>
           </div>
           <button className="close" onClick={onClose} aria-label="Close"><X size={18}/></button>
         </div>
@@ -68,6 +68,7 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
         .sidebar{ width:268px; background:#0B1412; color:#D1D5DB; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; flex-shrink:0; border-right:1px solid #1E3A36; overflow:auto; }
         .brand{ display:flex; gap:12px; align-items:center; padding:18px 16px; border-bottom:1px solid #1E3A36; }
         .logo{ width:36px; height:36px; border-radius:10px; background:#0F766E; color:#fff; display:grid; place-items:center; font-weight:800; letter-spacing:0.5px; }
+        .logo-img{ width:40px; height:40px; border-radius:10px; object-fit:contain; }
         .brand-title{ font-weight:800; color:#fff; font-size:15px; letter-spacing:0.8px; }
         .brand-sub{ font-size:10px; letter-spacing:0.6px; color:#94A3B8; }
         .close{ display:none; margin-left:auto; background:transparent; color:#fff; border:0; }
