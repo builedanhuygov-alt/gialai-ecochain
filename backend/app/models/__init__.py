@@ -11,6 +11,7 @@ from app.models.community import CommunityConfirmation, PhotoEvidence, FieldVeri
 from app.models.ops import ForestJob, MonitoredArea, Notification, AuditLog, QueryCacheEntry, QuotaLog
 from app.models.risk import RiskSignal, RiskScore, RiskHistory, Alert, Incident, IncidentEvidence, AgentRun, AgentResult, CarbonRecord, CarbonModel, RankingSnapshot, Achievement, TrustScore
 from app.models.farm import Farmer, Farm, Plot, ProcessingFacility, ProductionLot, CollectionPoint, Warehouse, Vehicle, Route, Trip, CarbonInventory
+from app.models.predictive import Forecast, Simulation, ModelMetric, Contributor, EarlyWarning
 
 __all__ = [
     "AdministrativeUnit",
@@ -33,4 +34,5 @@ __all__ = [
     "QuotaLog",
     "RiskSignal","RiskScore","RiskHistory","Alert","Incident","IncidentEvidence","AgentRun","AgentResult","CarbonRecord","CarbonModel","RankingSnapshot","Achievement","TrustScore",
     "Farmer","Farm","Plot","ProcessingFacility","ProductionLot","CollectionPoint","Warehouse","Vehicle","Route","Trip","CarbonInventory",
+    "Forecast","Simulation","ModelMetric","Contributor","EarlyWarning",
 ]

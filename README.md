@@ -1,6 +1,6 @@
-# ECOGL 1.0 — Phase 5 AI Orchestration + Production (Provincial Digital Eco System)
+# ECOGL 2.0 — Phase 6 Predictive Digital Twin + Climate Intelligence
 
-Phase1-4 + Orchestrator, Media, Public Portal, NL Assistant, Kill Switch, Fail-safe. Đã pass 12 tests (Phase1 8 + Phase2 1 + Phase3 1 + Phase4 1 + Phase5 1).
+Phase1-5 + Predictive (24h/7d/30d), Digital Twin, What-if Simulation, Investment Prioritization. Đã pass 13 tests (Phase1 8 + Phase2-6 5).
 
 ## Architecture (Section 23)
 
