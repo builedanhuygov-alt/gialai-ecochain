@@ -11,25 +11,25 @@ export default function Header({ onMenu }: { onMenu: ()=>void }) {
 
       <div className="scope">
         <select value={scope.commune||''} onChange={e=> setCommune(e.target.value||undefined)}>
-          <option value="">Gia Lai Province</option>
+          <option value="">Tỉnh Gia Lai</option>
           {communes.map(c=> <option key={c} value={c}>{c}</option>)}
         </select>
         {scope.commune && (
           <select value={scope.village||''} onChange={e=> setVillage(e.target.value||undefined)}>
-            <option value="">All villages</option>
+            <option value="">Tất cả thôn</option>
             {villages.map(v=> <option key={v} value={v}>{v}</option>)}
           </select>
         )}
-        <span className="scope-badge">{scope.role.toUpperCase()}</span>
+        <span className="scope-badge">{scope.role==='province'?'TỈNH':scope.role==='commune'?'XÃ':'THÔN'}</span>
       </div>
 
       <div className="header-right">
-        <span className="status"><span className="dot"/> Systems Operational</span>
-        <span className="meta">Data updated: 2 min ago</span>
-        <button className={`demo ${demo?'on':''}`} onClick={toggle} title="Demo Mode">{demo?'DEMO':'LIVE'}</button>
-        <button className="icon-btn" aria-label="Notifications"><Bell size={18}/> <span className="badge">3</span></button>
-        <button className="assistant"><Bot size={16}/> AI Assistant</button>
-        <div className="user">Admin</div>
+        <span className="status"><span className="dot"/> Hệ thống hoạt động</span>
+        <span className="meta">Cập nhật: 2 phút trước</span>
+        <button className={`demo ${demo?'on':''}`} onClick={toggle} title="Chế độ Demo">{demo?'DEMO':'THỰC'}</button>
+        <button className="icon-btn" aria-label="Thông báo"><Bell size={18}/> <span className="badge">3</span></button>
+        <button className="assistant"><Bot size={16}/> Trợ lý AI</button>
+        <div className="user">QT</div>
       </div>
 
       <style>{`

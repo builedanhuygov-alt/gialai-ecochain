@@ -10,10 +10,10 @@ export default function Dashboard() {
     <div className="dash">
       <div className="welcome">
         <div>
-          <h1>EcoGL — Gia Lai Environmental Intelligence</h1>
-          <p>Current State · Where is the risk? · Why is it happening? · What should we do?</p>
+          <h1>EcoGL — Trí tuệ Môi trường Gia Lai</h1>
+          <p>Hiện trạng · Rủi ro ở đâu? · Vì sao? · Cần làm gì?</p>
         </div>
-        <span className="demo-badge">DEMO DATA</span>
+        <span className="demo-badge">DỮ LIỆU DEMO</span>
       </div>
 
       <div className="kpi-grid">
@@ -28,15 +28,15 @@ export default function Dashboard() {
 
       {selected && (
         <div className="panel">
-          <h3>Xã A — EcoGL Score 72/100</h3>
+          <h3>Xã A — Điểm EcoGL 72/100</h3>
           <div className="panel-grid">
-            <div>Risk HIGH</div><div>Forest 81%</div><div>Incidents 4</div><div>AI Confidence 89%</div>
+            <div>Rủi ro CAO</div><div>Rừng 81%</div><div>Sự cố 4</div><div>AI tin cậy 89%</div>
           </div>
           <div className="panel-actions">
-            <button className="btn primary">View Details</button>
-            <button className="btn">Run AI Analysis</button>
-            <button className="btn">View Scenario</button>
-            <button className="btn">Create Task</button>
+            <button className="btn primary">Xem chi tiết</button>
+            <button className="btn">Chạy phân tích AI</button>
+            <button className="btn">Xem kịch bản</button>
+            <button className="btn">Tạo nhiệm vụ</button>
           </div>
         </div>
       )}
@@ -44,14 +44,14 @@ export default function Dashboard() {
       <div className="two-col">
         <AIInsightCard />
         <div className="alerts">
-          <div className="card-title">ALERTS</div>
+          <div className="card-title">CẢNH BÁO</div>
           {mockAlerts.map(a=> <AlertCard key={a.id} {...a} />)}
         </div>
       </div>
 
       <div className="two-col">
         <div className="chart-card">
-          <div className="card-title">Risk Trend</div>
+          <div className="card-title">Xu hướng rủi ro</div>
           <div style={{height:160}}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={[{v:42},{v:51},{v:63},{v:58},{v:71},{v:68}]}>
@@ -61,11 +61,11 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="chart-card">
-          <div className="card-title">Pending Actions</div>
+          <div className="card-title">Việc chờ xử lý</div>
           <ul className="action-list">
-            <li>Verify incident #2026-0012 — Thôn 1</li>
-            <li>Field task — Xã A (HIGH)</li>
-            <li>EUDR review — Lot GL-2026-00001</li>
+            <li>Xác minh sự cố #2026-0012 — Thôn 1</li>
+            <li>Nhiệm vụ thực địa — Xã A (CAO)</li>
+            <li>Rà soát EUDR — Lô GL-2026-00001</li>
           </ul>
         </div>
       </div>

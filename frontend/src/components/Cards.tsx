@@ -30,18 +30,18 @@ export function MetricCard({ label, value, unit, trend, dir, icon }: any) {
 export function AIInsightCard() {
   return (
     <div className="ai-card">
-      <div className="ai-head">AI INSIGHT <span className="conf">Confidence 89%</span></div>
-      <div className="ai-title">Forest fire risk increased in the selected area.</div>
+      <div className="ai-head">GỢI Ý AI <span className="conf">Tin cậy 89%</span></div>
+      <div className="ai-title">Nguy cơ cháy rừng tăng trong khu vực đã chọn.</div>
       <div className="ai-why">
-        <div>Main factors:</div>
+        <div>Nguyên nhân chính:</div>
         <ul>
-          <li>vegetation dryness</li><li>recent temperature trend</li><li>satellite anomaly</li><li>historical incidents</li>
+          <li>khô hạn thực bì</li><li>xu hướng nhiệt độ</li><li>bất thường vệ tinh</li><li>tiền sử sự cố</li>
         </ul>
       </div>
-      <div className="ai-meta">Sources: Sentinel-2 · Weather · Verified reports · 2h ago</div>
+      <div className="ai-meta">Nguồn: Sentinel-2 · Thời tiết · Báo cáo đã xác minh · 2 giờ trước</div>
       <div className="ai-actions">
-        <button className="btn primary">View Evidence</button>
-        <button className="btn ghost">Simulate Scenario</button>
+        <button className="btn primary">Xem bằng chứng</button>
+        <button className="btn ghost">Mô phỏng kịch bản</button>
       </div>
       <style>{`
         .ai-card{ background:#fff; border:1px solid #E2E8E5; border-radius:16px; padding:16px; }

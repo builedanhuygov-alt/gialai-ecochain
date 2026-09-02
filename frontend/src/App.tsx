@@ -21,22 +21,22 @@ function AIAssistant(){
   const [q, setQ] = useState('')
   const [ans, setAns] = useState<string|null>(null)
   const ask = ()=>{
-    if(q.toLowerCase().includes('risk')) setAns('3 communes have elevated fire risk. Highest: Xã A 87/100 Confidence 89% — vegetation dryness, satellite anomaly. Sources: Sentinel-2 · Weather · Verified reports. [Open Map]')
-    else setAns('EcoGL AI analyzed satellite + verified reports · Confidence 82% · 2h ago')
+    if(q.toLowerCase().includes('rủi ro') || q.toLowerCase().includes('risk')) setAns('3 xã có nguy cơ cháy cao. Cao nhất: Xã A 87/100 Tin cậy 89% — khô hạn thực bì, bất thường vệ tinh. Nguồn: Sentinel-2 · Thời tiết · Báo cáo đã xác minh. [Mở bản đồ]')
+    else setAns('EcoGL AI đã phân tích vệ tinh + báo cáo đã xác minh · Tin cậy 82% · 2 giờ trước')
   }
   return (
     <>
-      <button className="fab" onClick={()=> setOpen(true)} aria-label="AI Assistant">🤖</button>
+      <button className="fab" onClick={()=> setOpen(true)} aria-label="Trợ lý AI">🤖</button>
       {open && (
         <div className="ai-drawer" role="dialog" aria-modal="true">
-          <div className="ai-head">EcoGL AI Assistant <button onClick={()=>setOpen(false)}>✕</button></div>
+          <div className="ai-head">Trợ lý AI EcoGL <button onClick={()=>setOpen(false)}>✕</button></div>
           <div className="suggestions">
-            <button onClick={()=>setQ('Highest risk communes')}>Highest risk communes</button>
-            <button onClick={()=>setQ('Forest anomalies')}>Forest anomalies</button>
-            <button onClick={()=>setQ('Logistics optimization')}>Logistics optimization</button>
+            <button onClick={()=>setQ('Xã nào rủi ro cao nhất')}>Xã rủi ro cao nhất</button>
+            <button onClick={()=>setQ('Bất thường rừng')}>Bất thường rừng</button>
+            <button onClick={()=>setQ('Tối ưu logistics')}>Tối ưu logistics</button>
           </div>
-          <textarea value={q} onChange={e=>setQ(e.target.value)} placeholder="Ask about the province..." aria-label="Ask AI" />
-          <button className="ask" onClick={ask}>Ask AI</button>
+          <textarea value={q} onChange={e=>setQ(e.target.value)} placeholder="Hỏi về tỉnh Gia Lai..." aria-label="Hỏi AI" />
+          <button className="ask" onClick={ask}>Hỏi AI</button>
           {ans && <div className="answer">{ans}</div>}
         </div>
       )}

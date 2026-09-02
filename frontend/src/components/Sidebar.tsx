@@ -2,29 +2,29 @@ import { NavLink } from 'react-router-dom'
 import { LayoutDashboard, Map, Trees, Flame, Sprout, Leaf, FileCheck, Truck, Layers, Users, Trophy, FileText, Bell, ShieldCheck, Settings, HelpCircle, X } from 'lucide-react'
 
 const groups = [
-  { label:'OVERVIEW', items:[
-    { to:'/', label:'Dashboard', icon: LayoutDashboard },
-    { to:'/map', label:'Live Map', icon: Map },
+  { label:'TỔNG QUAN', items:[
+    { to:'/', label:'Tổng quan', icon: LayoutDashboard },
+    { to:'/map', label:'Bản đồ trực tiếp', icon: Map },
   ]},
-  { label:'INTELLIGENCE', items:[
-    { to:'/forest', label:'Forest AI', icon: Trees },
-    { to:'/disaster', label:'Disaster AI', icon: Flame },
-    { to:'/agriculture', label:'Agriculture AI', icon: Sprout },
+  { label:'TRÍ TUỆ', items:[
+    { to:'/forest', label:'AI Rừng', icon: Trees },
+    { to:'/disaster', label:'AI Thiên tai', icon: Flame },
+    { to:'/agriculture', label:'AI Nông nghiệp', icon: Sprout },
     { to:'/carbon', label:'Carbon', icon: Leaf },
     { to:'/eudr', label:'EUDR', icon: FileCheck },
-    { to:'/logistics', label:'Green Logistics', icon: Truck },
+    { to:'/logistics', label:'Logistics Xanh', icon: Truck },
   ]},
-  { label:'GOVERNANCE', items:[
-    { to:'/twin', label:'Digital Twin', icon: Layers },
-    { to:'/actions', label:'Action Center', icon: ShieldCheck },
-    { to:'/community', label:'Community', icon: Users },
-    { to:'/leaderboard', label:'Leaderboard', icon: Trophy },
-    { to:'/reports', label:'Reports', icon: FileText },
+  { label:'QUẢN TRỊ', items:[
+    { to:'/twin', label:'Bản sao số', icon: Layers },
+    { to:'/actions', label:'Trung tâm hành động', icon: ShieldCheck },
+    { to:'/community', label:'Cộng đồng', icon: Users },
+    { to:'/leaderboard', label:'Bảng xếp hạng', icon: Trophy },
+    { to:'/reports', label:'Báo cáo', icon: FileText },
   ]},
-  { label:'SYSTEM', items:[
-    { to:'/notifications', label:'Notifications', icon: Bell },
-    { to:'/admin', label:'Administration', icon: Settings },
-    { to:'/audit', label:'Audit Log', icon: FileText },
+  { label:'HỆ THỐNG', items:[
+    { to:'/notifications', label:'Thông báo', icon: Bell },
+    { to:'/admin', label:'Quản trị', icon: Settings },
+    { to:'/audit', label:'Nhật ký', icon: FileText },
   ]},
 ]
 
@@ -36,7 +36,7 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
           <div className="logo">E</div>
           <div>
             <div className="brand-title">ECOGL</div>
-            <div className="brand-sub">AI ENVIRONMENTAL INTELLIGENCE</div>
+            <div className="brand-sub">TRÍ TUỆ MÔI TRƯỜNG AI</div>
           </div>
           <button className="close" onClick={onClose} aria-label="Close"><X size={18}/></button>
         </div>
@@ -58,9 +58,9 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
         </nav>
 
         <div className="sidebar-foot">
-          <a><Settings size={16}/> Settings</a>
-          <a><HelpCircle size={16}/> Help</a>
-          <div className="profile"><div className="avatar">A</div><div><div className="pname">Province Admin</div><div className="prole">Gia Lai</div></div></div>
+          <a><Settings size={16}/> Cài đặt</a>
+          <a><HelpCircle size={16}/> Trợ giúp</a>
+          <div className="profile"><div className="avatar">QT</div><div><div className="pname">Quản trị Tỉnh</div><div className="prole">Gia Lai</div></div></div>
         </div>
       </aside>
       {mobileOpen && <div className="backdrop" onClick={onClose} />}
