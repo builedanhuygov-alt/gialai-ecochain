@@ -1,6 +1,6 @@
-# ECOGL 1.0 — Phase 3 AI Risk Intelligence (Forest + Disaster + Carbon + Ranking)
+# ECOGL 1.0 — Phase 5 AI Orchestration + Production (Provincial Digital Eco System)
 
-Phase 1 Foundation + Phase 2 ForestGuard + Phase 3 Multi-Agent Risk Intelligence. Đã pass 10 tests (Phase1 8 + Phase2 1 + Phase3 1).
+Phase1-4 + Orchestrator, Media, Public Portal, NL Assistant, Kill Switch, Fail-safe. Đã pass 12 tests (Phase1 8 + Phase2 1 + Phase3 1 + Phase4 1 + Phase5 1).
 
 ## Architecture (Section 23)
 

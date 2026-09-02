@@ -21,9 +21,12 @@ def _seeded(administrative_unit_id:str, risk_type:str, extra:str="")->random.Ran
 
 def fire_risk(administrative_unit_id:str, geometry:Dict|None, inputs:Dict[str,Any])->Dict[str,Any]:
     rng=_seeded(administrative_unit_id,"FIRE", str(inputs))
-    ndvi_change=inputs.get("ndvi_change", rng.uniform(-0.2,0.05))
-    temp=inputs.get("temperature", rng.uniform(28,38))
-    rainfall=inputs.get("rainfall", rng.uniform(0,80))
+    ndvi_change=inputs.get("ndvi_change")
+    if ndvi_change is None: ndvi_change= rng.uniform(-0.2,0.05)
+    temp=inputs.get("temperature")
+    if temp is None: temp= rng.uniform(28,38)
+    rainfall=inputs.get("rainfall")
+    if rainfall is None: rainfall= rng.uniform(0,80)
     # heuristic: low rain + high temp + vegetation decline => high risk
     score=int(max(0,min(100, (-ndvi_change*120) + (temp-30)*4 + (30-rainfall)*0.8 + rng.uniform(-5,5))))
     score=max(0,min(100,score))
@@ -38,8 +41,10 @@ def fire_risk(administrative_unit_id:str, geometry:Dict|None, inputs:Dict[str,An
 
 def flood_risk(administrative_unit_id:str, geometry:Dict|None, inputs:Dict[str,Any])->Dict[str,Any]:
     rng=_seeded(administrative_unit_id,"FLOOD", str(inputs))
-    rainfall=inputs.get("rainfall", rng.uniform(0,150))
-    elevation=inputs.get("elevation", rng.uniform(50,800))
+    rainfall=inputs.get("rainfall")
+    if rainfall is None: rainfall=rng.uniform(0,150)
+    elevation=inputs.get("elevation")
+    if elevation is None: elevation=rng.uniform(50,800)
     score=int(max(0,min(100, rainfall*0.6 - elevation*0.02 + rng.uniform(-8,8))))
     conf=int(55 + rng.randint(0,20))
     expl=[]
@@ -51,8 +56,10 @@ def flood_risk(administrative_unit_id:str, geometry:Dict|None, inputs:Dict[str,A
 
 def landslide_risk(administrative_unit_id:str, geometry:Dict|None, inputs:Dict[str,Any])->Dict[str,Any]:
     rng=_seeded(administrative_unit_id,"LANDSLIDE", str(inputs))
-    slope=inputs.get("slope", rng.uniform(0,35))
-    rainfall=inputs.get("rainfall", rng.uniform(0,120))
+    slope=inputs.get("slope")
+    if slope is None: slope=rng.uniform(0,35)
+    rainfall=inputs.get("rainfall")
+    if rainfall is None: rainfall=rng.uniform(0,120)
     score=int(max(0,min(100, slope*1.8 + rainfall*0.3 + rng.uniform(-6,6))))
     expl=[]
     if slope>15: expl.append(f"High slope {slope:.1f}°")
@@ -63,8 +70,10 @@ def landslide_risk(administrative_unit_id:str, geometry:Dict|None, inputs:Dict[s
 
 def drought_risk(administrative_unit_id:str, geometry:Dict|None, inputs:Dict[str,Any])->Dict[str,Any]:
     rng=_seeded(administrative_unit_id,"DROUGHT", str(inputs))
-    ndvi=inputs.get("ndvi", rng.uniform(0.3,0.8))
-    rainfall=inputs.get("rainfall", rng.uniform(0,60))
+    ndvi=inputs.get("ndvi")
+    if ndvi is None: ndvi=rng.uniform(0.3,0.8)
+    rainfall=inputs.get("rainfall")
+    if rainfall is None: rainfall=rng.uniform(0,60)
     score=int(max(0,min(100, (0.7-ndvi)*120 + (40-rainfall)*0.7 + rng.uniform(-5,5))))
     expl=[]
     if ndvi<0.4: expl.append("Vegetation anomaly (low NDVI)")
@@ -73,7 +82,8 @@ def drought_risk(administrative_unit_id:str, geometry:Dict|None, inputs:Dict[str
 
 def heat_risk(administrative_unit_id:str, geometry:Dict|None, inputs:Dict[str,Any])->Dict[str,Any]:
     rng=_seeded(administrative_unit_id,"HEAT", str(inputs))
-    temp=inputs.get("temperature", rng.uniform(30,40))
+    temp=inputs.get("temperature")
+    if temp is None: temp=rng.uniform(30,40)
     score=int(max(0,min(100, (temp-28)*8 + rng.uniform(-5,5))))
     expl=[f"Temperature {temp:.1f}°C"] if temp>33 else ["Normal heat"]
     return {"risk_type":"HEAT","score":max(0,min(100,score)),"confidence":65+rng.randint(0,15),"level":_level(score).value,"explanation":"; ".join(expl),"inputs":inputs,"model_version":MODEL_VERSION,"source":"DisasterGuard"}
