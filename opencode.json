@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "zen": {
+      "name": "OpenCode Zen",
+      "options": {
+        "baseURL": "https://opencode.ai/zen/v1"
+      },
+      "models": {
+        "muse-spark-1.2-contributor-free": {
+          "name": "Muse Spark 1.2 Contributor Free"
+        }
+      }
+    }
+  }
+}

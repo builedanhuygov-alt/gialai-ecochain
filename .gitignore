@@ -1,0 +1,24 @@
+# ECOGL — ignore runtime / secrets
+.env
+*.db
+*.sqlite
+*.sqlite3
+ecogl.db
+test.db
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg-info/
+node_modules/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
