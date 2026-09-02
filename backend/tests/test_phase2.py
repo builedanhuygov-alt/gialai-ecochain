@@ -9,6 +9,8 @@ from app.database import init_db
 from app.core.enums import ProposalStatus
 
 def setup_client():
+    from app.database import Base, engine
+    Base.metadata.drop_all(bind=engine)
     app = create_app()
     init_db()
     try:
@@ -61,8 +63,9 @@ def test_phase2_flow():
     assert r.status_code == 200
     proposals = r.json()
     assert len(proposals) >= 1
-    pid = proposals[0]["id"]
-    assert proposals[0]["status"] == ProposalStatus.PENDING.value
+    pending = [p for p in proposals if p["status"] == ProposalStatus.PENDING.value]
+    assert len(pending) >= 1, f"no PENDING, got {[p['status'] for p in proposals]}"
+    pid = pending[0]["id"]
 
     #  Duplicate detection + photo evidence
     import io

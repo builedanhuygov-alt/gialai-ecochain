@@ -86,8 +86,9 @@ def test_forest_guard_contract():
 
 
 def test_api_flow():
+    from app.database import Base, engine
+    Base.metadata.drop_all(bind=engine)
     app = create_app()
-    # ensure DB tables exist for in-memory URL — lifespan not auto-run in TestClient without context
     from app.database import init_db
     init_db()
     try:

@@ -9,6 +9,7 @@ from app.models.pipeline import (
 from app.models.query_log import EEQueryLog, DataLineage, AutomationStatus
 from app.models.community import CommunityConfirmation, PhotoEvidence, FieldVerificationTask
 from app.models.ops import ForestJob, MonitoredArea, Notification, AuditLog, QueryCacheEntry, QuotaLog
+from app.models.risk import RiskSignal, RiskScore, RiskHistory, Alert, Incident, IncidentEvidence, AgentRun, AgentResult, CarbonRecord, CarbonModel, RankingSnapshot, Achievement, TrustScore
 
 __all__ = [
     "AdministrativeUnit",
@@ -29,4 +30,5 @@ __all__ = [
     "AuditLog",
     "QueryCacheEntry",
     "QuotaLog",
+    "RiskSignal","RiskScore","RiskHistory","Alert","Incident","IncidentEvidence","AgentRun","AgentResult","CarbonRecord","CarbonModel","RankingSnapshot","Achievement","TrustScore",
 ]

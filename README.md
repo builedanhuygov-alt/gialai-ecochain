@@ -1,6 +1,6 @@
-# ECOGL 1.0 — Phase 2 Automated Data Intelligence + ForestGuard
+# ECOGL 1.0 — Phase 3 AI Risk Intelligence (Forest + Disaster + Carbon + Ranking)
 
-Phase 1 AI-Ready + Phase 2 ForestGuard automated monitoring (GEE Sentinel-2, NDVI, risk, community verification).
+Phase 1 Foundation + Phase 2 ForestGuard + Phase 3 Multi-Agent Risk Intelligence. Đã pass 10 tests (Phase1 8 + Phase2 1 + Phase3 1).
 
 ## Architecture (Section 23)
 
