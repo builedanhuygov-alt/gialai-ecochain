@@ -10,6 +10,7 @@ from app.models.query_log import EEQueryLog, DataLineage, AutomationStatus
 from app.models.community import CommunityConfirmation, PhotoEvidence, FieldVerificationTask
 from app.models.ops import ForestJob, MonitoredArea, Notification, AuditLog, QueryCacheEntry, QuotaLog
 from app.models.risk import RiskSignal, RiskScore, RiskHistory, Alert, Incident, IncidentEvidence, AgentRun, AgentResult, CarbonRecord, CarbonModel, RankingSnapshot, Achievement, TrustScore
+from app.models.farm import Farmer, Farm, Plot, ProcessingFacility, ProductionLot, CollectionPoint, Warehouse, Vehicle, Route, Trip, CarbonInventory
 
 __all__ = [
     "AdministrativeUnit",
@@ -31,4 +32,5 @@ __all__ = [
     "QueryCacheEntry",
     "QuotaLog",
     "RiskSignal","RiskScore","RiskHistory","Alert","Incident","IncidentEvidence","AgentRun","AgentResult","CarbonRecord","CarbonModel","RankingSnapshot","Achievement","TrustScore",
+    "Farmer","Farm","Plot","ProcessingFacility","ProductionLot","CollectionPoint","Warehouse","Vehicle","Route","Trip","CarbonInventory",
 ]

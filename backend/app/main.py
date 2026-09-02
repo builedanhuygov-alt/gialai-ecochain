@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
     from app.api.routes.forest import router as forest_router
     from app.api.routes.earth_engine import router as ee_router
     from app.api.routes.risk import router as risk_router
+    from app.api.routes.farm_logistics import router as farm_router
 
     app.include_router(health_router, prefix="/api", tags=["Health"])
     app.include_router(admin_router, prefix="/api", tags=["Administrative"])
@@ -66,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(forest_router, prefix="/api", tags=["Forest"])
     app.include_router(ee_router, prefix="/api", tags=["EarthEngine"])
     app.include_router(risk_router, prefix="/api", tags=["Risk"])
+    app.include_router(farm_router, prefix="/api", tags=["FarmLogistics"])
 
     @app.get("/")
     def root():

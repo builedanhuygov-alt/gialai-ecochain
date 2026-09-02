@@ -13,6 +13,13 @@ ACHIEVEMENTS={
     "Community Climate Action": {"criteria":"Community participation high","score_min":75},
     "Outstanding Village": {"criteria":"Overall safety top 10%","score_min":88},
     "Green Logistics Pioneer": {"criteria":"Logistics / sustainability","score_min":80},
+    # Phase4 Sec34
+    "EUDR Ready Commune": {"criteria":"EUDR readiness >=90","score_min":90},
+    "Traceability Champion": {"criteria":"Traceability >=90","score_min":90},
+    "Carbon Smart Commune": {"criteria":"Carbon performance >=85","score_min":85},
+    "Green Logistics Champion": {"criteria":"Logistics score >=85","score_min":85},
+    "Forest Protection Champion": {"criteria":"Forest score >=90","score_min":90},
+    "Overall EcoGL Champion": {"criteria":"Overall EcoGL score top 5%","score_min":88},
 }
 
 class RecognitionEngine:
