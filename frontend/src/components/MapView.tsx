@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { useLocation } from '../hooks/useLocation'
 
 export default function MapView({ onSelect }: { onSelect?: (type:string, id:string)=>void }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [layers, setLayers] = useState({ forest:true, fire:true, flood:false, carbon:false, agriculture:false, logistics:false, incidents:true })
+  const mapRef = useRef<any>(null)
+  const [layers, setLayers] = useState({ forest:true, fire:true, flood:false, carbon:false, agriculture:false, logistics:false, incidents:true, weather:false, rainfall:false, temperature:false, wind:false })
   const [styleUrl, setStyleUrl] = useState(()=> localStorage.getItem('ecogl_map_style') || '')
   const [apiKey, setApiKey] = useState(()=> localStorage.getItem('ecogl_map_key') || '')
   const [useSatellite, setUseSatellite] = useState(false)
+  const { state: locState, request: requestLoc } = useLocation()
 
   const resolvedStyle = (()=> {
     if(styleUrl.trim()) return styleUrl.trim()
@@ -24,6 +27,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       center: [108.35, 13.9],
       zoom: 9,
     })
+    mapRef.current = map
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
     // mock polygons
     map.on('load', ()=>{
@@ -34,7 +38,14 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       map.on('click','forest-fill', ()=> onSelect?.('forest','polygon-1'))
     })
     return ()=> map.remove()
-  }, [])
+  }, [resolvedStyle])
+
+  useEffect(()=>{
+    if(locState.status==='granted' && mapRef.current && locState.lon && locState.lat){
+      mapRef.current.flyTo({ center:[locState.lon, locState.lat], zoom:11, duration:1200, essential:true })
+      try{ new (maplibregl as any).Marker({color:'#0F766E'}).setLngLat([locState.lon, locState.lat]).addTo(mapRef.current) }catch{}
+    }
+  }, [locState])
 
   const saveMapConfig = ()=>{
     localStorage.setItem('ecogl_map_style', styleUrl)
@@ -49,10 +60,13 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           <div className="map-title">BẢN ĐỒ ECO TRỰC TIẾP</div>
           <div className="map-sub">Gia Lai · Rừng + Rủi ro + Sự cố {!styleUrl && !apiKey ? '· Đang dùng nền OSM miễn phí (chưa có vệ tinh)' : ''}</div>
         </div>
-        <div className="legend">
-          <span><i style={{background:'#10B981'}}/> Thấp</span>
-          <span><i style={{background:'#F59E0B'}}/> Cao</span>
-          <span><i style={{background:'#DC2626'}}/> Nguy kịch</span>
+        <div style={{display:'flex', gap:8, alignItems:'center'}}>
+          <button onClick={requestLoc} style={{background:'#0B1412', color:'#fff', border:0, padding:'6px 10px', borderRadius:999, fontSize:12, fontWeight:600}}>📍 Vị trí của tôi</button>
+          <div className="legend">
+            <span><i style={{background:'#10B981'}}/> Thấp</span>
+            <span><i style={{background:'#F59E0B'}}/> Cao</span>
+            <span><i style={{background:'#DC2626'}}/> Nguy kịch</span>
+          </div>
         </div>
       </div>
 

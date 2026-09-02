@@ -46,6 +46,14 @@ class Settings(BaseSettings):
         default=24, alias="FOREST_MONITORING_INTERVAL_HOURS"
     )
 
+    # Firms Sec2
+    firms_map_key: Optional[str] = Field(default=None, alias="FIRMS_MAP_KEY")
+
+    # Copernicus Sec5
+    copernicus_client_id: Optional[str] = Field(default=None, alias="COPERNICUS_CLIENT_ID")
+    copernicus_client_secret: Optional[str] = Field(default=None, alias="COPERNICUS_CLIENT_SECRET")
+    copernicus_token_url: Optional[str] = Field(default=None, alias="COPERNICUS_TOKEN_URL")
+
     # Earth Engine dataset defaults
     default_satellite_source: SatelliteSource = Field(
         default=SatelliteSource.SENTINEL2, alias="DEFAULT_SATELLITE_SOURCE"

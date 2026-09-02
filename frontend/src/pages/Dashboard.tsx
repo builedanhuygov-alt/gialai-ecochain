@@ -1,5 +1,6 @@
 import { MetricCard, AIInsightCard, AlertCard } from '../components/Cards'
 import MapView from '../components/MapView'
+import WeatherCard from '../components/WeatherCard'
 import { StaggerContainer, StaggerItem } from '../motion/primitives'
 import { mockKPIs, mockAlerts } from '../services/mockProvider'
 import { useState } from 'react'
@@ -29,6 +30,7 @@ export default function Dashboard() {
         </div>
       </StaggerContainer>
 
+      <WeatherCard />
       <MapView onSelect={()=> setSelected('Xã A')} />
 
       {selected && (

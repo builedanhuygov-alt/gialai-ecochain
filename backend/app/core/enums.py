@@ -47,8 +47,13 @@ class DataSourceType(StrEnum):
 
 class SatelliteSource(StrEnum):
     SENTINEL2 = "SENTINEL2"
+    SENTINEL1 = "SENTINEL1"
     LANDSAT8 = "LANDSAT8"
     LANDSAT9 = "LANDSAT9"
+    SRTM = "SRTM"
+    NASADEM = "NASADEM"
+    DYNAMIC_WORLD = "DYNAMIC_WORLD"
+    ESA_WORLDCOVER = "ESA_WORLDCOVER"
 
 
 class GEEStatus(StrEnum):

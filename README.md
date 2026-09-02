@@ -155,6 +155,33 @@ CREATE EXTENSION postgis;
 
 ---
 
+## Real Data Setup (Sec31)
+
+### Google Earth Engine
+1. Tạo project tại https://code.earthengine.google.com → tạo Service Account → download JSON key
+2. Điền `.env`: `GEE_PROJECT_ID`, `GEE_SERVICE_ACCOUNT`, `GEE_PRIVATE_KEY` (hoặc `GEE_KEY_FILE=/secrets/gee.json`)
+3. Kiểm tra: `GET /api/earth-engine/status` → `{"connected":true}`; nếu chưa có → `DEMO DATA` + `MockEarthEngineService` (NDVI, Sentinel-1 SAR VV/VH, Landsat 8/9, SRTM/NASADEM elevation/slope, Dynamic World/WorldCover land-cover) vẫn chạy
+
+### NASA FIRMS
+- Đăng ký MAP_KEY tại https://firms.modaps.eosdis.nasa.gov/api/area/ → `FIRMS_MAP_KEY` trong `.env`
+- Backend proxy `GET /api/fire/firms?lat=13.9&lon=108.3` → trả `fires[]` với `brightness/confidence/satellite MODIS/VIIRS`; key chỉ ở backend, frontend hiển thị `LIVE`/`DEMO DATA`
+
+### Copernicus Data Space (fallback)
+- Tạo tài khoản https://dataspace.copernicus.eu/ → `COPERNICUS_CLIENT_ID/SECRET/TOKEN_URL`
+- Kiến trúc `GEE Primary → failure → Copernicus fallback` (không hard-code provider)
+
+### Weather (Open-Meteo) + NASA POWER
+- Open-Meteo không cần key: `WeatherService` gọi `https://api.open-meteo.com/v1/forecast` qua `EcoGL Weather API` (`/api/weather/current|forecast`), backend cache 10 phút theo `lat/lon rounded + bucket`
+- NASA POWER (`/api/weather/historical` → `/api/climate/power`) cho `historical, T2M/PRECTOTCORR, drought/agriculture baseline`, service riêng `NASAWeatherService`
+
+### Mobile Location (BẮT BUỘC)
+- Browser `navigator.geolocation.getCurrentPosition` khi user bấm `📍 Dùng vị trí của tôi`
+- UX: `idle → prompt → locating (Detecting...) → granted (📍 Lat/Lon 2 số thập phân) / denied → "Location permission was denied..." / unsupported → fallback`
+- Privacy: `location = session/local state`, chỉ gửi `lat/lon` tới `/api/weather/*` khi cần, không lưu DB, không track liên tục, hiển thị hint privacy trên `WeatherCard`
+- HTTPS bắt buộc trên production (geolocation yêu cầu secure context), local `http://localhost` được phép
+
+---
+
 ## Database
 
 Migration: `app.database.Base.metadata.create_all(bind=engine)` (Alembic scaffold present). Seed creates Gia Lai Province → Xã A/B → Thôn 1/2 polygons + 4 monitored areas + vehicle `81A-12345`. Partition by `tenant/province/time` ready for multi-province.
