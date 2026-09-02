@@ -1,9 +1,12 @@
-"""Sec18 API architecture — weather, satellite, fire, climate, location."""
+"""Sec18 API architecture — weather, satellite, fire, climate, location. Real GEE tiles when configured."""
 from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
 import time, json
 
 router=APIRouter(tags=["Geospatial"])
+
+# simple tile cache
+_tile_cache={}
 
 @router.get("/weather/current")
 async def weather_current(lat: float = Query(..., ge=-90, le=90), lon: float = Query(..., ge=-180, le=180)):
@@ -40,16 +43,23 @@ async def reverse_geocode(lat: float = Query(..., ge=-90, le=90), lon: float = Q
 async def sat_s2(lat: float = Query(default=13.9), lon: float = Query(default=108.3), start: str = Query(default="2026-08-01"), end: str = Query(default="2026-09-01"), cloud: int = Query(default=20)):
     from app.services.earth_engine.service import EEQueryParams, get_earth_engine_service
     from app.core.enums import SatelliteSource
-    params=EEQueryParams(administrative_unit_id="query", geometry={"type":"Point","coordinates":[lon,lat]}, start_date=start, end_date=end, cloud_percentage=cloud, dataset=SatelliteSource.SENTINEL2)
+    # Gia Lai default geometry if lat/lon is Gia Lai center
+    geom={"type":"Point","coordinates":[lon,lat]}
+    # if near Gia Lai, expand to province polygon for better coverage
+    if 13.5 < lat < 14.5 and 107.5 < lon < 109.5:
+        geom={"type":"Polygon","coordinates":[[[108.0,13.5],[108.8,13.5],[108.8,14.3],[108.0,14.3],[108.0,13.5]]]}
+    params=EEQueryParams(administrative_unit_id="query", geometry=geom, start_date=start, end_date=end, cloud_percentage=cloud, dataset=SatelliteSource.SENTINEL2)
     svc=get_earth_engine_service()
     try:
         img=svc.get_imagery(params)
         ndvi=svc.calculate_ndvi(params)
-        return {"source":"Sentinel-2","processing":"Google Earth Engine","dataset":"COPERNICUS/S2_SR_HARMONIZED","acquired": f"{start} to {end}", "cloud_cover": cloud, "image_count": img.image_count, "ndvi": ndvi.__dict__, "status": "LIVE" if svc.get_status().value=="CONNECTED" else "DEMO DATA", "cache_status":"LIVE"}
+        status="LIVE" if svc.get_status().value=="CONNECTED" else "DEMO DATA"
+        # if GEE not configured, this will be DEMO, but we try real first — if DEMO, fallback to mock is intentional
+        return {"source":"Sentinel-2","processing":"Google Earth Engine","dataset":"COPERNICUS/S2_SR_HARMONIZED","acquired": img.metadata.get("acquired", f"{start} to {end}"), "cloud_cover": cloud, "image_count": img.image_count, "ndvi": ndvi.__dict__, "status": status, "cache_status":"LIVE" if status=="LIVE" else "DEMO DATA", "metadata": img.metadata}
     except Exception as e:
         from app.services.copernicus_service import fetch_copernicus
         fb=await fetch_copernicus({"satellite":"S2","cloud":cloud})
-        return {"source":"Sentinel-2","fallback": fb, "error": str(e), "status":"DEMO DATA"}
+        return {"source":"Sentinel-2","fallback": fb, "error": str(e), "status":"CONFIGURATION_REQUIRED" if "not connected" in str(e).lower() else "UNAVAILABLE"}
 
 @router.get("/satellite/sentinel1")
 async def sat_s1(lat: float = Query(default=13.9), lon: float = Query(default=108.3)):
@@ -73,6 +83,50 @@ async def sat_landcover(source: str = Query(default="DynamicWorld", regex="^(Dyn
     rng=random.Random(int(hashlib.sha256(f"{lat:.1f}{lon:.1f}{source}".encode()).hexdigest()[:8],16))
     classes=["forest","crops","water","built","grass","bare"] if source=="DynamicWorld" else ["Tree cover","Cropland","Water","Built-up"]
     return {"source": source, "dataset": "GOOGLE/DYNAMICWORLD/V1" if source=="DynamicWorld" else "ESA/WorldCover/v200", "class": rng.choice(classes), "confidence": rng.randint(70,95), "status":"LIVE"}
+
+@router.get("/satellite/tile/{layer}")
+async def satellite_tile(layer: str, lat: float = Query(default=13.9), lon: float = Query(default=108.3), start: str = Query(default="2026-08-01"), end: str = Query(default="2026-09-01"), cloud: int = Query(default=20, ge=0, le=100), north: Optional[float]=None, south: Optional[float]=None, east: Optional[float]=None, west: Optional[float]=None):
+    """
+    Real GEE tile — Sec18. Returns tile_url template for MapLibre.
+    layer: true|false|ndvi|ndmi|nbr|s1|landsat8|landsat9|dw|worldcover|dem|s2
+    Uses viewport geometry if bounds provided, else Gia Lai polygon or point.
+    """
+    from app.services.earth_engine.service import EEQueryParams, get_earth_engine_service
+    from app.core.enums import SatelliteSource, GEEStatus
+    # build geometry from viewport or point
+    if north is not None and south is not None and east is not None and west is not None:
+        geom={"type":"Polygon","coordinates":[[[west,south],[east,south],[east,north],[west,north],[west,south]]]}
+    elif 13.5 < lat < 14.5 and 107.5 < lon < 109.5:
+        geom={"type":"Polygon","coordinates":[[[108.0,13.5],[108.8,13.5],[108.8,14.3],[108.0,14.3],[108.0,13.5]]]}
+    else:
+        geom={"type":"Point","coordinates":[lon,lat]}
+    # map frontend layer names to GEE keys
+    layer_map={"sentinel-2":"true","s2":"true","true":"true","false":"false","ndvi":"ndvi","ndmi":"ndmi","nbr":"nbr","sentinel-1":"s1","s1":"s1","landsat8":"landsat8","landsat9":"landsat9","dynamicworld":"dw","dw":"dw","worldcover":"worldcover","dem":"dem","elevation":"dem","slope":"dem"}
+    gee_layer=layer_map.get(layer.lower(), "true")
+    # cache key
+    cache_key=f"{gee_layer}:{lat:.2f},{lon:.2f}:{start}:{end}:{cloud}:{north},{south}"
+    if cache_key in _tile_cache and time.time()-_tile_cache[cache_key]["ts"] < 3600:
+        d=_tile_cache[cache_key]["data"].copy(); d["cache_status"]="CACHED"; return d
+    svc=get_earth_engine_service()
+    # Sec16 REAL DATA ONLY — check GEE configured
+    if svc.get_status()!=GEEStatus.CONNECTED:
+        # try authenticate
+        svc.authenticate()
+    if svc.get_status()!=GEEStatus.CONNECTED:
+        return {"layer": layer, "status":"CONFIGURATION_REQUIRED", "reason":"GEE not configured — missing GEE_PROJECT_ID / GEE_SERVICE_ACCOUNT / GEE_PRIVATE_KEY (see backend/.env.example)", "hint":"Set env and restart backend, then GET /api/health/geospatial will show LIVE", "demo": False}
+    try:
+        params=EEQueryParams(administrative_unit_id="tile", geometry=geom, start_date=start, end_date=end, cloud_percentage=cloud, dataset=SatelliteSource.SENTINEL2)
+        # use GEE real get_tile
+        tile=svc.get_tile(params, gee_layer)  # type: ignore
+        tile["cache_status"]="LIVE"
+        tile["layer"]=layer
+        _tile_cache[cache_key]={"ts": time.time(), "data": tile}
+        return tile
+    except Exception as e:
+        err=str(e)
+        if "No suitable" in err:
+            return {"layer": layer, "status":"UNAVAILABLE", "reason":"No suitable Sentinel-2 imagery found for date/cloud filter", "acquired": None, "suggestion":"Try larger date range or higher cloud % (Sec22)"}
+        return {"layer": layer, "status":"UNAVAILABLE", "error": err}
 
 @router.get("/fire/firms")
 async def fire_firms(lat: float = Query(..., ge=-90, le=90), lon: float = Query(..., ge=-180, le=180), days: int = Query(default=2, ge=1, le=7)):
