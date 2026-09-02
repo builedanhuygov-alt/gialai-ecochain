@@ -14,6 +14,7 @@ from app.models.farm import Farmer, Farm, Plot, ProcessingFacility, ProductionLo
 from app.models.predictive import Forecast, Simulation, ModelMetric, Contributor, EarlyWarning
 from app.models.phase7 import Plan, PlanTask, Mission, LearningRecord, Approval, ModelRegistryEntry, AgentConflictRecord
 from app.models.data_fabric import DataSource, DataProvenanceRecord, DataLineageRecord, DataQualityRecord, DataConflictRecord
+from app.models.twin import TwinState, Scenario, ScenarioScore, InvestmentPlan, DataGap
 
 __all__ = [
     "AdministrativeUnit",
@@ -39,4 +40,5 @@ __all__ = [
     "Forecast","Simulation","ModelMetric","Contributor","EarlyWarning",
     "Plan","PlanTask","Mission","LearningRecord","Approval","ModelRegistryEntry","AgentConflictRecord",
     "DataSource","DataProvenanceRecord","DataLineageRecord","DataQualityRecord","DataConflictRecord",
+    "TwinState","Scenario","ScenarioScore","InvestmentPlan","DataGap",
 ]

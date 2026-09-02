@@ -1,6 +1,6 @@
-# ECOGL 4.0 — Phase 8 Provincial Eco Intelligence Network
+# ECOGL 5.0 — Phase 9 Provincial Digital Twin & Future Simulation
 
-Phase1-7 + Data Fabric, Knowledge Graph, Event Stream, Incident Fusion, Open Data. Đã pass 15 tests (Phase1 8 + Phase2-8 7).
+Phase1-8 + Twin States, What-If Engine, Multi-Scenario, Pareto, Future Models, Investment Optimizer. Đã pass 16 tests (Phase1 8 + Phase2-9 8).
 
 ## Architecture (Section 23)
 
