@@ -1,9 +1,11 @@
 import MapView from '../components/MapView'
+import { Tabs } from '../components/Tabs'
 export default function Disaster(){
   return (
     <div className="page">
-      <h1>Disaster AI</h1>
-      <div className="tabs"><span className="active">Fire</span><span>Flood</span><span>Drought</span><span>Storm</span><span>Landslide</span></div>
+      <h1>AI Thiên tai</h1>
+      <Tabs tabs={['Cháy','Ngập','Hạn','Bão','Sạt lở']} defaultTab="Cháy" />
+      <div style={{height:12}} />
       <MapView />
       <div className="grid">
         <div className="card"><b>Risk Score 87 CRITICAL</b> — Fire risk elevated, vegetation dryness + satellite anomaly. <br/><small>Sources: Sentinel-2 · Weather · Verified reports · Confidence 89% <a>View Evidence</a></small></div>

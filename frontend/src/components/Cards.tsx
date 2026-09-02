@@ -1,8 +1,9 @@
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { motion } from 'framer-motion'
 
 export function MetricCard({ label, value, unit, trend, dir, icon }: any) {
   return (
-    <div className="metric">
+    <motion.div className="metric" whileHover={{ y:-2, boxShadow:'0 8px 24px rgba(15,30,26,0.10)' }} transition={{ duration:0.18, ease:[0.16,1,0.3,1] as any }} style={{ willChange:'transform' }}>
       <div className="metric-top">
         <div className="metric-label">{label}</div>
         <div className="metric-icon">{icon}</div>
@@ -11,7 +12,8 @@ export function MetricCard({ label, value, unit, trend, dir, icon }: any) {
       <div className={`trend ${dir}`}>{dir==='up'?<TrendingUp size={14}/>:dir==='down'?<TrendingDown size={14}/>:<Minus size={14}/>} {trend}<span className="muted"> vs previous month</span></div>
       <div className="source"><span className="dot live"/> VERIFIED · 2h ago</div>
       <style>{`
-        .metric{ background:#fff; border:1px solid #E2E8E5; border-radius:16px; padding:16px; box-shadow:0 1px 2px rgba(15,30,26,0.06); }
+        .metric{ background:#fff; border:1px solid #E2E8E5; border-radius:16px; padding:16px; box-shadow:0 1px 2px rgba(15,30,26,0.06); transition: box-shadow var(--motion-normal) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard); }
+        .metric:hover{ border-color:#CBD5D1; }
         .metric-top{ display:flex; justify-content:space-between; align-items:center; }
         .metric-label{ font-size:11px; letter-spacing:0.6px; color:#64748B; font-weight:600; }
         .metric-icon{ width:28px; height:28px; border-radius:8px; background:#F1F5F3; display:grid; place-items:center; font-size:14px; }
@@ -23,7 +25,7 @@ export function MetricCard({ label, value, unit, trend, dir, icon }: any) {
         .source{ font-size:11px; color:#94A3B8; margin-top:8px; display:flex; gap:6px; align-items:center; }
         .dot.live{ width:6px; height:6px; border-radius:999px; background:#10B981; display:inline-block; }
       `}</style>
-    </div>
+    </motion.div>
   )
 }
 

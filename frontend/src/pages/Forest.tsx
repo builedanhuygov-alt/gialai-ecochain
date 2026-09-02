@@ -1,9 +1,11 @@
 import MapView from '../components/MapView'
+import { Tabs } from '../components/Tabs'
 export default function Forest(){
   return (
     <div className="page">
-      <h1>Forest Intelligence</h1>
-      <div className="kpis"><div>Forest Area 12,430 ha</div><div>Health 78.4</div><div>Anomalies 3</div></div>
+      <h1>Trí tuệ Rừng</h1>
+      <Tabs tabs={['Tổng quan','Sức khỏe','Bất thường']} />
+      <div className="kpis"><div>Diện tích 12,430 ha</div><div>Sức khỏe 78.4</div><div>Bất thường 3</div></div>
       <MapView />
       <div className="grid">
         <div className="card">NDVI Trend — Healthy vs Change (GEE Sentinel-2 ● Connected, 14:32)</div>

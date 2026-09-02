@@ -1,5 +1,6 @@
 import { MetricCard, AIInsightCard, AlertCard } from '../components/Cards'
 import MapView from '../components/MapView'
+import { StaggerContainer, StaggerItem } from '../motion/primitives'
 import { mockKPIs, mockAlerts } from '../services/mockProvider'
 import { useState } from 'react'
 import { LineChart, Line, ResponsiveContainer } from 'recharts'
@@ -16,13 +17,14 @@ export default function Dashboard() {
         <span className="demo-badge">DỮ LIỆU DEMO</span>
       </div>
 
-      <div className="kpi-grid">
-        {mockKPIs.slice(0,4).map(k=> <MetricCard key={k.label} {...k} icon={<span>●</span>} />)}
-      </div>
-
-      <div className="kpi-grid">
-        {mockKPIs.slice(4,8).map(k=> <MetricCard key={k.label} {...k} icon={<span>■</span>} />)}
-      </div>
+      <StaggerContainer>
+        <div className="kpi-grid">
+          {mockKPIs.slice(0,4).map(k=> <StaggerItem key={k.label}><MetricCard {...k} icon={<span>●</span>} /></StaggerItem>)}
+        </div>
+        <div className="kpi-grid">
+          {mockKPIs.slice(4,8).map(k=> <StaggerItem key={k.label}><MetricCard {...k} icon={<span>■</span>} /></StaggerItem>)}
+        </div>
+      </StaggerContainer>
 
       <MapView onSelect={()=> setSelected('Xã A')} />
 

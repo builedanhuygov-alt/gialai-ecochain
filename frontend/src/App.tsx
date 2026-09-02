@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { AnimatePresence, MotionConfig } from 'framer-motion'
 import AppShell from './components/AppShell'
 import Dashboard from './pages/Dashboard'
 import MapPage from './pages/MapPage'
@@ -14,6 +15,7 @@ import Governance from './pages/Governance'
 import Leaderboard from './pages/Leaderboard'
 import Reports from './pages/Reports'
 import Admin from './pages/Admin'
+import { PageTransition } from './motion/primitives'
 import { useState } from 'react'
 
 function AIAssistant(){
@@ -54,30 +56,41 @@ function AIAssistant(){
   )
 }
 
+function AnimatedRoutes(){
+  const location = useLocation()
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<PageTransition><Dashboard/></PageTransition>} />
+        <Route path="/map" element={<PageTransition><MapPage/></PageTransition>} />
+        <Route path="/forest" element={<PageTransition><Forest/></PageTransition>} />
+        <Route path="/disaster" element={<PageTransition><Disaster/></PageTransition>} />
+        <Route path="/agriculture" element={<PageTransition><Agriculture/></PageTransition>} />
+        <Route path="/carbon" element={<PageTransition><Carbon/></PageTransition>} />
+        <Route path="/eudr" element={<PageTransition><EUDR/></PageTransition>} />
+        <Route path="/logistics" element={<PageTransition><Logistics/></PageTransition>} />
+        <Route path="/twin" element={<PageTransition><Twin/></PageTransition>} />
+        <Route path="/community" element={<PageTransition><Community/></PageTransition>} />
+        <Route path="/actions" element={<PageTransition><Governance/></PageTransition>} />
+        <Route path="/leaderboard" element={<PageTransition><Leaderboard/></PageTransition>} />
+        <Route path="/reports" element={<PageTransition><Reports/></PageTransition>} />
+        <Route path="/admin" element={<PageTransition><Admin/></PageTransition>} />
+        <Route path="/notifications" element={<PageTransition><div className="card">Thông báo — Nguy kịch/Cảnh báo/Nhiệm vụ — Theo mức độ</div></PageTransition>} />
+        <Route path="/audit" element={<PageTransition><div className="card">Nhật ký — Thời gian · Người dùng · Hành động · Phạm vi · Trạng thái</div></PageTransition>} />
+      </Routes>
+    </AnimatePresence>
+  )
+}
+
 export default function App(){
   return (
-    <BrowserRouter>
-      <AppShell>
-        <Routes>
-          <Route path="/" element={<Dashboard/>} />
-          <Route path="/map" element={<MapPage/>} />
-          <Route path="/forest" element={<Forest/>} />
-          <Route path="/disaster" element={<Disaster/>} />
-          <Route path="/agriculture" element={<Agriculture/>} />
-          <Route path="/carbon" element={<Carbon/>} />
-          <Route path="/eudr" element={<EUDR/>} />
-          <Route path="/logistics" element={<Logistics/>} />
-          <Route path="/twin" element={<Twin/>} />
-          <Route path="/community" element={<Community/>} />
-          <Route path="/actions" element={<Governance/>} />
-          <Route path="/leaderboard" element={<Leaderboard/>} />
-          <Route path="/reports" element={<Reports/>} />
-          <Route path="/admin" element={<Admin/>} />
-          <Route path="/notifications" element={<div className="card">Notifications — Critical/Warnings/Tasks — Groups by priority</div>} />
-          <Route path="/audit" element={<div className="card">Audit Log — Timestamp · User · Action · Scope · Status</div>} />
-        </Routes>
-      </AppShell>
-      <AIAssistant />
-    </BrowserRouter>
+    <MotionConfig reducedMotion="user">
+      <BrowserRouter>
+        <AppShell>
+          <AnimatedRoutes />
+        </AppShell>
+        <AIAssistant />
+      </BrowserRouter>
+    </MotionConfig>
   )
 }
