@@ -58,12 +58,20 @@ def seed_demo():
         commune_b = AdministrativeUnit(name="Xã B (Demo)", level=AdministrativeLevel.COMMUNE.value, parent_id=province.id, code="GL-XA-B", is_demo=True)
         commune_b.set_geometry(DEMO_GEOMETRIES["commune_b"])
         db.add(commune_b)
+        db.flush()  # ensure IDs for monitored areas
 
         # Automation status seed
         db.add(AutomationStatus(agent_name="ForestGuard", status="ONLINE"))
         db.add(AutomationStatus(agent_name="EarthEngine", status="NOT_CONFIGURED"))
 
+        # Monitored areas — Sec 29 priority
+        from app.models.ops import MonitoredArea
+        db.add(MonitoredArea(administrative_unit_id=commune_a.id, is_priority=True, priority_reason="Demo high priority — fire history"))
+        db.add(MonitoredArea(administrative_unit_id=v1.id, is_priority=False))
+        db.add(MonitoredArea(administrative_unit_id=v2.id, is_priority=False))
+        db.add(MonitoredArea(administrative_unit_id=commune_b.id, is_priority=False))
+
         db.commit()
-        print("[seed] Demo hierarchy created: Gia Lai -> Xa A/B -> Thon 1/2")
+        print("[seed] Demo hierarchy created: Gia Lai -> Xa A/B -> Thon 1/2 (with monitored areas)")
     finally:
         db.close()

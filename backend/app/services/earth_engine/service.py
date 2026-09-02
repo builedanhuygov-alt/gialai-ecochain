@@ -115,11 +115,28 @@ class EarthEngineService(abc.ABC):
     ) -> Dict[str, Any]:
         ...
 
+    # Phase 2 extended interface (Sec 5)
+    @abc.abstractmethod
+    def get_collection(self, dataset: SatelliteSource) -> str:
+        ...
 
-# ── Mock implementation (Phase 1 default) ────────────────────────────
+    @abc.abstractmethod
+    def get_cloud_filtered_imagery(self, params: EEQueryParams) -> Dict[str, Any]:
+        ...
+
+    @abc.abstractmethod
+    def calculate_statistics(self, params: EEQueryParams) -> Dict[str, Any]:
+        ...
+
+    @abc.abstractmethod
+    def get_thumbnail(self, params: EEQueryParams) -> Dict[str, Any]:
+        ...
+
+
+# ── Mock implementation (Phase 1 default) — now delegates to modular mocks ──
 
 class MockEarthEngineService(EarthEngineService):
-    """Phase 1 mock — deterministic-ish but marked as demo."""
+    """Phase 1 mock — deterministic-ish but marked as demo. Delegates to imagery/ndvi/change_detection."""
 
     def authenticate(self) -> GEEStatus:
         return gee_auth.authenticate()
@@ -129,53 +146,53 @@ class MockEarthEngineService(EarthEngineService):
 
     def _simulate_latency(self) -> int:
         ms = random.randint(80, 250)
-        # keep it small for tests
         time.sleep(0.005)
         return ms
 
+    # facade delegates
+    def get_collection(self, dataset: SatelliteSource) -> str:
+        from app.services.earth_engine.imagery import get_collection
+        return get_collection(dataset)
+
     def get_imagery(self, params: EEQueryParams) -> EEImageryResult:
-        cfg = get_dataset_config(params.dataset)
+        from app.services.earth_engine.imagery import get_imagery_mock
         ms = self._simulate_latency()
-        # mock image count based on date range
-        try:
-            d1 = date.fromisoformat(params.start_date)
-            d2 = date.fromisoformat(params.end_date)
-            days = max(1, (d2 - d1).days)
-        except Exception:
-            days = 30
-        count = max(1, min(days // 5, 50))
+        data = get_imagery_mock(params)
         return EEImageryResult(
-            query_id=str(uuid.uuid4()),
-            image_count=count,
-            dataset=cfg.collection_id,
+            query_id=data["query_id"],
+            image_count=data["image_count"],
+            dataset=data["dataset"],
             processing_time_ms=ms,
-            metadata={
-                "cloud_percentage": params.cloud_percentage,
-                "geometry_type": params.geometry.get("type", "Polygon"),
-                "mock": True,
-            },
+            metadata=data["metadata"],
         )
 
+    def get_cloud_filtered_imagery(self, params: EEQueryParams) -> Dict[str, Any]:
+        from app.services.earth_engine.imagery import get_imagery_mock, get_cloud_filtered_imagery_mock
+        raw = get_imagery_mock(params)
+        filtered = get_cloud_filtered_imagery_mock(params, raw["image_count"])
+        filtered["dataset"] = raw["dataset"]
+        filtered["query_id"] = raw["query_id"]
+        # Sec 7: NO_VALID_IMAGE handling
+        if filtered["status"] == "NO_VALID_IMAGE":
+            filtered["processing_time_ms"] = self._simulate_latency()
+        return filtered
+
     def calculate_ndvi(self, params: EEQueryParams) -> NDVIStatistics:
-        ms = self._simulate_latency()
-        # deterministic pseudo-random based on unit + dates
-        seed = hash((params.administrative_unit_id, params.start_date, params.end_date)) & 0xFFFFFFFF
-        rng = random.Random(seed)
-        mean = round(rng.uniform(0.25, 0.85), 4)
-        median = round(mean + rng.uniform(-0.03, 0.03), 4)
-        mn = round(rng.uniform(0.05, mean - 0.05), 4)
-        mx = round(rng.uniform(mean + 0.05, 0.98), 4)
-        std = round(rng.uniform(0.05, 0.15), 4)
-        return NDVIStatistics(
-            mean=mean,
-            median=median,
-            min=mn,
-            max=mx,
-            std_dev=std,
-            pixel_count=rng.randint(5000, 50000),
-            change=None,
-            anomaly=None,
-        )
+        from app.services.earth_engine.ndvi import calculate_ndvi_mock
+        self._simulate_latency()
+        return calculate_ndvi_mock(params)
+
+    def calculate_statistics(self, params: EEQueryParams) -> Dict[str, Any]:
+        from app.services.earth_engine.imagery import calculate_statistics_mock
+        ndvi = self.calculate_ndvi(params)
+        stats = calculate_statistics_mock(ndvi)
+        cfg = get_dataset_config(params.dataset)
+        return {"dataset": cfg.collection_id, "period": f"{params.start_date} → {params.end_date}", "statistics": stats, "mock": True}
+
+    def get_thumbnail(self, params: EEQueryParams) -> Dict[str, Any]:
+        from app.services.earth_engine.imagery import get_thumbnail_mock
+        self._simulate_latency()
+        return get_thumbnail_mock(params)
 
     def detect_forest_change(
         self,
@@ -186,45 +203,31 @@ class MockEarthEngineService(EarthEngineService):
         dataset: SatelliteSource = SatelliteSource.SENTINEL2,
         cloud_percentage: int = 20,
     ) -> ForestChangeResult:
-        # reuse calculate_ndvi for before/after
-        before = self.calculate_ndvi(
-            EEQueryParams(
-                administrative_unit_id=administrative_unit_id,
-                geometry=geometry,
-                start_date=period_before[0],
-                end_date=period_before[1],
-                cloud_percentage=cloud_percentage,
-                dataset=dataset,
-            )
-        )
-        after = self.calculate_ndvi(
-            EEQueryParams(
-                administrative_unit_id=administrative_unit_id,
-                geometry=geometry,
-                start_date=period_after[0],
-                end_date=period_after[1],
-                cloud_percentage=cloud_percentage,
-                dataset=dataset,
-            )
-        )
-        cfg = get_dataset_config(dataset)
-        change = round(after.mean - before.mean, 4)
-        pct = round((change / before.mean * 100) if before.mean else 0, 2)
-        # confidence heuristic: larger |change| => higher confidence for demo
-        confidence = round(min(0.95, max(0.4, abs(change) * 3 + 0.5)), 2)
-        affected = round(abs(change) * 120 + random.Random(hash(administrative_unit_id)).uniform(0, 10), 2)
+        from app.services.earth_engine.change_detection import detect_change_mock
+        self._simulate_latency()
+        # need total_area from geometry approx
+        total_area = None
+        try:
+            coords = geometry.get("coordinates", [[[0, 0]]])[0] if geometry.get("type") == "Polygon" else []
+            if coords:
+                xs = [c[0] for c in coords]
+                ys = [c[1] for c in coords]
+                total_area = abs((max(xs) - min(xs)) * (max(ys) - min(ys)) * 1236400)
+        except Exception:
+            total_area = None
+        data = detect_change_mock(administrative_unit_id, geometry, period_before, period_after, dataset, cloud_percentage, total_area)
         return ForestChangeResult(
             administrative_unit_id=administrative_unit_id,
-            period_start=period_after[0],
-            period_end=period_after[1],
-            ndvi_before=before.mean,
-            ndvi_after=after.mean,
-            ndvi_change=change,
-            change_percentage=pct,
-            affected_area_ha=affected,
-            confidence=confidence,
+            period_start=data["period_start"],
+            period_end=data["period_end"],
+            ndvi_before=data["ndvi_before"],
+            ndvi_after=data["ndvi_after"],
+            ndvi_change=data["ndvi_change"],
+            change_percentage=data["change_percentage"],
+            affected_area_ha=data["affected_area_ha"],
+            confidence=data["confidence"] / 100.0,  # legacy 0-1
             source="EARTH_ENGINE",
-            source_dataset=cfg.collection_id,
+            source_dataset=data["source_dataset"],
             processing_time_ms=random.randint(200, 600),
             status="PROPOSED",
         )
@@ -285,6 +288,19 @@ class GEE_EarthEngineService(EarthEngineService):
 
     def detect_forest_change(self, *a, **kw) -> ForestChangeResult:
         raise NotImplementedError("GEE_EarthEngineService.detect_forest_change — Phase 2")
+
+    def get_collection(self, dataset: SatelliteSource) -> str:
+        from app.services.earth_engine.imagery import get_collection
+        return get_collection(dataset)
+
+    def get_cloud_filtered_imagery(self, params: EEQueryParams) -> Dict[str, Any]:
+        raise NotImplementedError("GEE_EarthEngineService.get_cloud_filtered_imagery — Phase 2")
+
+    def calculate_statistics(self, params: EEQueryParams) -> Dict[str, Any]:
+        raise NotImplementedError("GEE_EarthEngineService.calculate_statistics — Phase 2")
+
+    def get_thumbnail(self, params: EEQueryParams) -> Dict[str, Any]:
+        raise NotImplementedError("GEE_EarthEngineService.get_thumbnail — Phase 2")
 
     def get_statistics(self, *a, **kw) -> Dict[str, Any]:
         raise NotImplementedError("GEE_EarthEngineService.get_statistics — Phase 2")

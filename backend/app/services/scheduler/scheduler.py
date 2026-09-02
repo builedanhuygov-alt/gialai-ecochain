@@ -88,13 +88,15 @@ class SchedulerService:
         return self._jobs[job_id]
 
     def register_forest_monitoring_job(self) -> Dict[str, Any]:
-        """Section 4 example: forest monitoring every 24h."""
+        """Sec 4/28 — forest monitoring every 24h, priority aware, quota aware."""
         s = get_settings()
 
         def _forest_job():
-            # Phase 1: log only. Phase 2: iterate administrative units → pipeline.run_pipeline
             logger.info("[ForestGuard] Scheduled forest monitoring triggered at %s", datetime.utcnow().isoformat())
-            # Never run heavy EE work synchronously here without queue.
+            try:
+                self.run_forest_cycle()
+            except Exception as exc:
+                logger.exception("Forest cycle failed: %s", exc)
 
         return self.register_job(
             "forest_monitoring",
@@ -102,6 +104,45 @@ class SchedulerService:
             cron=s.forest_monitoring_cron,
             interval_hours=None,
         )
+
+    def run_forest_cycle(self) -> Dict[str, Any]:
+        """Sec 28 flow: list monitored areas (priority first) → ForestGuard → GEE → proposal → notification. Quota-aware."""
+        from app.database import SessionLocal
+        from app.models.ops import ForestJob, MonitoredArea
+        from app.services.quota import check_quota, log_quota
+
+        db = SessionLocal()
+        try:
+            quota = check_quota("GEE")
+            if quota["allowed"] != "true":
+                log_quota(db, "GEE", quota.get("reason", "RATE_LIMITED"), "cycle throttled")
+                db.commit()
+                return {"status": "SKIPPED", "reason": quota["reason"]}
+
+            areas = db.query(MonitoredArea).order_by(MonitoredArea.is_priority.desc(), MonitoredArea.last_monitored_at.asc()).all()
+            if not areas:
+                # fallback: all communes/villages
+                from app.models.administrative import AdministrativeUnit
+                areas_units = db.query(AdministrativeUnit).filter(AdministrativeUnit.level.in_(["COMMUNE", "VILLAGE"])).limit(20).all()
+                for u in areas_units:
+                    db.add(MonitoredArea(administrative_unit_id=u.id, is_priority=False))
+                db.commit()
+                areas = db.query(MonitoredArea).order_by(MonitoredArea.is_priority.desc()).all()
+
+            created = 0
+            for ma in areas[:5]:  # concurrency limit — max 5 per cycle (Sec 36)
+                q = check_quota("GEE")
+                if q["allowed"] != "true":
+                    break
+                job = ForestJob(administrative_unit_id=ma.administrative_unit_id, status="QUEUED", params='{"auto": true}')
+                db.add(job)
+                ma.last_monitored_at = datetime.utcnow()
+                created += 1
+            db.commit()
+            logger.info("Forest cycle enqueued %s jobs", created)
+            return {"status": "QUEUED", "jobs": created}
+        finally:
+            db.close()
 
     def list_jobs(self) -> Dict[str, Dict[str, Any]]:
         if self._scheduler and _HAS_APS:

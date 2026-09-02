@@ -1,6 +1,6 @@
-# ECOGL 1.0 — Phase 1 AI-Ready Architecture
+# ECOGL 1.0 — Phase 2 Automated Data Intelligence + ForestGuard
 
-AI Data Ingestion & Google Earth Engine Ready layer on top of Phase 1.
+Phase 1 AI-Ready + Phase 2 ForestGuard automated monitoring (GEE Sentinel-2, NDVI, risk, community verification).
 
 ## Architecture (Section 23)
 

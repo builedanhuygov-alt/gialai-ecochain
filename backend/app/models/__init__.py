@@ -7,6 +7,8 @@ from app.models.pipeline import (
     VerifiedData,
 )
 from app.models.query_log import EEQueryLog, DataLineage, AutomationStatus
+from app.models.community import CommunityConfirmation, PhotoEvidence, FieldVerificationTask
+from app.models.ops import ForestJob, MonitoredArea, Notification, AuditLog, QueryCacheEntry, QuotaLog
 
 __all__ = [
     "AdministrativeUnit",
@@ -18,4 +20,13 @@ __all__ = [
     "EEQueryLog",
     "DataLineage",
     "AutomationStatus",
+    "CommunityConfirmation",
+    "PhotoEvidence",
+    "FieldVerificationTask",
+    "ForestJob",
+    "MonitoredArea",
+    "Notification",
+    "AuditLog",
+    "QueryCacheEntry",
+    "QuotaLog",
 ]

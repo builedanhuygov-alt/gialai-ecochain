@@ -7,6 +7,8 @@ class MonitorRequest(BaseModel):
     administrative_unit_id: str
     start_date: str = Field(description="ISO date 2026-01-01")
     end_date: str
+    baseline_start: Optional[str] = None  # Sec 13
+    baseline_end: Optional[str] = None
     cloud_percentage: int = Field(default=20, ge=0, le=100)
     dataset: str = Field(default="SENTINEL2")
     geometry: Optional[dict] = None  # if not supplied, fetch from DB

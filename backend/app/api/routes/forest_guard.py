@@ -27,6 +27,9 @@ def monitor(req: MonitorRequest, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="Unit has no geometry; provide geometry in request")
     dataset = SatelliteSource(req.dataset) if req.dataset in [e.value for e in SatelliteSource] else SatelliteSource.SENTINEL2
     agent = get_forest_guard_agent()
+    # Sec 13 supports baseline period
+    baseline_start = getattr(req, "baseline_start", None)
+    baseline_end = getattr(req, "baseline_end", None)
     result = agent.monitor_area(
         administrative_unit_id=req.administrative_unit_id,
         start_date=req.start_date,
@@ -35,6 +38,8 @@ def monitor(req: MonitorRequest, db: Session = Depends(get_db)):
         dataset=dataset,
         cloud_percentage=req.cloud_percentage,
         db=db,
+        baseline_start=baseline_start,
+        baseline_end=baseline_end,
     )
     result["origin"] = tag_data_origin()
     return result

@@ -41,8 +41,8 @@ def create_app() -> FastAPI:
     s = get_settings()
     app = FastAPI(
         title="ECOGL API",
-        description="ECOGL 1.0 — Phase 1 AI Data Ingestion & GEE-ready Architecture",
-        version="1.0.0-phase1",
+        description="ECOGL 1.0 — Phase 2 Automated Data Intelligence + ForestGuard",
+        version="1.0.0-phase2",
         lifespan=lifespan,
     )
     app.add_middleware(
@@ -56,20 +56,26 @@ def create_app() -> FastAPI:
     from app.api.routes.health import router as health_router
     from app.api.routes.administrative import router as admin_router
     from app.api.routes.forest_guard import router as fg_router
+    from app.api.routes.forest import router as forest_router
+    from app.api.routes.earth_engine import router as ee_router
 
     app.include_router(health_router, prefix="/api", tags=["Health"])
     app.include_router(admin_router, prefix="/api", tags=["Administrative"])
     app.include_router(fg_router, prefix="/api", tags=["ForestGuard"])
+    app.include_router(forest_router, prefix="/api", tags=["Forest"])
+    app.include_router(ee_router, prefix="/api", tags=["EarthEngine"])
 
     @app.get("/")
     def root():
         return {
             "name": "ECOGL",
-            "version": "1.0.0-phase1",
+            "version": "1.0.0-phase2",
             "docs": "/docs",
             "health": "/api/health",
+            "earth_engine": "/api/earth-engine/status",
+            "forest": "/api/forest/areas",
             "demo_mode": s.is_demo,
-            "gee_status": "see /api/health",
+            "gee_status": "see /api/earth-engine/status",
         }
 
     return app

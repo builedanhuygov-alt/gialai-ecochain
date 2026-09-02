@@ -83,6 +83,14 @@ class DataProposal(Base):
     payload: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     proposed_by: Mapped[str] = mapped_column(String(50), nullable=False, default="ForestGuard")
+    # Phase 2 fields (Sec 15)
+    agent_id: Mapped[str | None] = mapped_column(String(50), nullable=True)  # e.g. ForestGuard
+    data_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_reference: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0-100
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     reviewed_by: Mapped[str | None] = mapped_column(String(36), nullable=True)  # admin user id
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)

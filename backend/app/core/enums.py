@@ -21,8 +21,12 @@ class AdministrativeLevel(StrEnum):
 class ProposalStatus(StrEnum):
     PROPOSED = "PROPOSED"
     PENDING = "PENDING"
-    VERIFIED = "VERIFIED"
+    # Phase 2 community / official split
+    COMMUNITY_VERIFIED = "COMMUNITY_VERIFIED"
+    OFFICIAL_VERIFIED = "OFFICIAL_VERIFIED"
+    VERIFIED = "VERIFIED"  # legacy alias = OFFICIAL_VERIFIED
     REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
 
 
 class DataStage(StrEnum):
@@ -56,10 +60,22 @@ class GEEStatus(StrEnum):
 
 class JobStatus(StrEnum):
     PENDING = "PENDING"
+    QUEUED = "QUEUED"
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
+    COMPLETED = "COMPLETED"
     FAILED = "FAILED"
+    NO_DATA = "NO_DATA"
+    CANCELLED = "CANCELLED"
     SKIPPED = "SKIPPED"
+
+
+class RiskLevel(StrEnum):
+    LOW = "LOW"
+    MODERATE = "MODERATE"
+    ELEVATED = "ELEVATED"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
 
 
 class AgentName(StrEnum):
