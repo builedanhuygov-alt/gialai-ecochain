@@ -85,6 +85,33 @@ async def ai_chat_stream(req: ChatRequest):
     
     return StreamingResponse(event_gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
 
+@router.post("/ai/pccc/synthesis")
+async def pccc_synthesis(body: dict):
+    """Vai trò 1: Gemini tổng hợp FireRiskEngine + FIRMS + thời tiết → kịch bản PCCC JSON chuẩn"""
+    from app.services.llm_service import synthesis_pccc
+    score = body.get("fire_score", 77)
+    firms = body.get("firms_count", 2)
+    weather = body.get("weather", {"temperature": 34, "wind_speed": 20, "humidity": 30})
+    district = body.get("district", "Huyện Chư Prông")
+    return await synthesis_pccc(fire_score=score, firms_count=firms, weather=weather, district=district)
+
+@router.post("/ai/vision/verify")
+async def vision_verify(body: dict):
+    """Vai trò 2: Gemini multimodal Text+Image xác minh ảnh cháy cộng đồng"""
+    from app.services.llm_service import verify_fire_image
+    image_b64 = body.get("image_b64", "")
+    gps = body.get("gps", {"lat": 13.9, "lon": 108.3})
+    return await verify_fire_image(image_b64=image_b64, gps=gps)
+
+@router.post("/ai/what-if/advisor")
+async def what_if_advisor(body: dict):
+    """Vai trò 3: What-if Advisor giải thích EXTREME / +3°C"""
+    from app.services.llm_service import what_if_advisor as wia
+    district = body.get("district", "Xã Ia Mơr")
+    temp_delta = body.get("temp_delta", 3)
+    ndvi = body.get("ndvi", 0.25)
+    return await wia(district=district, temp_delta=temp_delta, ndvi=ndvi)
+
 @router.get("/ai/health")
 async def ai_health():
     p = get_llm_provider()
@@ -95,8 +122,9 @@ async def ai_health():
         "vector_store": vs.health(),
         "streaming": "SSE",
         "tool_calling": list(__import__('app.services.ai.tools', fromlist=['TOOL_MAP']).TOOL_MAP.keys())[:5],
-        "structured_output": "JSON validated",
+        "structured_output": "JSON validated (PCCCResponse response_schema)",
         "api_security": "backend-only, no frontend keys",
+        "gemini_roles": ["synthesis_pccc", "vision_verify", "what_if_advisor"],
     }
 
 @router.get("/ai/rag/search")
