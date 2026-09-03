@@ -48,6 +48,7 @@ class FireRiskEngine:
         if slope>20: factors["Terrain"]="+10%"
         # NBR not used alone — only as evidence
         if nbr is not None and nbr < -0.25: factors["NBR burn scar"]="detected"
+        dry = (0.7 - ndvi)*50 + (0.4 - ndmi)*30
         base=min(100, max(5, int(base + _seed(administrative_unit_id,"base").uniform(-3,3))))
         level=score_to_level(base)
         # confidence data-aware Sec28
