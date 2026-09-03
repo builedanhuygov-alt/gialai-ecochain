@@ -3,24 +3,23 @@ import { useScope } from '../store/useScope'
 import { useDemo } from '../store/useDemo'
 
 export default function Header({ onMenu }: { onMenu: ()=>void }) {
-  const { scope, communes, villages, setCommune, setVillage } = useScope()
+  const { scope, communes, setCommune } = useScope()
   const { demo, toggle } = useDemo()
   return (
     <header className="header">
       <button className="menu" onClick={onMenu} aria-label="Menu"><Menu size={20}/></button>
 
       <div className="scope">
-        <select value={scope.commune||''} onChange={e=> setCommune(e.target.value||undefined)}>
+        <select value={scope.commune||''} onChange={e=> setCommune(e.target.value||undefined)} style={{display:'none'}}>
           <option value="">Tỉnh Gia Lai</option>
           {communes.map(c=> <option key={c} value={c}>{c}</option>)}
         </select>
-        {scope.commune && (
-          <select value={scope.village||''} onChange={e=> setVillage(e.target.value||undefined)}>
-            <option value="">Tất cả thôn</option>
-            {villages.map(v=> <option key={v} value={v}>{v}</option>)}
-          </select>
-        )}
+        <span style={{fontWeight:700}}>Gia Lai</span>
         <span className="scope-badge">{scope.role==='province'?'TỈNH':scope.role==='commune'?'XÃ':'THÔN'}</span>
+      </div>
+      <div style={{flex:1, maxWidth:420, margin:'0 16px', display:'flex', alignItems:'center', background:'#F8FAF9', border:'1px solid #E2E8E5', borderRadius:999, padding:'6px 12px', gap:8}}>
+        <span style={{opacity:0.5}}>⌕</span>
+        <input placeholder="Tìm xã, thôn, sự cố..." style={{border:0, outline:'none', flex:1, fontSize:13, background:'transparent'}} onKeyDown={e=>{ if(e.key==='Enter') alert('Tìm: '+(e.target as HTMLInputElement).value)}} />
       </div>
 
       <div className="header-right">
