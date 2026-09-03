@@ -1,0 +1,6 @@
+import{r as e,t}from"./jsx-runtime-BkSabwWG.js";import{t as n}from"./react-DHmoMYoq.js";import{r}from"./index-DxcAJMTw.js";var i=e(n(),1),a=t();function o({tabs:e,defaultTab:t}){let[n,o]=(0,i.useState)(t||e[0]);return(0,a.jsxs)(`div`,{children:[(0,a.jsx)(`div`,{className:`tabs`,role:`tablist`,children:e.map(e=>(0,a.jsxs)(`button`,{role:`tab`,"aria-selected":n===e,onClick:()=>o(e),className:n===e?`tab active`:`tab`,children:[n===e&&(0,a.jsx)(r.div,{layoutId:`tab-indicator`,className:`tab-indicator`,transition:{type:`spring`,stiffness:380,damping:32}}),(0,a.jsx)(`span`,{style:{position:`relative`},children:e})]},e))}),(0,a.jsx)(`style`,{children:`
+        .tabs{ display:flex; gap:6px; background:#F1F5F3; padding:4px; border-radius:999px; width:fit-content; }
+        .tab{ position:relative; padding:8px 14px; border-radius:999px; border:0; background:transparent; font-size:13px; font-weight:600; color:#64748B; }
+        .tab.active{ color:#0F1E1A; }
+        .tab-indicator{ position:absolute; inset:0; background:#fff; border-radius:999px; box-shadow:0 1px 3px rgba(0,0,0,0.08); border:1px solid #E2E8E5; }
+      `})]})}export{o as t};
