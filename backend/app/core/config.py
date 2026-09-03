@@ -46,8 +46,8 @@ class Settings(BaseSettings):
         default=24, alias="FOREST_MONITORING_INTERVAL_HOURS"
     )
 
-    # Firms Sec2
-    firms_map_key: Optional[str] = Field(default=None, alias="FIRMS_MAP_KEY")
+    # Firms Sec2 — NASA FIRMS MAP_KEY (Gia Lai LIVE)
+    firms_map_key: Optional[str] = Field(default="3ceb6a3e532d5d3be77ff23d71da4f1e", alias="FIRMS_MAP_KEY")
 
     # Copernicus Sec5
     copernicus_client_id: Optional[str] = Field(default=None, alias="COPERNICUS_CLIENT_ID")

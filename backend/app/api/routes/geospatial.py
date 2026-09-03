@@ -220,6 +220,15 @@ async def fire_firms(lat: float = Query(..., ge=-90, le=90), lon: float = Query(
     data["metadata"]={"source": data.get("source"), "provider":"NASA FIRMS", "timestamp": time.time(), "status": data.get("status"), "satellite": data.get("satellite"), "cache_status": data.get("cache")}
     return data
 
+@router.get("/hotspots/live")
+async def hotspots_live(day_range: int = Query(default=1, ge=1, le=7), source: str = Query(default="VIIRS_SNPP_NRT", regex="^(VIIRS_SNPP_NRT|MODIS_NRT|VIIRS_NOAA20_NRT|VIIRS_NOAA21_NRT)$")):
+    """NASA FIRMS Area query — Gia Lai BBox 107.3,13.1,109.4,14.7 — requires FIRMS_MAP_KEY=3ceb6a3e532d5d3be77ff23d71da4f1e"""
+    from app.services.firms_service import fetch_firms_gialai, GIALAI_BBOX
+    data=await fetch_firms_gialai(day_range=day_range, source=source)
+    # Enrich with metadata for frontend consistency
+    data["metadata"]={"source": data.get("source"), "provider":"NASA FIRMS", "timestamp": time.time(), "status": data.get("status"), "satellite": data.get("satellite"), "cache_status": data.get("cache"), "bbox": GIALAI_BBOX, "api_url": data.get("api_url")}
+    return data
+
 @router.get("/climate/power")
 async def climate_power(lat: float = Query(..., ge=-90, le=90), lon: float = Query(..., ge=-180, le=180)):
     from app.services.nasa_power import fetch_power

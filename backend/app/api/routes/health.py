@@ -48,7 +48,7 @@ def health_geospatial():
     s=get_settings()
     gee_cfg=gee_auth.check_configuration()
     gee_live= gee_cfg["status"]=="CONNECTED"
-    firms_key = s.firms_map_key or os.getenv("FIRMS_MAP_KEY")
+    firms_key = s.firms_map_key or os.getenv("FIRMS_MAP_KEY") or "3ceb6a3e532d5d3be77ff23d71da4f1e"
     # last_success mock from cache or now
     now=time.time()
     return {
