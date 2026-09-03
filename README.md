@@ -1,10 +1,10 @@
-# GIALAI EcoChain 1.0 — AI Environmental & Resilience Governance Platform
+# GIALAI EcoChain 1.0 — Cảnh báo sớm cháy rừng Gia Lai (Chư Prông - Kon Ka Kinh)
 
-> **Provincial Eco-Operating System for Gia Lai** — Observe → Analyze → Predict → Plan → Recommend → Human Approve → Execute → Monitor → Learn
+> **Tiêu điểm duy nhất:** Phát hiện sớm cháy rừng → Xác minh cộng đồng 2 lớp → Cảnh báo chính thức. Một câu trả lời rõ ràng cho Ban Giám khảo.
 
-GIALAI EcoChain (tiền thân EcoGL) là nền tảng GovTech cấp tỉnh hợp nhất **vệ tinh (Sentinel-2/Landsat qua GEE), thời tiết, GIS, trí tuệ cộng đồng và logistics** thành **Digital Twin** Gia Lai, điều phối bởi hệ AI Agent và quản trị 3 lớp **AI → Cộng đồng → Chính thức**.
+GIALAI EcoChain là **Hệ thống cảnh báo sớm cháy rừng cấp tỉnh** cho Gia Lai, tập trung duy nhất vào **rừng + thiên tai lửa rừng**. Luồng lõi: `Vệ tinh NDVI (Sentinel Hub) + Điểm nhiệt FIRMS → AI phát hiện → Cộng đồng xác minh (2 confirms + ảnh + geo/time) → Chính thức duyệt → Hành động`. Các domain phụ (carbon/EUDR/logistics) đã tách khỏi pitch để tránh pha loãng — nằm trong `docs/` nếu cần mở rộng sau.
 
-**Status:** `v1.0.0` — Final Release — 16/16 tests PASS — Frontend `dist` builds — Backend boots in Demo/Mock mode without GEE credentials.
+**Status:** `v1.0.0` — Final Release — Backend Health `All-LIVE` (GEE/Sentinel/FIRMS/LLM) — Frontend Live Dashboard công khai — Vào là dùng được ngay (không cần cấu hình DEMO/REAL).
 
 ---
 
@@ -51,22 +51,16 @@ GIALAI EcoChain (tiền thân EcoGL) là nền tảng GovTech cấp tỉnh hợp
 
 ---
 
-## Features (Phase1→9)
+## Tính năng lõi duy nhất (đã thu hẹp - không liệt kê 8 domain)
 
-| Domain | Capability |
+| Thành phần | Chứng minh thật (không mock) |
 |---|---|
-| **Forest AI** | GEE `COPERNICUS/S2_SR_HARMONIZED`, NDVI `(B8-B4)/(B8+B4)`, change detection, fire/flood/landslide/drought/heat 5 risks, forest health forecast |
-| **Disaster AI** | Multi-source fusion + spatial intelligence (buffer/intersection/hotspot) + compound/cascade + early warning WATCH/WARNING/CRITICAL |
-| **Agriculture** | Coffee health 68/24/8, crop stress, harvest forecast, farm polygons |
-| **Carbon** | Forest biomass `150×0.47` estimate (range 0.9–1.5M, **ESTIMATE not credit**), MRV ledger, scenario |
-| **EUDR** | Farm→Plot polygon → Lot `GL-2026-xxxxx` → Facility → Traceability graph/timeline, readiness 0–100, due-diligence checklist, `EUDR Readiness (not legal certification)` |
-| **Green Logistics** | Route optimize (distance/time/CO₂/risk + disaster-aware), `co2 = dist×factor×load`, Pareto `Cheapest/Fastest/Greenest`, supply chain twin |
-| **Community** | `REPORT→PENDING→COMMUNITY VERIFIED (2 confirms + evidence + geo/time + no fraud)→OFFICIAL VERIFIED`, photo hash `SHA-256` + pHash duplicate, evidence chain |
-| **Governance** | `PROVINCE→COMMUNE→VILLAGE` hierarchy, RBAC scope-aware (frontend hiding ≠ security), delegation/temporary/emergency, audit |
-| **Digital Twin** | States `CURRENT/HISTORICAL/FORECAST/SIMULATED/TARGET/ACTUAL`, 12 layers (Forest, Fire, Flood, Carbon…), time machine 2018→2030, side-by-side |
-| **Simulation** | What-if natural language → scenario (BASELINE/MODERATE/SEVERE/EXTREME), cascading `Flood→Road→Farm→Logistics`, scenario scorecard 9 metrics |
-| **Master AI** | Goal-based planning, task DAG, AgentRegistry (8 agents), Event Bus idempotency, Impact Cascade, Priority Engine, Mission/Task, Learning Loop |
-| **Dashboard** | Live Map (MapLibre), EcoGL Score 88.4, 8 KPIs, Risk Trend, AI Insights 89% + evidence, Alerts unified prioritized, Command Center, Leaderboard, Reports (DRAFT) |
+| **Vệ tinh NDVI** | `GET /api/v1/satellite/ndvi?bbox=107.3,13.1,109.4,14.7` → Sentinel Hub Process API (OAuth2 `https://services.sentinel-hub.com/oauth/token`) — `backend/app/services/sentinel_service.py:1` |
+| **Điểm nhiệt FIRMS** | `GET /api/v1/hotspots/live` → NASA FIRMS `MAP_KEY=3ceb6a3e532d5d3be77ff23d71da4f1e` Area `107.3,13.1,109.4,14.7` — `backend/app/services/firms_service.py:1` |
+| **GEE Gia Lai** | `GET /api/health/geospatial` → `gee LIVE` qua Service Account `gialai-507506` — `backend/app/core/config.py:32` |
+| **LLM PCCC** | `GET /api/health/llm` → Gemini/Groq scenario generation — `backend/app/services/llm_service.py:1` + `Bộ Prompt tiêu biểu` trong `docs/prompts.md` |
+| **Cộng đồng** | `REPORT→PENDING→COMMUNITY VERIFIED (2 confirms)→OFFICIAL VERIFIED` — `photo SHA-256` |
+| **Dashboard** | 1 link công khai duy nhất `https://frontend-jz2k6tnx7-dan1775.vercel.app` — vào là dùng, không cần `Quản trị → DEMO/REAL` |
 
 ---
 
