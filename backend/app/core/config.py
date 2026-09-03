@@ -46,13 +46,19 @@ class Settings(BaseSettings):
         default=24, alias="FOREST_MONITORING_INTERVAL_HOURS"
     )
 
-    # Firms Sec2 — NASA FIRMS MAP_KEY (Gia Lai LIVE)
+    # Firms Sec2 — NASA FIRMS MAP_KEY (Gia Lai LIVE) — supports both FIRMS_MAP_KEY and NASA_FIRMS_MAP_KEY
     firms_map_key: Optional[str] = Field(default="3ceb6a3e532d5d3be77ff23d71da4f1e", alias="FIRMS_MAP_KEY")
+    nasa_firms_map_key: Optional[str] = Field(default="3ceb6a3e532d5d3be77ff23d71da4f1e", alias="NASA_FIRMS_MAP_KEY")
 
-    # Copernicus Sec5
+    # Copernicus Sec5 (legacy)
     copernicus_client_id: Optional[str] = Field(default=None, alias="COPERNICUS_CLIENT_ID")
     copernicus_client_secret: Optional[str] = Field(default=None, alias="COPERNICUS_CLIENT_SECRET")
     copernicus_token_url: Optional[str] = Field(default=None, alias="COPERNICUS_TOKEN_URL")
+
+    # Sentinel Hub — new canonical env names (alias to Copernicus values for backward compat)
+    sentinelhub_client_id: Optional[str] = Field(default="sh-68631cbc-e038-4888-b634-959408db3438", alias="SENTINELHUB_CLIENT_ID")
+    sentinelhub_client_secret: Optional[str] = Field(default="YMc02Ln9MUFqcG3G4bjoeIUdojSr1ftL", alias="SENTINELHUB_CLIENT_SECRET")
+    sentinelhub_token_url: str = Field(default="https://services.sentinel-hub.com/oauth/token", alias="SENTINELHUB_TOKEN_URL")
 
     # Earth Engine dataset defaults
     default_satellite_source: SatelliteSource = Field(
@@ -66,6 +72,28 @@ class Settings(BaseSettings):
     @property
     def is_demo(self) -> bool:
         return self.demo_mode
+
+    @property
+    def effective_firms_key(self) -> Optional[str]:
+        import os
+        return self.firms_map_key or self.nasa_firms_map_key or os.getenv("FIRMS_MAP_KEY") or os.getenv("NASA_FIRMS_MAP_KEY") or "3ceb6a3e532d5d3be77ff23d71da4f1e"
+
+    @property
+    def sentinelhub_configured(self) -> bool:
+        import os
+        cid = self.sentinelhub_client_id or self.copernicus_client_id or os.getenv("SENTINELHUB_CLIENT_ID") or os.getenv("COPERNICUS_CLIENT_ID")
+        sec = self.sentinelhub_client_secret or self.copernicus_client_secret or os.getenv("SENTINELHUB_CLIENT_SECRET") or os.getenv("COPERNICUS_CLIENT_SECRET")
+        return bool(cid and sec)
+
+    @property
+    def effective_sentinelhub_id(self) -> Optional[str]:
+        import os
+        return self.sentinelhub_client_id or self.copernicus_client_id or os.getenv("SENTINELHUB_CLIENT_ID") or os.getenv("COPERNICUS_CLIENT_ID")
+
+    @property
+    def effective_sentinelhub_secret(self) -> Optional[str]:
+        import os
+        return self.sentinelhub_client_secret or self.copernicus_client_secret or os.getenv("SENTINELHUB_CLIENT_SECRET") or os.getenv("COPERNICUS_CLIENT_SECRET")
 
 
 @lru_cache

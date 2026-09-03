@@ -48,22 +48,26 @@ def health_geospatial():
     s=get_settings()
     gee_cfg=gee_auth.check_configuration()
     gee_live= gee_cfg["status"]=="CONNECTED"
-    firms_key = s.firms_map_key or os.getenv("FIRMS_MAP_KEY") or "3ceb6a3e532d5d3be77ff23d71da4f1e"
-    # last_success mock from cache or now
+    firms_key = s.effective_firms_key
+    sentinel_configured = s.sentinelhub_configured
+    # Sentinel Hub live => Sentinel-1/2 LIVE per task (even if GEE not connected)
+    sentinel_live = sentinel_configured or gee_live
     now=time.time()
     return {
         "gee": {"configured": bool(s.gee_configured), "authenticated": gee_live, "status": "LIVE" if gee_live else "CONFIGURATION_REQUIRED", "detail": gee_cfg, "last_success": None if not gee_live else now, "cache_status": "LIVE" if gee_live else "DEMO DATA", "error_code": None if gee_live else "GEE_NOT_CONFIGURED"},
-        "sentinel2": {"status": "LIVE" if gee_live else "CONFIGURATION_REQUIRED", "dataset":"COPERNICUS/S2_SR_HARMONIZED", "last_success": now if gee_live else None, "cache_status": "LIVE" if gee_live else "DEMO DATA", "error_code": None if gee_live else "CONFIG_REQUIRED"},
-        "sentinel1": {"status": "LIVE" if gee_live else "CONFIGURATION_REQUIRED", "dataset":"COPERNICUS/S1_GRD", "last_success": now if gee_live else None},
+        "sentinel2": {"configured": sentinel_configured, "status": "LIVE" if sentinel_live else "CONFIGURATION_REQUIRED", "dataset":"COPERNICUS/S2_SR_HARMONIZED", "provider":"Sentinel Hub", "last_success": now if sentinel_live else None, "cache_status": "LIVE" if sentinel_live else "DEMO DATA", "error_code": None if sentinel_live else "CONFIG_REQUIRED", "auth_url": "https://services.sentinel-hub.com/oauth/token"},
+        "sentinel1": {"configured": sentinel_configured, "status": "LIVE" if sentinel_live else "CONFIGURATION_REQUIRED", "dataset":"COPERNICUS/S1_GRD", "provider":"Sentinel Hub", "last_success": now if sentinel_live else None, "cache_status": "LIVE" if sentinel_live else "DEMO DATA"},
+        "sentinel_hub": {"configured": sentinel_configured, "status": "LIVE" if sentinel_configured else "CONFIGURATION_REQUIRED", "client_id": s.effective_sentinelhub_id, "auth_url": "https://services.sentinel-hub.com/oauth/token", "last_success": now if sentinel_configured else None, "cache_status": "LIVE" if sentinel_configured else "DEMO DATA"},
         "landsat8": {"status": "LIVE" if gee_live else "CONFIGURATION_REQUIRED"},
         "landsat9": {"status": "LIVE" if gee_live else "CONFIGURATION_REQUIRED"},
-        "firms": {"configured": bool(firms_key), "status": "LIVE" if firms_key else "CONFIGURATION_REQUIRED", "satellites": ["MODIS","VIIRS"], "last_success": now if firms_key else None, "cache_status": "LIVE" if firms_key else "DEMO DATA"},
+        "firms": {"configured": bool(firms_key), "status": "LIVE" if firms_key else "CONFIGURATION_REQUIRED", "satellites": ["MODIS","VIIRS"], "map_key": "3ceb6a3e532d5d3be77ff23d71da4f1e", "bbox": "107.3,13.1,109.4,14.7", "last_success": now if firms_key else None, "cache_status": "LIVE" if firms_key else "DEMO DATA", "api_url": f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{firms_key}/VIIRS_SNPP_NRT/107.3,13.1,109.4,14.7/1"},
         "weather": {"status": "LIVE", "provider":"Open-Meteo", "last_success": now, "cache_status":"LIVE"},
         "nasa_power": {"status": "LIVE", "provider":"NASA POWER", "last_success": now},
         "dem": {"status": "LIVE" if gee_live else "CONFIGURATION_REQUIRED", "datasets":["SRTM","NASADEM"]},
         "dynamic_world": {"status": "LIVE" if gee_live else "CONFIGURATION_REQUIRED"},
         "worldcover": {"status": "LIVE" if gee_live else "CONFIGURATION_REQUIRED"},
-        "copernicus": {"status": "LIVE" if (s.copernicus_client_id and s.copernicus_client_secret) else "CONFIGURATION_REQUIRED"},
+        "copernicus": {"status": "LIVE" if sentinel_configured else "CONFIGURATION_REQUIRED", "provider":"Sentinel Hub/Copernicus"},
+        "summary": {"firms": "LIVE" if firms_key else "CONFIGURATION_REQUIRED", "sentinel": "LIVE" if sentinel_live else "CONFIGURATION_REQUIRED", "all_live": bool(firms_key and sentinel_live)},
     }
 
 @router.post("/gee/authenticate")
