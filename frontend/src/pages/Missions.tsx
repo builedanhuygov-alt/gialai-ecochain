@@ -41,7 +41,15 @@ export default function Missions(){
       )}
 
       <div style={{background:'#F8FAF9', border:'1px solid #E2E8E5', borderRadius:12, padding:12, fontSize:13}}>
-        Vòng lặp học: AI dự đoán CAO → Thực địa XÁC NHẬN → Độ chính xác ✓ Đúng
+        <b>Vòng lặp học tập:</b> AI dự đoán CAO (87%) → Thực địa XÁC NHẬN → So sánh → Đánh giá mô hình → Cập nhật Digital Twin<br/>
+        <span style={{fontSize:12, color:'#64748B'}}>Dự đoán: Cháy 82% · Thực tế: Đã xác nhận cháy · Kết quả: ĐÚNG · Dùng cho cải tiến liên tục</span>
+      </div>
+
+      <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:16, padding:16}}>
+        <h4>Tác động môi trường (khi sự kiện gần nông nghiệp)</h4>
+        <div style={{fontSize:13, lineHeight:1.8}}>
+          Rừng: -12 ha · Carbon: +X tCO₂e (ước tính) · EUDR: Nguy cơ truy xuất · Logistics: +2.4h trễ · Chỉ hiện khi liên quan
+        </div>
       </div>
     </div>
   )
