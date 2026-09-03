@@ -56,7 +56,7 @@ GIALAI EcoChain là **Hệ thống cảnh báo sớm cháy rừng cấp tỉnh**
 | Thành phần | Chứng minh thật (không mock) |
 |---|---|
 | **Vệ tinh NDVI** | `GET /api/v1/satellite/ndvi?bbox=107.3,13.1,109.4,14.7` → Sentinel Hub Process API (OAuth2 `https://services.sentinel-hub.com/oauth/token`) — `backend/app/services/sentinel_service.py:1` |
-| **Điểm nhiệt FIRMS** | `GET /api/v1/hotspots/live` → NASA FIRMS `MAP_KEY=3ceb6a3e532d5d3be77ff23d71da4f1e` Area `107.3,13.1,109.4,14.7` — `backend/app/services/firms_service.py:1` |
+| **Điểm nhiệt FIRMS** | `GET /api/v1/hotspots/live` → NASA FIRMS `MAP_KEY` (env) Area `107.3,13.1,109.4,14.7` — `backend/app/services/firms_service.py:1` |
 | **GEE Gia Lai** | `GET /api/health/geospatial` → `gee LIVE` qua Service Account `gialai-507506` — `backend/app/core/config.py:32` |
 | **LLM PCCC** | `GET /api/health/llm` → Gemini/Groq scenario generation — `backend/app/services/llm_service.py:1` + `Bộ Prompt tiêu biểu` trong `docs/prompts.md` |
 | **Cộng đồng** | `REPORT→PENDING→COMMUNITY VERIFIED (2 confirms)→OFFICIAL VERIFIED` — `photo SHA-256` |

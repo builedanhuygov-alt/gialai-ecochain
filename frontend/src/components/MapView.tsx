@@ -18,13 +18,14 @@ const STATIONS = [
 export default function MapView({ onSelect }: { onSelect?: (type:string, id:string)=>void }) {
   const ref = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
-  const [base, setBase] = useState<'streets'|'satellite'>('streets')
+  const [base] = useState<'streets'|'satellite'>('streets')
   const [activeSat, setActiveSat] = useState<Record<string, boolean>>({})
   const [dateRange, setDateRange] = useState<'latest'|'7d'|'30d'|'3m'|'custom'>('30d')
   const [cloud, setCloud] = useState(20)
   const [info, setInfo] = useState<any>(null)
-  const [pixel, setPixel] = useState<any>(null)
-  const [liveStatus, setLiveStatus] = useState<'LIVE'|'CACHED'|'UNAVAILABLE'>('LIVE')
+  const [pixel] = useState<any>(null)
+  const [liveStatus, setLiveStatus] = useState<'LIVE'|'CACHED'|'STALE'|'CONFIGURATION_REQUIRED'|'UNAVAILABLE'|'DEMO'>('LIVE')
+  void onSelect; void pixel
   const [now, setNow] = useState(new Date())
   const [tickerIdx, setTickerIdx] = useState(0)
   const { state: locState, request: requestLoc } = useLocation()
@@ -62,8 +63,8 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
 
   const baseStyles: Record<string, string> = {
     streets: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-    satellite: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-    terrain: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+    satellite: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    terrain: 'https://demotiles.maplibre.org/style.json',
   }
 
   const fetchTile = async (layer:string)=>{
@@ -138,7 +139,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         }
         // click popup
         el.addEventListener('click', ()=>{
-          const popup = new (maplibregl as any).Popup({ closeButton:true, maxWidth:'320px' })
+          void new (maplibregl as any).Popup({ closeButton:true, maxWidth:'320px' })
             .setLngLat(st.coords as any)
             .setHTML(`<div style="font-family:Inter,sans-serif; min-width:220px"><b>${st.name}</b><br/>Cấp dự báo <b>CẤP ${st.level}</b> · Risk ${st.score}/100<br/>Nhiệt ${(st.temp + jitter.temp).toFixed(1)}°C · Ẩm ${(st.humidity + jitter.hum).toFixed(0)}% · Gió ${(st.wind + jitter.wind).toFixed(1)} km/h<br/><span style="font-size:11px; color:#64748B">Cập nhật: ${now.toLocaleTimeString('vi-VN')} · Nguồn: Sentinel-2 / FIRMS ${st.type.includes('Khẩn cấp')?'· LIVE':''}</span></div>`)
             .addTo(map)
@@ -164,40 +165,49 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   }, [locState])
 
   const [sourceLive, setSourceLive] = useState<Record<string,string>>({})
+  const [health, setHealth] = useState<any>(null)
   useEffect(()=>{
     fetch(`${API}/api/health/geospatial`).then(r=>r.json()).then(j=>{
-      setSourceLive({ sentinel2: j.sentinel2?.status || 'UNAVAILABLE', firms: j.firms?.status || 'UNAVAILABLE' })
-    }).catch(()=>{})
+      setSourceLive({ sentinel2: j.sentinel2?.status || 'UNAVAILABLE', firms: j.firms?.status || 'UNAVAILABLE', gee: j.gee?.status || 'UNAVAILABLE' })
+      setHealth(j)
+      const overall = j.summary?.all_live ? 'LIVE' : (j.firms?.status==='CONFIGURATION_REQUIRED' ? 'CONFIGURATION_REQUIRED' : 'UNAVAILABLE')
+      setLiveStatus(overall as any)
+    }).catch(()=> setLiveStatus('UNAVAILABLE'))
   },[])
 
   return (
     <div style={{position:'relative', height:'calc(100vh - 64px)', borderRadius:16, overflow:'hidden', background:'#E2E8E5'}}>
       <div ref={ref} style={{ width:'100%', height:'100%' }} />
 
-      {/* Top: search + LIVE */}
+      {/* Top: search + honest LIVE status */}
       <div style={{position:'absolute', top:12, left:12, right:12, display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', pointerEvents:'none'}}>
         <div style={{background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:999, padding:'8px 14px', display:'flex', gap:8, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', pointerEvents:'auto', flex:1, maxWidth:420}}>
           <span style={{opacity:0.6}}>⌕</span>
           <input placeholder="Tìm xã, thôn, sự cố..." style={{border:0, outline:'none', flex:1, fontSize:13, background:'transparent'}} onKeyDown={e=>{ if(e.key==='Enter'){ const v=(e.target as HTMLInputElement).value; if(v) mapRef.current?.flyTo({center:[108.3+Math.random()*0.2,13.9+Math.random()*0.2], zoom:11}) }}} />
+          <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background: health?.firms?.status==='LIVE'?'#DCFCE7': health?.firms?.status==='DEMO'?'#FEF3C7':'#FEE2E2'}}>{health?.firms?.status || liveStatus}</span>
         </div>
         <div style={{background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:12, padding:'8px 12px', fontSize:12, display:'flex', gap:8, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', pointerEvents:'auto'}}>
-          <span style={{width:8, height:8, borderRadius:999, background:'#10B981', display:'inline-block', animation:'pulse 1.5s infinite'}}/>
-          <span style={{fontWeight:800, fontSize:11, letterSpacing:0.5}}>HỆ THỐNG TRỰC TIẾP (LIVE)</span>
+          <span style={{width:8, height:8, borderRadius:999, background: liveStatus==='LIVE'?'#10B981': liveStatus==='CACHED'?'#F59E0B': liveStatus==='CONFIGURATION_REQUIRED'?'#F59E0B':'#EF4444', display:'inline-block', animation: liveStatus==='LIVE'?'pulse 1.5s infinite':''}}/>
+          <span style={{fontWeight:800, fontSize:11, letterSpacing:0.5}}>{liveStatus==='LIVE'?'HỆ THỐNG TRỰC TIẾP (LIVE)': liveStatus==='CACHED'?'DỮ LIỆU ĐỆM (CACHED)': liveStatus==='CONFIGURATION_REQUIRED'?'CẦN CẤU HÌNH': 'KHÔNG KHẢ DỤNG'}</span>
           <span style={{color:'#64748B'}}>· Cập nhật lúc: {now.toLocaleTimeString('vi-VN')} - {now.toLocaleDateString('vi-VN')}</span>
+          {health && <span style={{fontSize:10, background:'#F1F5F9', padding:'2px 6px', borderRadius:999}}>GEE:{health.gee?.status} FIRMS:{health.firms?.status} Sentinel:{health.sentinel2?.status}</span>}
         </div>
       </div>
 
-      {/* Layer toggle — 3 layers as per spec */}
-      <div style={{position:'absolute', top:64, left:12, background:'rgba(255,255,255,0.96)', backdropFilter:'blur(14px)', borderRadius:16, padding:10, minWidth:200, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', border:'1px solid rgba(255,255,255,0.7)', display:'flex', gap:6}}>
+      {/* Layer toggle — functional */}
+      <div style={{position:'absolute', top:64, left:12, background:'rgba(255,255,255,0.96)', backdropFilter:'blur(14px)', borderRadius:16, padding:10, minWidth:260, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', border:'1px solid rgba(255,255,255,0.7)', display:'flex', flexDirection:'column', gap:6}}>
+        <div style={{fontSize:11, fontWeight:700}}>Lớp bản đồ</div>
         {[
-          ['hotspot','🔥 Điểm nhiệt'],
-          ['forest','🌲 Độ che phủ'],
-          ['weather','🌧️ Trạm Thời tiết'],
-        ].map(([k,label])=>(
-          <label key={k} style={{display:'flex', gap:6, alignItems:'center', background:'#F8FAF9', padding:'6px 10px', borderRadius:999, fontSize:12, border:'1px solid #E2E8E5', cursor:'pointer'}}>
-            <input type="checkbox" defaultChecked={k==='hotspot'} onChange={()=>{}} /> {label}
+          ['hotspot','🔥 Điểm nhiệt FIRMS', 'hotspot', 'VIIRS_SNPP_NRT'],
+          ['ndvi','🌿 NDVI', 'ndvi', 'ndvi'],
+          ['s1','📡 Sentinel-1 VV/VH', 's1', 's1'],
+        ].map(([k,label, key, geeLayer])=>(
+          <label key={k} style={{display:'flex', gap:6, alignItems:'center', background: activeSat[key]?'#DCFCE7':'#F8FAF9', padding:'6px 10px', borderRadius:999, fontSize:12, border:'1px solid #E2E8E5', cursor:'pointer'}}>
+            <input type="checkbox" checked={!!activeSat[key as string]} onChange={()=> toggleSat(key as string, geeLayer as string)} /> {label}
+            <span style={{fontSize:10, padding:'1px 6px', borderRadius:999, background: sourceLive[key==='hotspot'?'firms': key==='ndvi'?'sentinel2':'sentinel1']==='LIVE'?'#DCFCE7':'#FEF3C7'}}>{sourceLive[key==='hotspot'?'firms': key==='ndvi'?'sentinel2':'sentinel1'] || '...'}</span>
           </label>
         ))}
+        <div style={{fontSize:10, color:'#64748B'}}>Gia Lai bbox 107.3,13.1,109.4,14.7 · Zoom ~9.2</div>
       </div>
 
       {/* Right controls */}

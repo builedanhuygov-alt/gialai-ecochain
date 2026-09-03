@@ -47,12 +47,20 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=lifespan,
     )
+    # Phase 28 Security: explicit origins, no wildcard with credentials
+    allowed_origins = [
+        "https://frontend-orcin-eight-y39ieidj2r.vercel.app",
+        "https://frontend-jz2k6tnx7-dan1775.vercel.app",
+        "https://frontend-dan1775.vercel.app",
+        "http://localhost:5173",
+        "http://localhost:3000",
+    ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=allowed_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
     )
     # Sec51 rate limiting + Sec52 fraud flags + Sec53 security headers
     _counts=defaultdict(list)

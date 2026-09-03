@@ -19,7 +19,7 @@ def test_weather_current():
     assert r.status_code==200
     j=r.json()
     assert "source" in j and "metadata" in j
-    assert j["metadata"]["status"] in ["LIVE","DEMO DATA"]
+    assert j["metadata"]["status"] in ["LIVE","DEMO","DEMO DATA","CACHED","STALE","CONFIGURATION_REQUIRED","UNAVAILABLE"]
     # invalid coords
     r=c.get("/api/weather/current?lat=100&lon=200")
     assert r.status_code in [400,422]
@@ -31,7 +31,7 @@ def test_weather_forecast_cache():
     r2=c.get("/api/weather/forecast?lat=13.9&lon=108.3&days=7")
     assert r2.status_code==200
     # second may be CACHED
-    assert r2.json()["metadata"]["cache_status"] in ["LIVE","CACHED","DEMO DATA"]
+    assert r2.json()["metadata"]["cache_status"] in ["LIVE","CACHED","DEMO","DEMO DATA","STALE","CONFIGURATION_REQUIRED","UNAVAILABLE"]
 
 def test_satellite():
     c=setup()
@@ -52,7 +52,7 @@ def test_firms():
     assert r.status_code==200
     j=r.json()
     assert "fires" in j and "metadata" in j
-    assert j["metadata"]["status"] in ["LIVE","DEMO DATA"]
+    assert j["metadata"]["status"] in ["LIVE","DEMO","DEMO DATA","CACHED","STALE","CONFIGURATION_REQUIRED","UNAVAILABLE"]
 
 def test_climate():
     c=setup()
@@ -62,9 +62,9 @@ def test_climate():
 
 def test_gee_fallback():
     c=setup()
-    # GEE not configured → DEMO DATA, not crash
+    # GEE not configured → DEMO or CONFIGURATION_REQUIRED, not crash
     r=c.get("/api/satellite/sentinel2?lat=13.9&lon=108.3")
-    assert r.json()["status"] in ["LIVE","DEMO DATA"]
+    assert r.json()["status"] in ["LIVE","DEMO","DEMO DATA","CACHED","STALE","CONFIGURATION_REQUIRED","UNAVAILABLE"]
 
 def test_location_reverse():
     c=setup()

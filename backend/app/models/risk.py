@@ -2,16 +2,22 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
 class RiskSignal(Base):
     __tablename__ = "risk_signals"
+    __table_args__ = (
+        Index("ix_risk_signals_adm", "administrative_unit_id"),
+        Index("ix_risk_signals_type", "risk_type"),
+        Index("ix_risk_signals_timestamp", "timestamp"),
+        Index("ix_risk_signals_status", "level"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     agent: Mapped[str] = mapped_column(String(30), nullable=False)  # ForestGuard/DisasterGuard/CarbonGuard/RiskEngine
-    risk_type: Mapped[str] = mapped_column(String(30), nullable=False)  # FIRE/FLOOD/LANDSLIDE/DROUGHT/HEAT/FOREST/CARBON/OVERALL
-    administrative_unit_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    risk_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)  # FIRE/FLOOD/LANDSLIDE/DROUGHT/HEAT/FOREST/CARBON/OVERALL
+    administrative_unit_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     score: Mapped[int] = mapped_column(Integer, nullable=False)  # 0-100
     confidence: Mapped[int] = mapped_column(Integer, nullable=False)  # 0-100 distinct
     level: Mapped[str] = mapped_column(String(20), nullable=False)  # LOW..CRITICAL

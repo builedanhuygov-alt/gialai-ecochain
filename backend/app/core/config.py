@@ -29,11 +29,9 @@ class Settings(BaseSettings):
     # Security
     secret_key: str = Field(default="change-me", alias="SECRET_KEY")
 
-    # GEE — Gia Lai Service Account gialai-507506 (defaults for 100% green health)
-    gee_project_id: Optional[str] = Field(default="gialai-507506", alias="GEE_PROJECT_ID")
-    gee_service_account: Optional[str] = Field(
-        default="huycho@gialai-507506.iam.gserviceaccount.com", alias="GEE_SERVICE_ACCOUNT"
-    )
+    # GEE — env-based, no hard-coded secrets
+    gee_project_id: Optional[str] = Field(default=None, alias="GEE_PROJECT_ID")
+    gee_service_account: Optional[str] = Field(default=None, alias="GEE_SERVICE_ACCOUNT")
     gee_private_key: Optional[str] = Field(default=None, alias="GEE_PRIVATE_KEY")
     gee_key_file: Optional[str] = Field(default=None, alias="GEE_KEY_FILE")
 
@@ -41,6 +39,8 @@ class Settings(BaseSettings):
     gemini_api_key: Optional[str] = Field(default=None, alias="GEMINI_API_KEY")
     groq_api_key: Optional[str] = Field(default=None, alias="GROQ_API_KEY")
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
+    cdse_client_id: Optional[str] = Field(default=None, alias="CDSE_CLIENT_ID")
+    cdse_client_secret: Optional[str] = Field(default=None, alias="CDSE_CLIENT_SECRET")
 
     # Scheduler
     scheduler_enabled: bool = Field(default=True, alias="SCHEDULER_ENABLED")
@@ -51,18 +51,16 @@ class Settings(BaseSettings):
         default=24, alias="FOREST_MONITORING_INTERVAL_HOURS"
     )
 
-    # Firms Sec2 — NASA FIRMS MAP_KEY (Gia Lai LIVE) — supports both FIRMS_MAP_KEY and NASA_FIRMS_MAP_KEY
-    firms_map_key: Optional[str] = Field(default="3ceb6a3e532d5d3be77ff23d71da4f1e", alias="FIRMS_MAP_KEY")
-    nasa_firms_map_key: Optional[str] = Field(default="3ceb6a3e532d5d3be77ff23d71da4f1e", alias="NASA_FIRMS_MAP_KEY")
+    # Firms — NASA FIRMS MAP_KEY
+    firms_map_key: Optional[str] = Field(default=None, alias="FIRMS_MAP_KEY")
+    nasa_firms_map_key: Optional[str] = Field(default=None, alias="NASA_FIRMS_MAP_KEY")
 
-    # Copernicus Sec5 (legacy)
+    # Copernicus / Sentinel Hub / CDSE — env-based
     copernicus_client_id: Optional[str] = Field(default=None, alias="COPERNICUS_CLIENT_ID")
     copernicus_client_secret: Optional[str] = Field(default=None, alias="COPERNICUS_CLIENT_SECRET")
     copernicus_token_url: Optional[str] = Field(default=None, alias="COPERNICUS_TOKEN_URL")
-
-    # Sentinel Hub — new canonical env names (alias to Copernicus values for backward compat)
-    sentinelhub_client_id: Optional[str] = Field(default="sh-68631cbc-e038-4888-b634-959408db3438", alias="SENTINELHUB_CLIENT_ID")
-    sentinelhub_client_secret: Optional[str] = Field(default="YMc02Ln9MUFqcG3G4bjoeIUdojSr1ftL", alias="SENTINELHUB_CLIENT_SECRET")
+    sentinelhub_client_id: Optional[str] = Field(default=None, alias="SENTINELHUB_CLIENT_ID")
+    sentinelhub_client_secret: Optional[str] = Field(default=None, alias="SENTINELHUB_CLIENT_SECRET")
     sentinelhub_token_url: str = Field(default="https://services.sentinel-hub.com/oauth/token", alias="SENTINELHUB_TOKEN_URL")
 
     # Earth Engine dataset defaults
@@ -73,18 +71,8 @@ class Settings(BaseSettings):
     @property
     def gee_configured(self) -> bool:
         import os
-        # also check file existence for Vercel (key file may not exist on cloud, use PRIVATE_KEY fallback)
-        has_key = bool(self.gee_private_key or self.gee_key_file or os.getenv("GEE_PRIVATE_KEY"))
-        # if key file path not found (e.g., local Windows path on Vercel), still consider configured if project+SA present
-        if self.gee_project_id and self.gee_service_account:
-            # treat as configured when project+SA present, private key via env or file
-            return bool(has_key or self.gee_project_id == "gialai-507506")
-        return bool(self.gee_project_id and has_key and self.gee_service_account)
-
-    @property
-    def gee_effective_configured(self) -> bool:
-        # For health 100% green: GEE LIVE if project_id gialai-507506 present
-        return bool(self.gee_project_id == "gialai-507506" and self.gee_service_account)
+        has_key = bool(self.gee_private_key or self.gee_key_file or os.getenv("GEE_PRIVATE_KEY") or os.getenv("GEE_KEY_FILE"))
+        return bool(self.gee_project_id and self.gee_service_account and has_key)
 
     @property
     def llm_configured(self) -> bool:
@@ -100,18 +88,13 @@ class Settings(BaseSettings):
         )
 
     @property
-    def llm_status(self) -> str:
-        # For health green: if no key, still return LIVE via mock/demo (100% green for jury)
-        return "LIVE"
-
-    @property
     def is_demo(self) -> bool:
         return self.demo_mode
 
     @property
     def effective_firms_key(self) -> Optional[str]:
         import os
-        return self.firms_map_key or self.nasa_firms_map_key or os.getenv("FIRMS_MAP_KEY") or os.getenv("NASA_FIRMS_MAP_KEY") or "3ceb6a3e532d5d3be77ff23d71da4f1e"
+        return self.firms_map_key or self.nasa_firms_map_key or os.getenv("FIRMS_MAP_KEY") or os.getenv("NASA_FIRMS_MAP_KEY")
 
     @property
     def sentinelhub_configured(self) -> bool:

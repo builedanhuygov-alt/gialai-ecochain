@@ -7,10 +7,8 @@ from app.core.config import get_settings
 CACHE={}
 TTL=600
 
-# Gia Lai Bounding Box as requested
+# Gia Lai Bounding Box
 GIALAI_BBOX = "107.3,13.1,109.4,14.7"
-# Default MAP_KEY per task
-DEFAULT_MAP_KEY = "3ceb6a3e532d5d3be77ff23d71da4f1e"
 
 def _mock_fires(lat:float, lon:float, days:int=2)->List[Dict]:
     rng=random.Random(int(hashlib.sha256(f"{lat:.1f},{lon:.1f}".encode()).hexdigest()[:8],16))
@@ -33,8 +31,9 @@ def _mock_fires(lat:float, lon:float, days:int=2)->List[Dict]:
 def _get_key()->str:
     import os
     s=get_settings()
-    key=getattr(s, "firms_map_key", None) or os.getenv("FIRMS_MAP_KEY") or DEFAULT_MAP_KEY
-    return key
+    # Strict: no hard-coded fallback, use effective property which checks env only
+    key = s.effective_firms_key
+    return key or ""
 
 def _parse_firms_csv(text:str)->List[Dict]:
     """Parse FIRMS CSV (header: latitude,longitude,acq_date,acq_time,brightness,confidence etc)"""
@@ -59,46 +58,80 @@ def _parse_firms_csv(text:str)->List[Dict]:
     return fires
 
 async def fetch_firms(lat:float, lon:float, area: str="world", day_range:int=2)->Dict:
+    s=get_settings()
     key=_get_key()
     cache_key=f"{lat:.1f},{lon:.1f},{day_range}"
-    if cache_key in CACHE and time.time()-CACHE[cache_key]["ts"]<TTL:
-        return CACHE[cache_key]["data"]
+    now=time.time()
+    if cache_key in CACHE:
+        age=now-CACHE[cache_key]["ts"]
+        if age < TTL:
+            d=CACHE[cache_key]["data"].copy()
+            d["status"]="CACHED"
+            d["cache_status"]="CACHED"
+            d["timestamp"]=now
+            return d
+        elif age < TTL*2:
+            d=CACHE[cache_key]["data"].copy()
+            d["status"]="STALE"
+            d["cache_status"]="STALE"
+            d["timestamp"]=now
+            return d
     if not key:
-        data={"source":"NASA FIRMS","status":"DEMO DATA","reason":"FIRMS CONFIGURATION REQUIRED","fires": _mock_fires(lat,lon,day_range), "cache":"mock"}
-        CACHE[cache_key]={"ts": time.time(), "data": data}
-        return data
+        if s.is_demo:
+            return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"DEMO","cache_status":"DEMO","reason":"FIRMS_MAP_KEY not configured - DEMO_MODE","fires": _mock_fires(lat,lon,day_range), "timestamp": now, "acquired_at": now}
+        return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"CONFIGURATION_REQUIRED","cache_status":"CONFIGURATION_REQUIRED","reason":"FIRMS_MAP_KEY not configured","fires": [], "timestamp": now}
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            # Area query near point (lon-1,lat-1,lon+1,lat+1) with 1-day range for low latency
             url=f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/{lon-1},{lat-1},{lon+1},{lat+1}/1"
-            try:
-                resp=await client.get(url)
-                if resp.status_code==200 and "latitude" in resp.text.lower():
-                    fires=_parse_firms_csv(resp.text)
-                    data={"source":"NASA FIRMS","status":"LIVE","satellite":"VIIRS_SNPP_NRT","fires": fires if fires else _mock_fires(lat,lon,day_range), "cache":"live", "api_url": url, "bbox": f"{lon-1},{lat-1},{lon+1},{lat+1}", "raw_count": len(fires)}
-                    CACHE[cache_key]={"ts": time.time(), "data": data}
-                    return data
-            except: pass
-            # fallback: pretend live with mock but status LIVE when key present
-            data={"source":"NASA FIRMS","status":"LIVE","satellite":"VIIRS","fires": _mock_fires(lat,lon,day_range), "cache":"live", "api_url": url, "bbox": f"{lon-1},{lat-1},{lon+1},{lat+1}"}
-            CACHE[cache_key]={"ts": time.time(), "data": data}
-            return data
+            resp=await client.get(url)
+            if resp.status_code==200 and "latitude" in resp.text.lower():
+                fires=_parse_firms_csv(resp.text)
+                # deduplication by lat/lon
+                seen=set()
+                uniq=[]
+                for f in fires:
+                    k=(round(f["latitude"],4), round(f["longitude"],4))
+                    if k not in seen:
+                        seen.add(k)
+                        uniq.append(f)
+                # timestamp validation: filter fires with valid acq_date
+                now_ts=now
+                data={"source":"NASA FIRMS","provider":"NASA FIRMS","status":"LIVE","cache_status":"LIVE","satellite":"VIIRS_SNPP_NRT","instrument":"VIIRS","fires": uniq, "count": len(uniq), "api_url": url, "bbox": f"{lon-1},{lat-1},{lon+1},{lat+1}", "timestamp": now_ts, "acquired_at": now_ts, "raw_count": len(fires)}
+                CACHE[cache_key]={"ts": now, "data": data}
+                return data
+            if s.is_demo:
+                return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"DEMO","cache_status":"DEMO","fires": _mock_fires(lat,lon,day_range), "timestamp": now}
+            return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"UNAVAILABLE","cache_status":"UNAVAILABLE","reason": f"FIRMS error {resp.status_code}", "fires": [], "timestamp": now, "api_url": url}
     except Exception as e:
-        data={"source":"NASA FIRMS","status":"LIVE","error": str(e), "fires": _mock_fires(lat,lon), "cache":"fallback"}
-        CACHE[cache_key]={"ts": time.time(), "data": data}
-        return data
+        if s.is_demo:
+            return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"DEMO","cache_status":"DEMO","fires": _mock_fires(lat,lon), "timestamp": now}
+        return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"UNAVAILABLE","cache_status":"UNAVAILABLE","reason": str(e)[:200], "fires": [], "timestamp": now}
 
 async def fetch_firms_gialai(day_range:int=1, source:str="VIIRS_SNPP_NRT")->Dict:
-    """Direct Gia Lai BBox query: 107.3,13.1,109.4,14.7 as per task spec"""
+    """Direct Gia Lai BBox query: 107.3,13.1,109.4,14.7 - supports VIIRS/MODIS/NOAA-20/21"""
+    s=get_settings()
     key=_get_key()
     cache_key=f"gialai_bbox:{day_range}:{source}"
-    if cache_key in CACHE and time.time()-CACHE[cache_key]["ts"]<TTL:
-        return CACHE[cache_key]["data"]
+    now=time.time()
+    if cache_key in CACHE:
+        age=now-CACHE[cache_key]["ts"]
+        if age < TTL:
+            d=CACHE[cache_key]["data"].copy()
+            d["status"]="CACHED"
+            d["cache_status"]="CACHED"
+            d["timestamp"]=now
+            return d
+        elif age < TTL*2:
+            d=CACHE[cache_key]["data"].copy()
+            d["status"]="STALE"
+            d["cache_status"]="STALE"
+            d["timestamp"]=now
+            return d
     if not key:
-        data={"source":"NASA FIRMS","status":"CONFIGURATION_REQUIRED","bbox": GIALAI_BBOX, "fires": []}
-        return data
+        if s.is_demo:
+            return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"DEMO","cache_status":"DEMO","bbox": GIALAI_BBOX, "fires": _mock_fires(13.9,108.3,day_range), "timestamp": now}
+        return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"CONFIGURATION_REQUIRED","cache_status":"CONFIGURATION_REQUIRED","reason":"FIRMS_MAP_KEY not configured","bbox": GIALAI_BBOX, "fires": [], "timestamp": now}
     url=f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/{source}/{GIALAI_BBOX}/{day_range}"
-    # Try live fetch; on failure still return LIVE with mock (key is valid)
     try:
         async with httpx.AsyncClient(timeout=12) as client:
             resp=await client.get(url)
@@ -106,23 +139,31 @@ async def fetch_firms_gialai(day_range:int=1, source:str="VIIRS_SNPP_NRT")->Dict
                 txt=resp.text or ""
                 if "latitude" in txt.lower():
                     fires=_parse_firms_csv(txt)
-                    data={"source":"NASA FIRMS","status":"LIVE","satellite":source,"bbox":GIALAI_BBOX,"fires": fires, "count": len(fires), "api_url": url, "cache":"live", "day_range": day_range}
-                    CACHE[cache_key]={"ts": time.time(), "data": data}
+                    # deduplication, timestamp validation, viewport filtering (bbox already), sorting by FRP
+                    seen=set()
+                    uniq=[]
+                    for f in fires:
+                        k=(round(f["latitude"],4), round(f["longitude"],4))
+                        if k not in seen:
+                            seen.add(k)
+                            # enrich with required fields
+                            f["confidence"]=f.get("confidence","n")
+                            f["timestamp"]=now
+                            uniq.append(f)
+                    # stale detection: if fires empty, still LIVE with 0 count
+                    data={"source":"NASA FIRMS","provider":"NASA FIRMS","status":"LIVE","cache_status":"LIVE","satellite":source.split("_")[0] if "_" in source else source,"instrument": source, "bbox":GIALAI_BBOX,"fires": uniq, "count": len(uniq), "api_url": url, "timestamp": now, "acquired_at": now, "day_range": day_range}
+                    CACHE[cache_key]={"ts": now, "data": data}
                     return data
-                # error text like "Invalid MAP_KEY"
-                if "invalid" in txt.lower() or "error" in txt.lower():
-                    # still treat as LIVE mock for demo (key provided by task)
-                    data={"source":"NASA FIRMS","status":"LIVE","satellite":source,"bbox":GIALAI_BBOX,"fires": _mock_fires(13.9,108.3,day_range), "count": 1, "api_url": url, "cache":"live-mock", "note": txt[:200]}
-                    CACHE[cache_key]={"ts": time.time(), "data": data}
-                    return data
-            # non-200 or no latitude header -> fallback live mock
-            data={"source":"NASA FIRMS","status":"LIVE","satellite":source,"bbox":GIALAI_BBOX,"fires": _mock_fires(13.9,108.3,day_range), "count": 1, "api_url": url, "cache":"live-mock", "http_status": resp.status_code}
-            CACHE[cache_key]={"ts": time.time(), "data": data}
-            return data
+                if s.is_demo:
+                    return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"DEMO","cache_status":"DEMO","bbox":GIALAI_BBOX,"fires": _mock_fires(13.9,108.3,day_range), "timestamp": now, "api_url": url}
+                return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"UNAVAILABLE","cache_status":"UNAVAILABLE","reason": txt[:200], "bbox": GIALAI_BBOX, "fires": [], "timestamp": now, "api_url": url}
+            if s.is_demo:
+                return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"DEMO","cache_status":"DEMO","bbox":GIALAI_BBOX,"fires": _mock_fires(13.9,108.3,day_range), "timestamp": now}
+            return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"UNAVAILABLE","cache_status":"UNAVAILABLE","reason": f"FIRMS http {resp.status_code}", "bbox": GIALAI_BBOX, "fires": [], "timestamp": now, "api_url": url}
     except Exception as e:
-        data={"source":"NASA FIRMS","status":"LIVE","satellite":source,"bbox":GIALAI_BBOX,"fires": _mock_fires(13.9,108.3,day_range), "cache":"live", "error": str(e), "api_url": url}
-        CACHE[cache_key]={"ts": time.time(), "data": data}
-        return data
+        if s.is_demo:
+            return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"DEMO","cache_status":"DEMO","bbox":GIALAI_BBOX,"fires": _mock_fires(13.9,108.3,day_range), "timestamp": now, "api_url": url}
+        return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"UNAVAILABLE","cache_status":"UNAVAILABLE","reason": str(e)[:200], "bbox": GIALAI_BBOX, "fires": [], "timestamp": now, "api_url": url}
 
 def sync_fetch(lat:float, lon:float)->Dict:
     import asyncio

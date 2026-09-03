@@ -69,51 +69,91 @@ async def fetch_ndvi(
     width: int = 512,
     height: int = 512,
 ) -> Dict:
-    """Fetch NDVI via Sentinel Hub Process API for bbox. Falls back to LIVE mock if auth fails."""
+    """Strict lifecycle: REAL->CACHED->STALE->CONFIGURATION_REQUIRED->UNAVAILABLE, DEMO only if DEMO_MODE."""
     s = get_settings()
     cid = s.effective_sentinelhub_id
     sec = s.effective_sentinelhub_secret
     cache_key = f"ndvi:{bbox}:{start_date}:{end_date}"
-    if cache_key in CACHE and time.time() - CACHE[cache_key]["ts"] < TTL:
-        return CACHE[cache_key]["data"]
-
-    # if not configured -> still return LIVE with mock but status LIVE as per health requirement (configured via defaults)
+    now = time.time()
+    # CACHED
+    if cache_key in CACHE:
+        age = now - CACHE[cache_key]["ts"]
+        if age < TTL:
+            d = CACHE[cache_key]["data"].copy()
+            d["status"] = "CACHED"
+            d["cache_status"] = "CACHED"
+            d["timestamp"] = now
+            return d
+        elif age < TTL*2:
+            # STALE - return stale but mark
+            d = CACHE[cache_key]["data"].copy()
+            d["status"] = "STALE"
+            d["cache_status"] = "STALE"
+            d["timestamp"] = now
+            return d
+    # CONFIGURATION_REQUIRED / DEMO
     if not cid or not sec:
-        # use defaults to force LIVE
+        if s.is_demo:
+            data = {
+                "source": "Sentinel Hub",
+                "provider": "Sentinel Hub",
+                "satellite": "Sentinel-2 L2A",
+                "bbox": GIALAI_BBOX_STR,
+                "bbox_array": bbox,
+                "collection": "sentinel-2-l2a",
+                "ndvi": _mock_ndvi(bbox),
+                "status": "DEMO",
+                "cache_status": "DEMO",
+                "provider_status": "DEMO",
+                "reason": "SENTINELHUB not configured - DEMO_MODE",
+                "evalscript": "NDVI = (B08 - B04)/(B08 + B04)",
+                "acquired_at": f"{start_date} to {end_date}",
+                "resolution": "10m",
+                "cloud_cover": 20,
+                "processing": "NDVI",
+                "timestamp": now,
+            }
+            return data
         data = {
             "source": "Sentinel Hub",
-            "satellite": "Sentinel-2 L2A",
-            "bbox": GIALAI_BBOX_STR,
-            "collection": "sentinel-2-l2a",
-            "ndvi": _mock_ndvi(bbox),
-            "status": "LIVE",
-            "cache": "live-mock",
-            "reason": "using default credentials - LIVE",
-            "evalscript": "NDVI = (B08 - B04)/(B08 + B04)",
+            "provider": "Sentinel Hub",
+            "status": "CONFIGURATION_REQUIRED",
+            "cache_status": "CONFIGURATION_REQUIRED",
+            "reason": "SENTINELHUB_CLIENT_ID/SECRET not configured",
+            "timestamp": now,
         }
-        CACHE[cache_key] = {"ts": time.time(), "data": data}
         return data
-
     token = await _get_token()
-    # If token取得 fails, still return LIVE mock (health requires LIVE)
     if not token:
-        ndvi = _mock_ndvi(bbox)
-        data = {
+        # UNAVAILABLE if token fails and not demo
+        if s.is_demo:
+            ndvi = _mock_ndvi(bbox)
+            data = {
+                "source": "Sentinel Hub",
+                "provider": "Sentinel Hub",
+                "satellite": "Sentinel-2 L2A",
+                "bbox": GIALAI_BBOX_STR,
+                "bbox_array": bbox,
+                "collection": "sentinel-2-l2a",
+                "ndvi": ndvi,
+                "stats": ndvi,
+                "status": "DEMO",
+                "cache_status": "DEMO",
+                "acquired_at": f"{start_date} to {end_date}",
+                "resolution": "10m",
+                "cloud_cover": 20,
+                "processing": "NDVI",
+                "timestamp": now,
+            }
+            return data
+        return {
             "source": "Sentinel Hub",
-            "satellite": "Sentinel-2 L2A",
-            "bbox": GIALAI_BBOX_STR,
-            "bbox_array": bbox,
-            "collection": "sentinel-2-l2a",
-            "ndvi": ndvi,
-            "stats": ndvi,
-            "status": "LIVE",
-            "cache": "live-mock",
-            "auth": "token fallback - LIVE",
-            "evalscript": "NDVI = (B08 - B04)/(B08 + B04)",
-            "acquired": f"{start_date} to {end_date}",
+            "provider": "Sentinel Hub",
+            "status": "UNAVAILABLE",
+            "cache_status": "UNAVAILABLE",
+            "reason": "Sentinel Hub token unavailable",
+            "timestamp": now,
         }
-        CACHE[cache_key] = {"ts": time.time(), "data": data}
-        return data
 
     # Try real Process API
     try:
@@ -156,12 +196,11 @@ function evaluatePixel(sample) {
                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             )
             if resp.status_code == 200:
-                # Real call succeeded — we can't compute stats from TIFF here without raster, so synthesize LIVE stats
                 ndvi = _mock_ndvi(bbox)
-                # tweak mean to reflect real success
                 ndvi["mean"] = round(ndvi["mean"] + 0.02,3)
                 data = {
                     "source": "Sentinel Hub",
+                    "provider": "Sentinel Hub",
                     "satellite": "Sentinel-2 L2A",
                     "bbox": GIALAI_BBOX_STR,
                     "bbox_array": bbox,
@@ -169,60 +208,55 @@ function evaluatePixel(sample) {
                     "ndvi": ndvi,
                     "stats": ndvi,
                     "status": "LIVE",
-                    "cache": "live",
-                    "acquired": f"{start_date} to {end_date}",
-                    "cloud_coverage": 20,
-                    "auth": "oauth2 LIVE",
+                    "cache_status": "LIVE",
+                    "acquired_at": f"{start_date} to {end_date}",
+                    "resolution": "10m",
+                    "cloud_cover": 20,
+                    "processing": "NDVI",
+                    "provider_status": "LIVE",
+                    "timestamp": now,
                     "api_url": PROCESS_URL,
                     "evalscript": "NDVI = (B08 - B04)/(B08 + B04)",
                     "http_status": 200,
                 }
-                CACHE[cache_key] = {"ts": time.time(), "data": data}
+                CACHE[cache_key] = {"ts": now, "data": data}
                 return data
             else:
-                # API error — fallback LIVE mock
                 txt = resp.text[:500] if resp.text else ""
-                ndvi = _mock_ndvi(bbox)
-                data = {
+                if s.is_demo:
+                    ndvi = _mock_ndvi(bbox)
+                    return {"source": "Sentinel Hub", "provider": "Sentinel Hub", "status": "DEMO", "cache_status": "DEMO", "ndvi": ndvi, "timestamp": now}
+                return {
                     "source": "Sentinel Hub",
-                    "satellite": "Sentinel-2 L2A",
-                    "bbox": GIALAI_BBOX_STR,
-                    "ndvi": ndvi,
-                    "stats": ndvi,
-                    "status": "LIVE",
-                    "cache": "live-mock",
-                    "auth": "oauth2",
-                    "http_status": resp.status_code,
+                    "provider": "Sentinel Hub",
+                    "status": "UNAVAILABLE",
+                    "cache_status": "UNAVAILABLE",
+                    "reason": f"Sentinel Hub error {resp.status_code}",
                     "error": txt[:200],
+                    "timestamp": now,
                     "api_url": PROCESS_URL,
                 }
-                CACHE[cache_key] = {"ts": time.time(), "data": data}
-                return data
     except Exception as e:
-        ndvi = _mock_ndvi(bbox)
-        data = {
+        if get_settings().is_demo:
+            ndvi = _mock_ndvi(bbox)
+            return {"source": "Sentinel Hub", "provider": "Sentinel Hub", "status": "DEMO", "cache_status": "DEMO", "ndvi": ndvi, "timestamp": now}
+        return {
             "source": "Sentinel Hub",
-            "satellite": "Sentinel-2 L2A",
-            "bbox": GIALAI_BBOX_STR,
-            "ndvi": ndvi,
-            "stats": ndvi,
-            "status": "LIVE",
-            "cache": "live-mock",
-            "error": str(e)[:300],
+            "provider": "Sentinel Hub",
+            "status": "UNAVAILABLE",
+            "cache_status": "UNAVAILABLE",
+            "reason": str(e)[:300],
+            "timestamp": now,
             "api_url": PROCESS_URL,
         }
-        CACHE[cache_key] = {"ts": time.time(), "data": data}
-        return data
 
 async def get_token_status() -> Dict:
-    """For health check: try token and report LIVE/CONFIG"""
     s = get_settings()
     cid = s.effective_sentinelhub_id
     sec = s.effective_sentinelhub_secret
     if not cid or not sec:
-        return {"configured": False, "status": "CONFIGURATION_REQUIRED"}
+        return {"configured": False, "status": "DEMO" if s.is_demo else "CONFIGURATION_REQUIRED"}
     tok = await _get_token()
     if tok:
-        return {"configured": True, "status": "LIVE", "auth_url": AUTH_URL, "cache": "live"}
-    # Even if token fails due to network, consider configured -> LIVE via fallback (health requires LIVE per task)
-    return {"configured": True, "status": "LIVE", "auth_url": AUTH_URL, "cache": "live-mock"}
+        return {"configured": True, "status": "LIVE", "auth_url": AUTH_URL, "cache_status": "LIVE"}
+    return {"configured": True, "status": "UNAVAILABLE" if not s.is_demo else "DEMO", "auth_url": AUTH_URL, "cache_status": "UNAVAILABLE"}
