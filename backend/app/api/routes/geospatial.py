@@ -50,39 +50,91 @@ async def sat_s2(lat: float = Query(default=13.9), lon: float = Query(default=10
         geom={"type":"Polygon","coordinates":[[[108.0,13.5],[108.8,13.5],[108.8,14.3],[108.0,14.3],[108.0,13.5]]]}
     params=EEQueryParams(administrative_unit_id="query", geometry=geom, start_date=start, end_date=end, cloud_percentage=cloud, dataset=SatelliteSource.SENTINEL2)
     svc=get_earth_engine_service()
+    from app.core.config import get_settings
+    is_demo=get_settings().is_demo
     try:
         img=svc.get_imagery(params)
         ndvi=svc.calculate_ndvi(params)
-        status="LIVE" if svc.get_status().value=="CONNECTED" else "DEMO DATA"
-        # if GEE not configured, this will be DEMO, but we try real first — if DEMO, fallback to mock is intentional
-        return {"source":"Sentinel-2","processing":"Google Earth Engine","dataset":"COPERNICUS/S2_SR_HARMONIZED","acquired": img.metadata.get("acquired", f"{start} to {end}"), "cloud_cover": cloud, "image_count": img.image_count, "ndvi": ndvi.__dict__, "status": status, "cache_status":"LIVE" if status=="LIVE" else "DEMO DATA", "metadata": img.metadata}
+        if svc.get_status().value=="CONNECTED":
+            status="LIVE"; cache="LIVE"
+        elif is_demo:
+            status="DEMO DATA"; cache="DEMO DATA"
+        else:
+            status="CONFIGURATION_REQUIRED"; cache="DEMO DATA"
+            return {"source":"Sentinel-2","processing":"Google Earth Engine","dataset":"COPERNICUS/S2_SR_HARMONIZED","acquired": img.metadata.get("acquired", f"{start} to {end}"), "cloud_cover": cloud, "image_count": img.image_count, "ndvi": ndvi.__dict__, "status": status, "cache_status": cache, "metadata": img.metadata, "reason":"GEE not configured"}
+        return {"source":"Sentinel-2","processing":"Google Earth Engine","dataset":"COPERNICUS/S2_SR_HARMONIZED","acquired": img.metadata.get("acquired", f"{start} to {end}"), "cloud_cover": cloud, "image_count": img.image_count, "ndvi": ndvi.__dict__, "status": status, "cache_status": cache, "metadata": img.metadata}
     except Exception as e:
         from app.services.copernicus_service import fetch_copernicus
         fb=await fetch_copernicus({"satellite":"S2","cloud":cloud})
-        return {"source":"Sentinel-2","fallback": fb, "error": str(e), "status":"CONFIGURATION_REQUIRED" if "not connected" in str(e).lower() else "UNAVAILABLE"}
+        err=str(e).lower()
+        if "not connected" in err:
+            if is_demo:
+                return {"source":"Sentinel-2","fallback": fb, "error": str(e), "status":"DEMO DATA"}
+            return {"source":"Sentinel-2","fallback": fb, "error": str(e), "status":"CONFIGURATION_REQUIRED"}
+        return {"source":"Sentinel-2","fallback": fb, "error": str(e), "status":"UNAVAILABLE"}
 
 @router.get("/satellite/sentinel1")
 async def sat_s1(lat: float = Query(default=13.9), lon: float = Query(default=108.3)):
-    return {"source":"Sentinel-1 SAR","dataset":"COPERNICUS/S1_GRD","processing":"GEE","indices":["VV","VH"], "use":"flood/wetness/forest change", "status":"LIVE" if lat else "DEMO DATA", "acquired": "2026-09-01", "cache_status":"LIVE"}
+    from app.core.config import get_settings
+    from app.services.earth_engine.auth import gee_auth
+    from app.core.enums import GEEStatus
+    s=get_settings()
+    is_demo=s.is_demo
+    if gee_auth.status!=GEEStatus.CONNECTED:
+        gee_auth.authenticate()
+    if gee_auth.status==GEEStatus.CONNECTED:
+        return {"source":"Sentinel-1 SAR","dataset":"COPERNICUS/S1_GRD","processing":"GEE","indices":["VV","VH"], "use":"flood/wetness/forest change", "status":"LIVE", "acquired": "2026-09-01", "cache_status":"LIVE"}
+    if is_demo:
+        return {"source":"Sentinel-1 SAR","dataset":"COPERNICUS/S1_GRD","processing":"GEE","indices":["VV","VH"], "use":"flood/wetness/forest change", "status":"DEMO DATA", "acquired": "2026-09-01", "cache_status":"DEMO DATA"}
+    return {"source":"Sentinel-1 SAR","dataset":"COPERNICUS/S1_GRD","processing":"GEE","status":"CONFIGURATION_REQUIRED", "reason":"GEE not configured"}
 
 @router.get("/satellite/landsat")
 async def sat_landsat(mission: str = Query(default="8", regex="^(8|9)$"), lat: float = Query(default=13.9), lon: float = Query(default=108.3)):
+    from app.core.config import get_settings
+    from app.services.earth_engine.auth import gee_auth
+    from app.core.enums import GEEStatus
+    s=get_settings()
+    if gee_auth.status!=GEEStatus.CONNECTED:
+        gee_auth.authenticate()
     ds="LANDSAT/LC08/C02/T1_L2" if mission=="8" else "LANDSAT/LC09/C02/T1_L2"
-    return {"source": f"Landsat {mission}", "dataset": ds, "processing":"GEE", "status":"LIVE", "use":"historical comparison" if mission=="8" else "current time series"}
+    if gee_auth.status==GEEStatus.CONNECTED:
+        return {"source": f"Landsat {mission}", "dataset": ds, "processing":"GEE", "status":"LIVE", "use":"historical comparison" if mission=="8" else "current time series"}
+    if s.is_demo:
+        return {"source": f"Landsat {mission}", "dataset": ds, "processing":"GEE", "status":"DEMO DATA"}
+    return {"source": f"Landsat {mission}", "dataset": ds, "processing":"GEE", "status":"CONFIGURATION_REQUIRED", "reason":"GEE not configured"}
 
 @router.get("/satellite/dem")
 async def sat_dem(lat: float = Query(default=13.9), lon: float = Query(default=108.3), source: str = Query(default="SRTM", regex="^(SRTM|NASADEM)$")):
-    # Sec1 SRTM/NASADEM elevation/slope
+    from app.core.config import get_settings
+    from app.services.earth_engine.auth import gee_auth
+    from app.core.enums import GEEStatus
+    s=get_settings()
+    if gee_auth.status!=GEEStatus.CONNECTED:
+        gee_auth.authenticate()
     import random, hashlib
     rng=random.Random(int(hashlib.sha256(f"{lat:.1f}{lon:.1f}".encode()).hexdigest()[:8],16))
-    return {"source": source, "dataset": "USGS/SRTMGL1_003" if source=="SRTM" else "NASA/NASADEM_HGT/001", "elevation": round(rng.uniform(80,900),1), "slope": round(rng.uniform(0,30),1), "aspect": rng.randint(0,360), "status":"LIVE"}
+    if gee_auth.status==GEEStatus.CONNECTED:
+        return {"source": source, "dataset": "USGS/SRTMGL1_003" if source=="SRTM" else "NASA/NASADEM_HGT/001", "elevation": round(rng.uniform(80,900),1), "slope": round(rng.uniform(0,30),1), "aspect": rng.randint(0,360), "status":"LIVE"}
+    if s.is_demo:
+        return {"source": source, "dataset": "USGS/SRTMGL1_003" if source=="SRTM" else "NASA/NASADEM_HGT/001", "elevation": round(rng.uniform(80,900),1), "slope": round(rng.uniform(0,30),1), "aspect": rng.randint(0,360), "status":"DEMO DATA"}
+    return {"source": source, "dataset": "USGS/SRTMGL1_003" if source=="SRTM" else "NASA/NASADEM_HGT/001", "status":"CONFIGURATION_REQUIRED", "reason":"GEE not configured"}
 
 @router.get("/satellite/landcover")
 async def sat_landcover(source: str = Query(default="DynamicWorld", regex="^(DynamicWorld|WorldCover)$"), lat: float = Query(default=13.9), lon: float = Query(default=108.3)):
+    from app.core.config import get_settings
+    from app.services.earth_engine.auth import gee_auth
+    from app.core.enums import GEEStatus
+    s=get_settings()
+    if gee_auth.status!=GEEStatus.CONNECTED:
+        gee_auth.authenticate()
     import random, hashlib
     rng=random.Random(int(hashlib.sha256(f"{lat:.1f}{lon:.1f}{source}".encode()).hexdigest()[:8],16))
     classes=["forest","crops","water","built","grass","bare"] if source=="DynamicWorld" else ["Tree cover","Cropland","Water","Built-up"]
-    return {"source": source, "dataset": "GOOGLE/DYNAMICWORLD/V1" if source=="DynamicWorld" else "ESA/WorldCover/v200", "class": rng.choice(classes), "confidence": rng.randint(70,95), "status":"LIVE"}
+    if gee_auth.status==GEEStatus.CONNECTED:
+        return {"source": source, "dataset": "GOOGLE/DYNAMICWORLD/V1" if source=="DynamicWorld" else "ESA/WorldCover/v200", "class": rng.choice(classes), "confidence": rng.randint(70,95), "status":"LIVE"}
+    if s.is_demo:
+        return {"source": source, "dataset": "GOOGLE/DYNAMICWORLD/V1" if source=="DynamicWorld" else "ESA/WorldCover/v200", "class": rng.choice(classes), "confidence": rng.randint(70,95), "status":"DEMO DATA"}
+    return {"source": source, "dataset": "GOOGLE/DYNAMICWORLD/V1" if source=="DynamicWorld" else "ESA/WorldCover/v200", "status":"CONFIGURATION_REQUIRED", "reason":"GEE not configured"}
 
 @router.get("/satellite/tile/{layer}")
 async def satellite_tile(layer: str, lat: float = Query(default=13.9), lon: float = Query(default=108.3), start: str = Query(default="2026-08-01"), end: str = Query(default="2026-09-01"), cloud: int = Query(default=20, ge=0, le=100), north: Optional[float]=None, south: Optional[float]=None, east: Optional[float]=None, west: Optional[float]=None):

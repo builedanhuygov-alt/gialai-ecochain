@@ -1,25 +1,26 @@
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { AnimatePresence, MotionConfig } from 'framer-motion'
+import { lazy, Suspense, useState } from 'react'
 import AppShell from './components/AppShell'
-import EcoMap from './pages/EcoMap'
-import MapPage from './pages/MapPage'
-import EventIntelligence, { EventsList } from './pages/EventIntelligence'
-import WhatIfLab from './pages/WhatIfLab'
-import Missions from './pages/Missions'
-import Forest from './pages/Forest'
-import Disaster from './pages/Disaster'
-import Agriculture from './pages/Agriculture'
-import Carbon from './pages/Carbon'
-import EUDR from './pages/EUDR'
-import Logistics from './pages/Logistics'
-import Twin from './pages/Twin'
-import Community from './pages/Community'
-import Governance from './pages/Governance'
-import Leaderboard from './pages/Leaderboard'
-import Reports from './pages/Reports'
-import Admin from './pages/Admin'
 import { PageTransition } from './motion/primitives'
-import { useState } from 'react'
+const EcoMap = lazy(()=> import('./pages/EcoMap'))
+const MapPage = lazy(()=> import('./pages/MapPage'))
+const EventIntelligence = lazy(()=> import('./pages/EventIntelligence'))
+const EventsList = lazy(()=> import('./pages/EventIntelligence').then(m=> ({ default: m.EventsList })))
+const WhatIfLab = lazy(()=> import('./pages/WhatIfLab'))
+const Missions = lazy(()=> import('./pages/Missions'))
+const Forest = lazy(()=> import('./pages/Forest'))
+const Disaster = lazy(()=> import('./pages/Disaster'))
+const Agriculture = lazy(()=> import('./pages/Agriculture'))
+const Carbon = lazy(()=> import('./pages/Carbon'))
+const EUDR = lazy(()=> import('./pages/EUDR'))
+const Logistics = lazy(()=> import('./pages/Logistics'))
+const Twin = lazy(()=> import('./pages/Twin'))
+const Community = lazy(()=> import('./pages/Community'))
+const Governance = lazy(()=> import('./pages/Governance'))
+const Leaderboard = lazy(()=> import('./pages/Leaderboard'))
+const Reports = lazy(()=> import('./pages/Reports'))
+const Admin = lazy(()=> import('./pages/Admin'))
 
 function AIAssistant(){
   const [open, setOpen] = useState(false)
@@ -62,31 +63,33 @@ function AIAssistant(){
 function AnimatedRoutes(){
   const location = useLocation()
   return (
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
-        <Route path="/" element={<PageTransition><EcoMap/></PageTransition>} />
-        <Route path="/events" element={<PageTransition><EventsList/></PageTransition>} />
-        <Route path="/events/:id" element={<PageTransition><EventIntelligence/></PageTransition>} />
-        <Route path="/what-if" element={<PageTransition><WhatIfLab/></PageTransition>} />
-        <Route path="/missions" element={<PageTransition><Missions/></PageTransition>} />
-        {/* Legacy intelligence kept as hidden capabilities, not primary nav */}
-        <Route path="/map" element={<PageTransition><MapPage/></PageTransition>} />
-        <Route path="/forest" element={<PageTransition><Forest/></PageTransition>} />
-        <Route path="/disaster" element={<PageTransition><Disaster/></PageTransition>} />
-        <Route path="/agriculture" element={<PageTransition><Agriculture/></PageTransition>} />
-        <Route path="/carbon" element={<PageTransition><Carbon/></PageTransition>} />
-        <Route path="/eudr" element={<PageTransition><EUDR/></PageTransition>} />
-        <Route path="/logistics" element={<PageTransition><Logistics/></PageTransition>} />
-        <Route path="/twin" element={<PageTransition><Twin/></PageTransition>} />
-        <Route path="/community" element={<PageTransition><Community/></PageTransition>} />
-        <Route path="/actions" element={<PageTransition><Governance/></PageTransition>} />
-        <Route path="/leaderboard" element={<PageTransition><Leaderboard/></PageTransition>} />
-        <Route path="/reports" element={<PageTransition><Reports/></PageTransition>} />
-        <Route path="/admin" element={<PageTransition><Admin/></PageTransition>} />
-        <Route path="/notifications" element={<PageTransition><div className="card">Thông báo — Nguy kịch/Cảnh báo/Nhiệm vụ — Theo mức độ</div></PageTransition>} />
-        <Route path="/audit" element={<PageTransition><div className="card">Nhật ký — Thời gian · Người dùng · Hành động · Phạm vi · Trạng thái</div></PageTransition>} />
-      </Routes>
-    </AnimatePresence>
+    <Suspense fallback={<div style={{padding:24}}><div className="skeleton" style={{height:320}} /></div>}>
+      <AnimatePresence mode="wait">
+        <Routes location={location} key={location.pathname}>
+          <Route path="/" element={<PageTransition><EcoMap/></PageTransition>} />
+          <Route path="/events" element={<PageTransition><EventsList/></PageTransition>} />
+          <Route path="/events/:id" element={<PageTransition><EventIntelligence/></PageTransition>} />
+          <Route path="/what-if" element={<PageTransition><WhatIfLab/></PageTransition>} />
+          <Route path="/missions" element={<PageTransition><Missions/></PageTransition>} />
+          {/* Legacy intelligence kept as hidden capabilities, not primary nav */}
+          <Route path="/map" element={<PageTransition><MapPage/></PageTransition>} />
+          <Route path="/forest" element={<PageTransition><Forest/></PageTransition>} />
+          <Route path="/disaster" element={<PageTransition><Disaster/></PageTransition>} />
+          <Route path="/agriculture" element={<PageTransition><Agriculture/></PageTransition>} />
+          <Route path="/carbon" element={<PageTransition><Carbon/></PageTransition>} />
+          <Route path="/eudr" element={<PageTransition><EUDR/></PageTransition>} />
+          <Route path="/logistics" element={<PageTransition><Logistics/></PageTransition>} />
+          <Route path="/twin" element={<PageTransition><Twin/></PageTransition>} />
+          <Route path="/community" element={<PageTransition><Community/></PageTransition>} />
+          <Route path="/actions" element={<PageTransition><Governance/></PageTransition>} />
+          <Route path="/leaderboard" element={<PageTransition><Leaderboard/></PageTransition>} />
+          <Route path="/reports" element={<PageTransition><Reports/></PageTransition>} />
+          <Route path="/admin" element={<PageTransition><Admin/></PageTransition>} />
+          <Route path="/notifications" element={<PageTransition><div className="card">Thông báo — Nguy kịch/Cảnh báo/Nhiệm vụ — Theo mức độ</div></PageTransition>} />
+          <Route path="/audit" element={<PageTransition><div className="card">Nhật ký — Thời gian · Người dùng · Hành động · Phạm vi · Trạng thái</div></PageTransition>} />
+        </Routes>
+      </AnimatePresence>
+    </Suspense>
   )
 }
 
