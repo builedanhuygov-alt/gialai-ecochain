@@ -193,6 +193,23 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         <div style={{fontSize:11, fontWeight:700, color:'#64748B', marginTop:8}}>ĐỊA HÌNH</div>
         <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Elevation</label>
         <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Slope</label>
+        <div style={{fontSize:11, fontWeight:700, color:'#64748B', marginTop:8}}>CHÁY</div>
+        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox" defaultChecked/> AI Fire Risk</label>
+        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox" defaultChecked/> NASA FIRMS</label>
+        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Burned Area</label>
+        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Fire History</label>
+        <div style={{fontSize:11, fontWeight:700, color:'#64748B', marginTop:8}}>THIÊN TAI</div>
+        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Flood Risk</label>
+        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Drought Risk</label>
+        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Landslide Risk</label>
+        <div style={{fontSize:11, fontWeight:700, color:'#64748B', marginTop:8}}>AI</div>
+        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox" defaultChecked/> AI Anomalies</label>
+        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> AI Risk Zones</label>
+        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> AI Events</label>
+        <div style={{fontSize:11, fontWeight:700, color:'#64748B', marginTop:8}}>VẬN HÀNH</div>
+        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox" defaultChecked/> Community Reports</label>
+        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Verified Events</label>
+        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Missions</label>
         <div style={{fontSize:10, color:'#64748B', marginTop:8, borderTop:'1px solid #E2E8E5', paddingTop:6}}>Nguồn: Google Earth Engine · Không giả LIVE</div>
       </div>
 

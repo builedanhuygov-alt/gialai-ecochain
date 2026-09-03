@@ -19,37 +19,36 @@ def _seed(uid:str, extra:str="")->random.Random:
 
 class FireRiskEngine:
     def analyze(self, administrative_unit_id:str, satellite:Dict|None=None, weather:Dict|None=None, terrain:Dict|None=None, hotspots:List[Dict]|None=None, community:int=0, historical:Dict|None=None)->Dict[str,Any]:
+        from app.services.fire_risk_config import WEIGHTS
         satellite=satellite or {}
         weather=weather or {}
         terrain=terrain or {}
         hotspots=hotspots or []
-        # vegetation from satellite NDVI/NDMI/NBR
         ndvi=satellite.get("ndvi", 0.6); ndmi=satellite.get("ndmi", 0.3); nbr=satellite.get("nbr", 0.2)
         temp=weather.get("temperature", 30); humidity=weather.get("humidity", 60); rainfall=weather.get("rainfall", 5); wind=weather.get("wind_speed", 10)
         slope=terrain.get("slope", 10); elevation=terrain.get("elevation", 300)
-        # heuristic
-        base=0
+        # Sec20 weighted scoring — not hard-coded NBR alone
+        # Fuel dryness (NDVI/NDMI) 30%, Weather 20%, FIRMS 15%, Wind 10%, Rainfall 10%, Terrain 10%, Historical/community 5%
+        fuel_score = max(0, min(100, (0.7-ndvi)*120 + (0.4-ndmi)*80))
+        # NBR is burn evidence, not fuel alone — weight it only as part of fuel if available, not standalone
+        if nbr is not None and nbr < -0.1: fuel_score = min(100, fuel_score + 5)  # slight bump, not dominant
+        weather_score = max(0, min(100, (temp-28)*4 + (60-humidity)*0.8))
+        firms_score = 70 if hotspots else 10
+        wind_score = min(100, wind*3)
+        rain_score = max(0, min(100, (10-rainfall)*6))
+        terrain_score = min(100, slope*2)
+        hist_score = 50 + (20 if historical else 0) + (community*5)
+        base = int(fuel_score*WEIGHTS["fuel_dryness"] + weather_score*WEIGHTS["weather_danger"] + firms_score*WEIGHTS["firms_proximity"] + wind_score*WEIGHTS["wind"] + rain_score*WEIGHTS["rainfall_deficit"] + terrain_score*WEIGHTS["terrain"] + hist_score*WEIGHTS["historical_community"])
         factors={}
-        # temp
-        if temp>33: base+=18; factors["Temperature"]="+18%"
-        elif temp>30: base+=8; factors["Temperature"]="+8%"
-        # humidity
-        if humidity<35: base+=22; factors["Humidity"]="+22%"
-        elif humidity<50: base+=10; factors["Humidity"]="+10%"
-        # rainfall deficit
-        if rainfall<2: base+=24; factors["Rainfall deficit"]="+24%"
-        elif rainfall<10: base+=10; factors["Rainfall deficit"]="+10%"
-        # vegetation dryness
-        dry = (0.7 - ndvi)*50 + (0.4 - ndmi)*30
-        if dry>15: base+=19; factors["Vegetation dryness"]="+19%"
-        if ndmi and ndmi<0.1: factors["NDMI"]="↓ 21%"
-        # wind
-        if wind>18: base+=11; factors["Wind"]="+11%"
-        # hotspots
-        if hotspots: base+=17; factors["Recent hotspot"]="+17%"
-        # terrain
-        if slope>20: factors["Slope 24°"]="HIGH difficulty"
-        base=min(100, max(5, int(base + _seed(administrative_unit_id,"base").uniform(-5,5))))
+        if fuel_score>60: factors["Fuel Dryness"]="+30%"
+        if weather_score>60: factors["Weather danger"]="+20%"
+        if firms_score>50: factors["FIRMS proximity"]="+15%"
+        if wind>18: factors["Wind"]="+10%"
+        if rainfall<2: factors["Rainfall deficit"]="+10%"
+        if slope>20: factors["Terrain"]="+10%"
+        # NBR not used alone — only as evidence
+        if nbr is not None and nbr < -0.25: factors["NBR burn scar"]="detected"
+        base=min(100, max(5, int(base + _seed(administrative_unit_id,"base").uniform(-3,3))))
         level=score_to_level(base)
         # confidence data-aware Sec28
         data_available = sum([1 for x in [satellite.get("ndvi") is not None, weather.get("temperature") is not None, bool(hotspots), terrain.get("slope") is not None] if x]) + (1 if community else 0)
