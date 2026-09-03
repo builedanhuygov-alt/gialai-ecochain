@@ -21,6 +21,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   const mapRef = useRef<maplibregl.Map | null>(null)
   void onSelect
   const [base] = useState<'streets'|'satellite'>('streets')
+  const [baseXyz, setBaseXyz] = useState<string>('carto')
   const [activeSat, setActiveSat] = useState<Record<string, boolean>>({})
   const [dateRange, setDateRange] = useState<'latest'|'7d'|'30d'|'3m'|'custom'>('30d')
   const [cloud, setCloud] = useState(20)
@@ -62,6 +63,13 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     return { start:'2026-08-01', end:'2026-09-01' }
   }
 
+  // XYZ Tile URLs — dán trực tiếp vào MapLibre/Leaflet/OpenLayers (không cần API Key)
+  const XYZ_TILES: Record<string, { url: string, attribution: string }> = {
+    esri: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '© Esri World Imagery' },
+    google_s: { url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', attribution: '© Google Satellite' },
+    google_y: { url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attribution: '© Google Hybrid' },
+    eox: { url: 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg', attribution: '© EOX Sentinel-2 cloudless' },
+  }
   // ⚠️ BẮT BUỘC 2: Dùng Style miễn phí KHÔNG CẦN API KEY của CARTO/OSM
   const baseStyles: Record<string, string> = {
     streets: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
@@ -110,6 +118,20 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     }
   }
   void addGEETileLayer
+
+  const switchBaseXyz = (id: string)=>{
+    setBaseXyz(id)
+    const map = mapRef.current
+    if(!map) return
+    // Remove previous base xyz
+    if(map.getLayer('base-xyz')) try{ map.removeLayer('base-xyz')}catch{}
+    if(map.getSource('base-xyz')) try{ map.removeSource('base-xyz')}catch{}
+    if(id==='carto') return // CARTO Positron đã là style gốc
+    const tile = XYZ_TILES[id]
+    if(!tile) return
+    map.addSource('base-xyz', { type:'raster', tiles:[tile.url], tileSize:256, attribution: tile.attribution } as any)
+    map.addLayer({ id:'base-xyz', type:'raster', source:'base-xyz', paint:{ 'raster-opacity': 1 } } as any, 'boundary')
+  }
 
   const toggleSat = async (key:string, geeLayer:string)=>{
     const checked = !activeSat[key]
@@ -230,9 +252,19 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         </div>
       </div>
 
-      {/* Layer toggle — functional */}
+      {/* Layer toggle — functional + XYZ base */}
       <div style={{position:'absolute', top:64, left:12, background:'rgba(255,255,255,0.96)', backdropFilter:'blur(14px)', borderRadius:16, padding:10, minWidth:260, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', border:'1px solid rgba(255,255,255,0.7)', display:'flex', flexDirection:'column', gap:6}}>
-        <div style={{fontSize:11, fontWeight:700}}>Lớp bản đồ</div>
+        <div style={{fontSize:11, fontWeight:700}}>Nền bản đồ (XYZ — dán trực tiếp MapLibre/Leaflet)</div>
+        <select value={baseXyz} onChange={e=> switchBaseXyz(e.target.value)} style={{padding:'6px 10px', borderRadius:999, border:'1px solid #E2E8E5', fontSize:12, background:'#F8FAF9'}}>
+          <option value="carto">CARTO Positron (Vector xám nhẹ) — https://basemaps.cartocdn.com/gl/positron-gl-style/style.json</option>
+          <option value="esri">Esri World Imagery — https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{'{'}z{'}'}/{'{'}y{'}'}/{'{'}x{'}'}</option>
+          <option value="google_s">Google Satellite — https://mt1.google.com/vt/lyrs=s&x={`{x}`}&y={`{y}`}&z={`{z}`}</option>
+          <option value="google_y">Google Hybrid — https://mt1.google.com/vt/lyrs=y&x={`{x}`}&y={`{y}`}&z={`{z}`}</option>
+          <option value="eox">EOX Sentinel-2 cloudless — https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{'{'}z{'}'}/{'{'}y{'}'}/{'{'}x{'}'}.jpg</option>
+        </select>
+        <div style={{fontSize:10, color:'#64748B'}}>Nguồn: <a href="https://earthengine.google.com" target="_blank">GEE</a> · <a href="https://dataspace.copernicus.eu" target="_blank">Copernicus</a> · <a href="https://planetarycomputer.microsoft.com" target="_blank">Planetary Computer</a> · <a href="https://firms.modaps.eosdis.nasa.gov" target="_blank">NASA FIRMS</a></div>
+        <div style={{height:1, background:'#E2E8E5', margin:'4px 0'}}/>
+        <div style={{fontSize:11, fontWeight:700}}>Lớp AI/GEE (overlay)</div>
         {[
           ['hotspot','🔥 Điểm nhiệt FIRMS', 'hotspot', 'VIIRS_SNPP_NRT'],
           ['ndvi','🌿 NDVI', 'ndvi', 'ndvi'],
