@@ -1,3 +1,4 @@
+import ModelSwitcher from '../components/ModelSwitcher'
 export default function Admin(){
   const saveGEE = ()=>{
     const pid=(document.getElementById('gee_pid') as HTMLInputElement)?.value
@@ -48,6 +49,7 @@ export default function Admin(){
         </div>
       </div>
 
+      <ModelSwitcher />
       <div className="audit">Nhật ký: 14:32 Quản trị Tỉnh đã xác minh sự cố Thôn A — THÀNH CÔNG</div>
       <style>{`.health,.agents{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:12px} .health div,.agents div{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:12px; font-size:13px} .audit{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:12px; margin-top:12px; font-size:13px; font-family:monospace}`}</style>
     </div>
