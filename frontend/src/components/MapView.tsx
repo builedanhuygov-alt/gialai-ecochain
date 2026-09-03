@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
+// ⚠️ BẮT BUỘC 1: Import CSS của MapLibre (Nếu thiếu map sẽ trắng/vỡ)
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useLocation } from '../hooks/useLocation'
 
@@ -16,16 +17,17 @@ const STATIONS = [
 ]
 
 export default function MapView({ onSelect }: { onSelect?: (type:string, id:string)=>void }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<any>(null)
+  const mapContainer = useRef<HTMLDivElement>(null)
+  const mapRef = useRef<maplibregl.Map | null>(null)
+  void onSelect
   const [base] = useState<'streets'|'satellite'>('streets')
   const [activeSat, setActiveSat] = useState<Record<string, boolean>>({})
   const [dateRange, setDateRange] = useState<'latest'|'7d'|'30d'|'3m'|'custom'>('30d')
   const [cloud, setCloud] = useState(20)
   const [info, setInfo] = useState<any>(null)
   const [pixel] = useState<any>(null)
+  void pixel
   const [liveStatus, setLiveStatus] = useState<'LIVE'|'CACHED'|'STALE'|'CONFIGURATION_REQUIRED'|'UNAVAILABLE'|'DEMO'>('LIVE')
-  void onSelect; void pixel
   const [now, setNow] = useState(new Date())
   const [tickerIdx, setTickerIdx] = useState(0)
   const { state: locState, request: requestLoc } = useLocation()
@@ -44,7 +46,6 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     const id=setInterval(()=> setTickerIdx(i=> (i+1)%tickerLines.length), 3500)
     return ()=> clearInterval(id)
   },[])
-  // Auto jitter temp/humidity every 5-10s Sec2
   const [jitter, setJitter]= useState({temp:0, hum:0, wind:0})
   useEffect(()=>{
     const id=setInterval(()=> setJitter({temp: (Math.random()-0.5)*0.4, hum: (Math.random()-0.5)*2, wind: (Math.random()-0.5)*0.6}), 7000)
@@ -61,11 +62,13 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     return { start:'2026-08-01', end:'2026-09-01' }
   }
 
+  // ⚠️ BẮT BUỘC 2: Dùng Style miễn phí KHÔNG CẦN API KEY của CARTO/OSM
   const baseStyles: Record<string, string> = {
     streets: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-    satellite: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    satellite: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
     terrain: 'https://demotiles.maplibre.org/style.json',
   }
+  void baseStyles
 
   const fetchTile = async (layer:string)=>{
     const { start, end } = dateParams()
@@ -77,9 +80,36 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     }
     try{
       const r=await fetch(`${API}/api/satellite/tile/${layer}?${params}`)
+      if(!r.ok) throw new Error('GEE Service chưa sẵn sàng')
       return await r.json()
-    }catch(e){ return { status:'UNAVAILABLE', error:String(e) } }
+    }catch(e){
+      // 🛡️ CHỐNG SẬP: Nếu GEE lỗi, log cảnh báo nhẹ, KHÔNG CRASH bản đồ chính
+      console.warn(`Lớp ${layer} chưa khả dụng (Chế độ Fallback BaseMap):`, e)
+      return { status:'UNAVAILABLE', error:String(e) }
+    }
   }
+
+  // 🛡️ Fallback chống sập khi Backend GEE trả về CONFIGURATION_REQUIRED
+  const addGEETileLayer = async (layerId: string, tileType: string) => {
+    const map = mapRef.current
+    if (!map) return
+    try {
+      const res = await fetch(`${API}/api/satellite/tile/${tileType}?layer=${tileType}&lat=13.85&lon=108.5&start=2026-08-10&end=2026-09-03&cloud=20`)
+      if (!res.ok) throw new Error('GEE Service chưa sẵn sàng')
+      const data = await res.json()
+      if (data.tile_url) {
+        if (map.getSource(layerId)) {
+          (map.getSource(layerId) as maplibregl.RasterTileSource).setTiles([data.tile_url])
+        } else {
+          map.addSource(layerId, { type:'raster', tiles:[data.tile_url], tileSize:256 })
+          map.addLayer({ id:layerId, type:'raster', source:layerId, paint:{ 'raster-opacity': 0.8 } })
+        }
+      }
+    } catch (err) {
+      console.warn(`Lớp ${tileType} chưa khả dụng (Chế độ Fallback BaseMap):`, err)
+    }
+  }
+  void addGEETileLayer
 
   const toggleSat = async (key:string, geeLayer:string)=>{
     const checked = !activeSat[key]
@@ -89,38 +119,46 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       if(mapRef.current?.getSource(key)) try{ mapRef.current.removeSource(key) }catch{}
       return
     }
-    const res=await fetchTile(geeLayer)
-    if(res.status==='LIVE' && res.tile_url){
-      if(mapRef.current.getLayer(key)) try{ mapRef.current.removeLayer(key) }catch{}
-      if(mapRef.current.getSource(key)) try{ mapRef.current.removeSource(key) }catch{}
-      mapRef.current.addSource(key, { type:'raster', tiles:[res.tile_url], tileSize:256 })
-      mapRef.current.addLayer({ id:key, type:'raster', source:key, paint:{ 'raster-opacity': 0.85 } } as any)
-      setLiveStatus('LIVE'); setInfo({ layer: key, ...res })
-    } else {
-      setInfo({ layer: key, status: res.status || 'UNAVAILABLE', reason: res.reason || res.error })
+    try{
+      const res=await fetchTile(geeLayer)
+      if(res.status==='LIVE' && res.tile_url && mapRef.current){
+        if(mapRef.current?.getLayer(key)) try{ mapRef.current.removeLayer(key) }catch{}
+        if(mapRef.current?.getSource(key)) try{ mapRef.current.removeSource(key) }catch{}
+        mapRef.current.addSource(key, { type:'raster', tiles:[res.tile_url], tileSize:256 })
+        mapRef.current.addLayer({ id:key, type:'raster', source:key, paint:{ 'raster-opacity': 0.85 } } as any)
+        setLiveStatus('LIVE'); setInfo({ layer: key, ...res })
+      } else {
+        // GEE CONFIGURATION_REQUIRED → fallback, không crash
+        console.warn(`Lớp ${geeLayer} chưa khả dụng (Fallback BaseMap):`, res.reason || res.error)
+        setInfo({ layer: key, status: res.status || 'UNAVAILABLE', reason: res.reason || res.error })
+      }
+    }catch(err){
+      console.warn(`Lớp ${geeLayer} lỗi:`, err)
+      setInfo({ layer: key, status:'UNAVAILABLE', reason:String(err) })
     }
   }
 
-  // Initial state: hardcode live dashboard <1.5s, auto load Gia Lai bounds + activeIncident Xã Hội Sơn
   useEffect(()=>{
-    if(!ref.current) return
-    const map = new (maplibregl as any).Map({
-      container: ref.current,
-      style: baseStyles[base],
-      center: [108.50, 13.85],
-      zoom: 8.5,
+    if(!mapContainer.current || mapRef.current) return
+    // ⚠️ BẮT BUỘC 2: Dùng Style miễn phí KHÔNG CẦN API KEY
+    const map = new maplibregl.Map({
+      container: mapContainer.current,
+      style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+      center: [108.35, 13.9],
+      zoom: 9.2,
+      maxBounds: [[106.5, 12.5],[110.0, 15.2]],
       attributionControl: false,
     })
-    mapRef.current = map
-    map.addControl(new maplibregl.NavigationControl({ showCompass:false }), 'bottom-right')
-    // fitBounds Gia Lai mới SW [13.1,107.3] NE [14.7,109.4]
-    map.fitBounds([[107.3, 13.1], [109.4, 14.7]], { padding:20, duration: 0 })
+    mapRef.current = map as any
+    map.addControl(new maplibregl.NavigationControl(), 'top-right')
+    map.fitBounds([[107.3, 13.1], [109.4, 14.7]], { padding:20, duration:0 })
     map.addControl(new (maplibregl as any).AttributionControl({ compact:true }), 'bottom-left')
     map.on('load', ()=>{
-      // Gia Lai boundary new
+      console.log('✅ MapLibre loaded successfully!')
+      map.resize()
+      // Gia Lai boundary
       map.addSource('gialai-boundary', { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[[107.3,13.1],[109.4,13.1],[109.4,14.7],[107.3,14.7],[107.3,13.1]]] }, properties:{} } })
       map.addLayer({ id:'boundary', type:'line', source:'gialai-boundary', paint:{ 'line-color':'#0F766E', 'line-width':1.5, 'line-opacity':0.5, 'line-dasharray':[4,4] } })
-      // 6 stations custom SVG markers
       STATIONS.forEach(st=>{
         const isHigh = st.level==='IV' || st.level==='V'
         const el=document.createElement('div')
@@ -137,24 +175,21 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         } else {
           new (maplibregl as any).Marker({ element: el }).setLngLat(st.coords as any).addTo(map)
         }
-        // click popup
         el.addEventListener('click', ()=>{
           void new (maplibregl as any).Popup({ closeButton:true, maxWidth:'320px' })
             .setLngLat(st.coords as any)
             .setHTML(`<div style="font-family:Inter,sans-serif; min-width:220px"><b>${st.name}</b><br/>Cấp dự báo <b>CẤP ${st.level}</b> · Risk ${st.score}/100<br/>Nhiệt ${(st.temp + jitter.temp).toFixed(1)}°C · Ẩm ${(st.humidity + jitter.hum).toFixed(0)}% · Gió ${(st.wind + jitter.wind).toFixed(1)} km/h<br/><span style="font-size:11px; color:#64748B">Cập nhật: ${now.toLocaleTimeString('vi-VN')} · Nguồn: Sentinel-2 / FIRMS ${st.type.includes('Khẩn cấp')?'· LIVE':''}</span></div>`)
             .addTo(map)
-          // also notify FireRiskGauge
           window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: st.name, level: st.level }}))
         })
       })
-      // Auto demo after 800ms: show all markers already, then pan to Xã Hội Sơn and trigger gauge V
       setTimeout(()=>{
         map.flyTo({ center:[108.68, 13.92], zoom:11, duration:1200 })
         window.dispatchEvent(new CustomEvent('ecochain-demo', { detail:{ area:'Xã Hội Sơn', level:'V' }}))
         window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area:'Xã Hội Sơn', level:'V' }}))
       }, 900)
     })
-    return ()=> map.remove()
+    return () => { map.remove(); (mapRef as any).current = null }
   }, [base])
 
   useEffect(()=>{
@@ -176,8 +211,9 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   },[])
 
   return (
-    <div style={{position:'relative', height:'calc(100vh - 64px)', borderRadius:16, overflow:'hidden', background:'#E2E8E5'}}>
-      <div ref={ref} style={{ width:'100%', height:'100%' }} />
+    // ⚠️ BẮT BUỘC 3: Div chứa map PHẢI CÓ height/width cố định rõ ràng (Tránh h-0)
+    <div className="relative w-full h-[calc(100vh-64px)] min-h-[500px] bg-slate-900" style={{position:'relative', height:'calc(100vh - 64px)', borderRadius:16, overflow:'hidden', background:'#0f172a'}}>
+      <div ref={mapContainer} className="absolute inset-0 w-full h-full" style={{ width:'100%', height:'100%' }} />
 
       {/* Top: search + honest LIVE status */}
       <div style={{position:'absolute', top:12, left:12, right:12, display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', pointerEvents:'none'}}>
@@ -188,7 +224,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         </div>
         <div style={{background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:12, padding:'8px 12px', fontSize:12, display:'flex', gap:8, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', pointerEvents:'auto'}}>
           <span style={{width:8, height:8, borderRadius:999, background: liveStatus==='LIVE'?'#10B981': liveStatus==='CACHED'?'#F59E0B': liveStatus==='CONFIGURATION_REQUIRED'?'#F59E0B':'#EF4444', display:'inline-block', animation: liveStatus==='LIVE'?'pulse 1.5s infinite':''}}/>
-          <span style={{fontWeight:800, fontSize:11, letterSpacing:0.5}}>{liveStatus==='LIVE'?'HỆ THỐNG TRỰC TIẾP (LIVE)': liveStatus==='CACHED'?'DỮ LIỆU ĐỆM (CACHED)': liveStatus==='CONFIGURATION_REQUIRED'?'CẦN CẤU HÌNH': 'KHÔNG KHẢ DỤNG'}</span>
+          <span style={{fontWeight:800, fontSize:11, letterSpacing:0.5}}>{liveStatus==='LIVE'?'HỆ THỐNG TRỰC TIẾP (LIVE)': liveStatus==='CACHED'?'DỮ LIỆU ĐỆM (CACHED)': liveStatus==='CONFIGURATION_REQUIRED'?'CẦN CẤU HÌNH': liveStatus==='DEMO'?'CHẾ ĐỘ DEMO':'KHÔNG KHẢ DỤNG'}</span>
           <span style={{color:'#64748B'}}>· Cập nhật lúc: {now.toLocaleTimeString('vi-VN')} - {now.toLocaleDateString('vi-VN')}</span>
           {health && <span style={{fontSize:10, background:'#F1F5F9', padding:'2px 6px', borderRadius:999}}>GEE:{health.gee?.status} FIRMS:{health.firms?.status} Sentinel:{health.sentinel2?.status}</span>}
         </div>
@@ -224,7 +260,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       {/* Bottom ticker + timeline */}
       <div style={{position:'absolute', bottom:0, left:0, right:0, background:'rgba(11,20,18,0.94)', color:'#fff', padding:'8px 12px', display:'flex', flexDirection:'column', gap:6}}>
         <div style={{display:'flex', gap:10, alignItems:'center', overflow:'hidden', whiteSpace:'nowrap'}}>
-          <span style={{background:'#DC2626', padding:'2px 8px', borderRadius:999, fontSize:11, fontWeight:700, animation:'pulse 1.5s infinite'}}>● LIVE</span>
+          <span style={{background: liveStatus==='LIVE'?'#10B981': liveStatus==='DEMO'?'#F59E0B':'#64748B', padding:'2px 8px', borderRadius:999, fontSize:11, fontWeight:700}}>{liveStatus==='LIVE'?'● LIVE': liveStatus==='DEMO'?'● DEMO':'● '+liveStatus}</span>
           <span style={{fontSize:12, animation:'marquee 18s linear infinite'}}>{tickerLines[tickerIdx]}</span>
         </div>
         <div style={{display:'flex', gap:8, alignItems:'center', background:'rgba(255,255,255,0.08)', borderRadius:10, padding:'6px 10px'}}>
@@ -238,8 +274,8 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
 
       {(info || pixel) && (
         <div style={{position:'absolute', bottom:80, right:12, background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:12, padding:12, minWidth:280, maxWidth:360, boxShadow:'0 8px 24px rgba(0,0,0,0.12)'}}>
-          {info && <><div style={{fontWeight:700, fontSize:12}}>DỮ LIỆU VỆ TINH — {info.layer} <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background: info.status==='LIVE'?'#DCFCE7':'#FEF3C7'}}>{info.status}</span></div><div style={{fontSize:12, marginTop:6, color:'#334155'}}>Nguồn: {info.source || 'Sentinel-2'} · Ngày: {info.acquired || '—'} · <span style={{background:'#DBEAFE', padding:'1px 6px', borderRadius:999, fontSize:10, color:'#1E40AF'}}>Chỉ số GIS / Định tính</span></div></>}
-          {pixel && <><div style={{height:1, background:'#E2E8E5', margin:'8px 0'}}/><div style={{fontSize:12}}>NDVI: <b>{pixel.ndvi}</b> <span style={{fontSize:10, background:'#DBEAFE', padding:'1px 6px', borderRadius:999}}>Chỉ số GIS</span> · AI: <span style={{fontSize:10, background:'#F3E8FF', padding:'1px 6px', borderRadius:999}}>AI Generative</span></div></>}
+          {info && <><div style={{fontWeight:700, fontSize:12}}>DỮ LIỆU VỆ TINH — {info.layer} <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background: info.status==='LIVE'?'#DCFCE7': info.status==='DEMO'?'#FEF3C7':'#FEE2E2'}}>{info.status}</span></div><div style={{fontSize:12, marginTop:6, color:'#334155'}}>Nguồn: {info.source || 'Sentinel-2'} · Ngày: {info.acquired || '—'} {info.status==='CONFIGURATION_REQUIRED' && <span style={{color:'#F59E0B'}}>· Fallback BaseMap</span>}</div></>}
+          {pixel && <><div style={{height:1, background:'#E2E8E5', margin:'8px 0'}}/><div style={{fontSize:12}}>NDVI: <b>{pixel.ndvi}</b></div></>}
         </div>
       )}
 
