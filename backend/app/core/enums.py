@@ -83,6 +83,22 @@ class RiskLevel(StrEnum):
     CRITICAL = "CRITICAL"
 
 
+class FireWarningLevel(StrEnum):
+    I = "I"
+    II = "II"
+    III = "III"
+    IV = "IV"
+    V = "V"
+
+FIRE_WARNING_LABELS = {
+    FireWarningLevel.I: "ÍT NGUY CƠ",
+    FireWarningLevel.II: "NGUY CƠ TRUNG BÌNH",
+    FireWarningLevel.III: "NGUY CƠ CAO",
+    FireWarningLevel.IV: "NGUY HIỂM",
+    FireWarningLevel.V: "CỰC KỲ NGUY HIỂM",
+}
+
+
 class AgentName(StrEnum):
     FOREST_GUARD = "ForestGuard"
     CARBON = "CarbonAgent"

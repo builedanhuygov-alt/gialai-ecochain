@@ -87,6 +87,7 @@ def create_app() -> FastAPI:
     from app.api.routes.p8 import router as p8_router
     from app.api.routes.p9 import router as p9_router
     from app.api.routes.geospatial import router as geo_router
+    from app.api.routes.fire import router as fire_router
 
     app.include_router(health_router, prefix="/api", tags=["Health"])
     app.include_router(admin_router, prefix="/api", tags=["Administrative"])
@@ -101,6 +102,7 @@ def create_app() -> FastAPI:
     app.include_router(p8_router, prefix="/api", tags=["Phase8"])
     app.include_router(p9_router, prefix="/api", tags=["Phase9"])
     app.include_router(geo_router, prefix="/api", tags=["Geospatial"])
+    app.include_router(fire_router, prefix="/api", tags=["Fire"])
     # Sec77 versioned alias
     app.include_router(geo_router, prefix="/api/v1", tags=["Geospatial-v1"])
 
