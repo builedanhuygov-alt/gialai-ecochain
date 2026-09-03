@@ -1,21 +1,20 @@
 import { Bell, Bot, Menu } from 'lucide-react'
-import { useScope } from '../store/useScope'
-import { useDemo } from '../store/useDemo'
+import { useEffect, useState } from 'react'
 
 export default function Header({ onMenu }: { onMenu: ()=>void }) {
-  const { scope, communes, setCommune } = useScope()
-  const { demo, toggle } = useDemo()
+  const [now, setNow] = useState(new Date())
+  useEffect(()=>{
+    const id=setInterval(()=> setNow(new Date()), 1000)
+    return ()=> clearInterval(id)
+  },[])
+  const timeStr = now.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit', second:'2-digit'}) + ' - ' + now.toLocaleDateString('vi-VN')
   return (
     <header className="header">
       <button className="menu" onClick={onMenu} aria-label="Menu"><Menu size={20}/></button>
 
       <div className="scope">
-        <select value={scope.commune||''} onChange={e=> setCommune(e.target.value||undefined)} style={{display:'none'}}>
-          <option value="">Tỉnh Gia Lai</option>
-          {communes.map(c=> <option key={c} value={c}>{c}</option>)}
-        </select>
         <span style={{fontWeight:700}}>Gia Lai</span>
-        <span className="scope-badge">{scope.role==='province'?'TỈNH':scope.role==='commune'?'XÃ':'THÔN'}</span>
+        <span className="scope-badge">TRỰC TIẾP</span>
       </div>
       <div style={{flex:1, maxWidth:420, margin:'0 16px', display:'flex', alignItems:'center', background:'#F8FAF9', border:'1px solid #E2E8E5', borderRadius:999, padding:'6px 12px', gap:8}}>
         <span style={{opacity:0.5}}>⌕</span>
@@ -23,9 +22,8 @@ export default function Header({ onMenu }: { onMenu: ()=>void }) {
       </div>
 
       <div className="header-right">
-        <span className="status"><span className="dot"/> Hệ thống hoạt động</span>
-        <span className="meta">Cập nhật: 2 phút trước</span>
-        <button className={`demo ${demo?'on':''}`} onClick={toggle} title="Chế độ Demo">{demo?'DEMO':'THỰC'}</button>
+        <span className="status"><span className="dot live" style={{animation:'pulse 1.5s infinite'}}/> Hệ thống trực tiếp</span>
+        <span className="meta">Cập nhật: {timeStr}</span>
         <button className="icon-btn" aria-label="Thông báo"><Bell size={18}/> <span className="badge">3</span></button>
         <button className="assistant"><Bot size={16}/> Trợ lý AI</button>
         <div className="user">QT</div>

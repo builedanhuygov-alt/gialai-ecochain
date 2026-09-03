@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { Map, Flame, FileCheck, Truck, Layers, Users, Settings, HelpCircle, X } from 'lucide-react'
+import FireRiskGauge from './FireRiskGauge'
 
 const groups = [
   { label:'CHÍNH', items:[
@@ -25,6 +26,10 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
             <div className="brand-sub">EcoChain</div>
           </div>
           <button className="close" onClick={onClose} aria-label="Close"><X size={18}/></button>
+        </div>
+
+        <div style={{padding:'12px 10px'}}>
+          <FireRiskGauge compact />
         </div>
 
         <nav className="nav">

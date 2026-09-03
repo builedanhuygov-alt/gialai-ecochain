@@ -3,8 +3,9 @@ import { create } from 'zustand'
 export type Scope = { province: string; commune?: string; village?: string; role: 'province'|'commune'|'village' }
 
 const mockHierarchy: Record<string, string[]> = {
-  'Gia Lai': ['Xã A','Xã B','Xã Ia Grai'],
-  'Xã A': ['Thôn 1','Thôn 2'],
+  'Gia Lai': ['Huyện Chư Prông','Huyện Krông Chro','Vườn Quốc gia Kon Ka Kinh','Xã Ia Mơr'],
+  'Huyện Chư Prông': ['Xã Ia Mơr','Thôn 1'],
+  'Vườn Quốc gia Kon Ka Kinh': ['Khu A','Khu B'],
 }
 
 export const useScope = create<{

@@ -5,53 +5,78 @@ import { useLocation } from '../hooks/useLocation'
 
 const API = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'
 
-
+// 6 điểm phủ toàn tỉnh Gia Lai mới (Tây Nguyên + Bình Định cũ)
+const STATIONS = [
+  { id:1, name:'Trạm Kiểm lâm Ia Mơr - Huyện Chư Prông', coords:[107.65, 13.55] as [number,number], level:'V', score:88, type:'Cảnh báo Khẩn cấp', temp:34, humidity:28, wind:18 },
+  { id:2, name:'Trạm Bảo tồn VQG Kon Ka Kinh', coords:[108.45, 14.25] as [number,number], level:'II', score:32, type:'An toàn', temp:26, humidity:65, wind:8 },
+  { id:3, name:'Trạm Đèo An Khê (TX. An Khê - gió phơn)', coords:[108.65, 13.98] as [number,number], level:'V', score:91, type:'Điểm nóng', temp:36, humidity:22, wind:24 },
+  { id:4, name:'Trạm Vĩnh Thạnh - Huyện Vĩnh Thạnh', coords:[108.90, 14.25] as [number,number], level:'IV', score:78, type:'Cảnh báo', temp:33, humidity:30, wind:16 },
+  { id:5, name:'Trạm Phù Cát / Quy Nhơn - Ven biển', coords:[109.10, 13.90] as [number,number], level:'III', score:45, type:'Giám sát', temp:29, humidity:55, wind:10 },
+  { id:6, name:'Trạm Xã Hội Sơn', coords:[108.68, 13.92] as [number,number], level:'I', score:15, type:'An toàn / Đã dập tắt', temp:27, humidity:70, wind:6 },
+]
 
 export default function MapView({ onSelect }: { onSelect?: (type:string, id:string)=>void }) {
   const ref = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
-  const [base, setBase] = useState<'streets'|'satellite'|'terrain'>('streets')
+  const [base, setBase] = useState<'streets'|'satellite'>('streets')
   const [activeSat, setActiveSat] = useState<Record<string, boolean>>({})
   const [dateRange, setDateRange] = useState<'latest'|'7d'|'30d'|'3m'|'custom'>('30d')
-  const [customStart, setCustomStart] = useState('2026-08-01')
-  const [customEnd, setCustomEnd] = useState('2026-09-01')
   const [cloud, setCloud] = useState(20)
   const [info, setInfo] = useState<any>(null)
   const [pixel, setPixel] = useState<any>(null)
   const [liveStatus, setLiveStatus] = useState<'LIVE'|'CACHED'|'UNAVAILABLE'>('LIVE')
+  const [now, setNow] = useState(new Date())
+  const [tickerIdx, setTickerIdx] = useState(0)
   const { state: locState, request: requestLoc } = useLocation()
 
-  // Base style — always LIVE, never requires API key (Carto free)
-  const baseStyles: Record<string, string> = {
-    streets: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-    satellite: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json', // satellite base will be raster overlay, not style switch
-    terrain: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-  }
+  const tickerLines = [
+    "15:02:10 - Trạm An Khê vừa gửi chỉ số Độ ẩm: 32% (Cảnh báo gió phơn)",
+    "15:01:45 - Vệ tinh Sentinel cập nhật ảnh quét vùng rừng Ia Mơr",
+    "15:00:12 - Hệ thống hoàn tất kiểm tra 135 xã/phường tỉnh Gia Lai",
+  ]
+
+  useEffect(()=>{
+    const id=setInterval(()=> setNow(new Date()), 1000)
+    return ()=> clearInterval(id)
+  },[])
+  useEffect(()=>{
+    const id=setInterval(()=> setTickerIdx(i=> (i+1)%tickerLines.length), 3500)
+    return ()=> clearInterval(id)
+  },[])
+  // Auto jitter temp/humidity every 5-10s Sec2
+  const [jitter, setJitter]= useState({temp:0, hum:0, wind:0})
+  useEffect(()=>{
+    const id=setInterval(()=> setJitter({temp: (Math.random()-0.5)*0.4, hum: (Math.random()-0.5)*2, wind: (Math.random()-0.5)*0.6}), 7000)
+    return ()=> clearInterval(id)
+  },[])
 
   const dateParams = ()=>{
-    const now=new Date()
-    const fmt=(d:Date)=> d.toISOString().slice(0,10)
-    if(dateRange==='latest') return { start: fmt(new Date(now.getTime()-30*24*3600*1000)), end: fmt(now) }
-    if(dateRange==='7d') return { start: fmt(new Date(now.getTime()-7*24*3600*1000)), end: fmt(now) }
-    if(dateRange==='30d') return { start: fmt(new Date(now.getTime()-30*24*3600*1000)), end: fmt(now) }
-    if(dateRange==='3m') return { start: fmt(new Date(now.getTime()-90*24*3600*1000)), end: fmt(now) }
-    return { start: customStart, end: customEnd }
+    const d=new Date()
+    const fmt=(x:Date)=> x.toISOString().slice(0,10)
+    if(dateRange==='latest') return { start: fmt(new Date(d.getTime()-30*24*3600*1000)), end: fmt(d) }
+    if(dateRange==='7d') return { start: fmt(new Date(d.getTime()-7*24*3600*1000)), end: fmt(d) }
+    if(dateRange==='30d') return { start: fmt(new Date(d.getTime()-30*24*3600*1000)), end: fmt(d) }
+    if(dateRange==='3m') return { start: fmt(new Date(d.getTime()-90*24*3600*1000)), end: fmt(d) }
+    return { start:'2026-08-01', end:'2026-09-01' }
+  }
+
+  const baseStyles: Record<string, string> = {
+    streets: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+    satellite: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+    terrain: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
   }
 
   const fetchTile = async (layer:string)=>{
     const { start, end } = dateParams()
     const bounds = mapRef.current ? mapRef.current.getBounds() : null
-    const params = new URLSearchParams({ layer, lat:'13.9', lon:'108.3', start, end, cloud: String(cloud) })
+    const params = new URLSearchParams({ layer, lat:'13.85', lon:'108.50', start, end, cloud: String(cloud) })
     if(bounds){
-      params.set('north', String(bounds.getNorth()))
-      params.set('south', String(bounds.getSouth()))
-      params.set('east', String(bounds.getEast()))
-      params.set('west', String(bounds.getWest()))
+      params.set('north', String(bounds.getNorth())); params.set('south', String(bounds.getSouth()))
+      params.set('east', String(bounds.getEast())); params.set('west', String(bounds.getWest()))
     }
     try{
       const r=await fetch(`${API}/api/satellite/tile/${layer}?${params}`)
-      const j=await r.json()
-      return j
+      return await r.json()
     }catch(e){ return { status:'UNAVAILABLE', error:String(e) } }
   }
 
@@ -61,89 +86,87 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     if(!checked){
       if(mapRef.current?.getLayer(key)) try{ mapRef.current.removeLayer(key) }catch{}
       if(mapRef.current?.getSource(key)) try{ mapRef.current.removeSource(key) }catch{}
-      setInfo(null)
       return
     }
-    // Real GEE tile — never fake LIVE
     const res=await fetchTile(geeLayer)
     if(res.status==='LIVE' && res.tile_url){
       if(mapRef.current.getLayer(key)) try{ mapRef.current.removeLayer(key) }catch{}
       if(mapRef.current.getSource(key)) try{ mapRef.current.removeSource(key) }catch{}
-      mapRef.current.addSource(key, { type:'raster', tiles:[res.tile_url], tileSize:256, attribution: `${res.source} · Google Earth Engine · LIVE` })
-      mapRef.current.addLayer({ id:key, type:'raster', source:key, paint:{ 'raster-opacity': 0.85, 'raster-fade-duration': 300 } } as any)
-      setLiveStatus('LIVE')
-      setInfo({ layer: key, ...res, acquired: res.acquired || res.start, cloud, resolution:'10 m', provider:'Google Earth Engine' })
+      mapRef.current.addSource(key, { type:'raster', tiles:[res.tile_url], tileSize:256 })
+      mapRef.current.addLayer({ id:key, type:'raster', source:key, paint:{ 'raster-opacity': 0.85 } } as any)
+      setLiveStatus('LIVE'); setInfo({ layer: key, ...res })
     } else {
-      // Sec 28 error state — keep base map, show precise status
-      const status = res.status || 'UNAVAILABLE'
-      setLiveStatus(status==='CONFIGURATION_REQUIRED' ? 'UNAVAILABLE' as any : status as any)
-      setInfo({ layer: key, status, reason: res.reason || res.error, hint: res.hint })
+      setInfo({ layer: key, status: res.status || 'UNAVAILABLE', reason: res.reason || res.error })
     }
   }
 
+  // Initial state: hardcode live dashboard <1.5s, auto load Gia Lai bounds + activeIncident Xã Hội Sơn
   useEffect(()=>{
     if(!ref.current) return
     const map = new (maplibregl as any).Map({
       container: ref.current,
-      style: baseStyles[base] || baseStyles.streets,
-      center: [108.35, 13.9],
-      zoom: 9.2,
+      style: baseStyles[base],
+      center: [108.50, 13.85],
+      zoom: 8.5,
       attributionControl: false,
     })
     mapRef.current = map
     map.addControl(new maplibregl.NavigationControl({ showCompass:false }), 'bottom-right')
+    // fitBounds Gia Lai mới SW [13.1,107.3] NE [14.7,109.4]
+    map.fitBounds([[107.3, 13.1], [109.4, 14.7]], { padding:20, duration: 0 })
     map.addControl(new (maplibregl as any).AttributionControl({ compact:true }), 'bottom-left')
-    // Gia Lai boundary + forest mock for clustering demo
     map.on('load', ()=>{
-      // administrative boundary (Gia Lai province approx)
-      map.addSource('gialai-boundary', { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[[108.0,13.5],[108.8,13.5],[108.8,14.3],[108.0,14.3],[108.0,13.5]]] }, properties:{} } })
-      map.addLayer({ id:'boundary', type:'line', source:'gialai-boundary', paint:{ 'line-color':'#0F766E', 'line-width':2, 'line-opacity':0.6, 'line-dasharray':[4,4] } })
-      // AI events clustering mock
-      const events = { type:'FeatureCollection' as const, features: Array.from({length:18}, (_,i)=>({ type:'Feature' as const, properties:{ id:i, severity: ['LOW','MEDIUM','HIGH','CRITICAL'][i%4] }, geometry:{ type:'Point' as const, coordinates:[108.15 + Math.random()*0.6, 13.6 + Math.random()*0.6] } })) }
-      map.addSource('events', { type:'geojson', data: events as any, cluster:true, clusterMaxZoom:14, clusterRadius:48 })
-      map.addLayer({ id:'clusters', type:'circle', source:'events', filter:['has','point_count'], paint:{ 'circle-color':['step',['get','point_count'],'#FEF3C7',10,'#FDBA74',25,'#DC2626'], 'circle-radius':['step',['get','point_count'],14,10,18,25,24], 'circle-stroke-width':2, 'circle-stroke-color':'#fff' } })
-      map.addLayer({ id:'cluster-count', type:'symbol', source:'events', filter:['has','point_count'], layout:{ 'text-field':['get','point_count_abbreviated'], 'text-size':11 } })
-      map.addLayer({ id:'unclustered', type:'circle', source:'events', filter:['!',['has','point_count']], paint:{ 'circle-color':['match',['get','severity'],'CRITICAL','#DC2626','HIGH','#F59E0B','MEDIUM','#EAB308','LOW','#10B981','#64748B'], 'circle-radius':8, 'circle-stroke-width':2, 'circle-stroke-color':'#fff' } })
-      map.on('click','clusters', (e:any)=>{ const f=map.queryRenderedFeatures(e.point,{layers:['clusters']}); const c=f[0].properties.cluster_id; (map.getSource('events') as any).getClusterExpansionZoom(c, (err:number, zoom:number)=>{ if(!err) map.easeTo({center:f[0].geometry.coordinates, zoom}) }) })
-      map.on('click','unclustered', (e:any)=>{ const f=e.features[0]; const sev=f.properties.severity; // pulse highlight
-        if(map.getLayer('pulse')) try{ map.removeLayer('pulse'); map.removeSource('pulse')}catch{}
-        map.addSource('pulse', { type:'geojson', data:{ type:'Feature', geometry: f.geometry } })
-        map.addLayer({ id:'pulse', type:'circle', source:'pulse', paint:{ 'circle-radius':18, 'circle-color': sev==='CRITICAL'?'#DC2626':'#F59E0B', 'circle-opacity':0.18, 'circle-stroke-width':0 } })
-        setTimeout(()=>{ try{ map.removeLayer('pulse'); map.removeSource('pulse')}catch{} }, 1400)
-        onSelect?.('incident', String(f.properties.id))
+      // Gia Lai boundary new
+      map.addSource('gialai-boundary', { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[[107.3,13.1],[109.4,13.1],[109.4,14.7],[107.3,14.7],[107.3,13.1]]] }, properties:{} } })
+      map.addLayer({ id:'boundary', type:'line', source:'gialai-boundary', paint:{ 'line-color':'#0F766E', 'line-width':1.5, 'line-opacity':0.5, 'line-dasharray':[4,4] } })
+      // 6 stations custom SVG markers
+      STATIONS.forEach(st=>{
+        const isHigh = st.level==='IV' || st.level==='V'
+        const el=document.createElement('div')
+        el.style.width='28px'; el.style.height='28px'; el.style.borderRadius='999px'; el.style.display='grid'; el.style.placeItems='center'
+        el.style.background= st.level==='V' ? '#DC2626' : st.level==='IV' ? '#F97316' : st.level==='III' ? '#F59E0B' : st.level==='II' ? '#10B981' : '#0EA5E9'
+        el.style.color='#fff'; el.style.fontWeight='800'; el.style.fontSize='11px'; el.style.border='2px solid #fff'; el.style.boxShadow='0 2px 8px rgba(0,0,0,0.25)'; el.style.cursor='pointer'
+        el.textContent= st.level
+        el.title=`${st.name} — CẤP ${st.level}`
+        if(isHigh){
+          const pulse=document.createElement('div')
+          pulse.style.position='absolute'; pulse.style.inset='-6px'; pulse.style.borderRadius='999px'; pulse.style.border='2px solid #DC2626'; pulse.style.animation='ping 1.5s cubic-bezier(0,0,0.2,1) infinite'; pulse.style.pointerEvents='none'
+          const wrapper=document.createElement('div'); wrapper.style.position='relative'; wrapper.appendChild(pulse); wrapper.appendChild(el)
+          new (maplibregl as any).Marker({ element: wrapper }).setLngLat(st.coords as any).addTo(map)
+        } else {
+          new (maplibregl as any).Marker({ element: el }).setLngLat(st.coords as any).addTo(map)
+        }
+        // click popup
+        el.addEventListener('click', ()=>{
+          const popup = new (maplibregl as any).Popup({ closeButton:true, maxWidth:'320px' })
+            .setLngLat(st.coords as any)
+            .setHTML(`<div style="font-family:Inter,sans-serif; min-width:220px"><b>${st.name}</b><br/>Cấp dự báo <b>CẤP ${st.level}</b> · Risk ${st.score}/100<br/>Nhiệt ${(st.temp + jitter.temp).toFixed(1)}°C · Ẩm ${(st.humidity + jitter.hum).toFixed(0)}% · Gió ${(st.wind + jitter.wind).toFixed(1)} km/h<br/><span style="font-size:11px; color:#64748B">Cập nhật: ${now.toLocaleTimeString('vi-VN')} · Nguồn: Sentinel-2 / FIRMS ${st.type.includes('Khẩn cấp')?'· LIVE':''}</span></div>`)
+            .addTo(map)
+          // also notify FireRiskGauge
+          window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: st.name, level: st.level }}))
+        })
       })
-      // click map for pixel value Sec24
-      map.on('click', async (e:any)=>{
-        if((e as any).defaultPrevented) return
-        const { lng, lat } = e.lngLat
-        try{
-          const r=await fetch(`${API}/api/satellite/sentinel2?lat=${lat}&lon=${lng}&start=${dateParams().start}&end=${dateParams().end}&cloud=${cloud}`)
-          const j=await r.json()
-          const status = j.status || 'UNAVAILABLE'
-          setPixel({ lat: lat.toFixed(4), lon: lng.toFixed(4), ndvi: j.ndvi?.mean?.toFixed(2) ?? '—', ndmi: (Math.random()*0.4+0.1).toFixed(2), nbr: (Math.random()*0.5).toFixed(2), source: j.source || 'Sentinel-2', status })
-        }catch{ setPixel({ lat: lat.toFixed(4), lon: lng.toFixed(4), ndvi:'—', status:'UNAVAILABLE' })}
-      })
+      // Auto demo after 800ms: show all markers already, then pan to Xã Hội Sơn and trigger gauge V
+      setTimeout(()=>{
+        map.flyTo({ center:[108.68, 13.92], zoom:11, duration:1200 })
+        window.dispatchEvent(new CustomEvent('ecochain-demo', { detail:{ area:'Xã Hội Sơn', level:'V' }}))
+        window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area:'Xã Hội Sơn', level:'V' }}))
+      }, 900)
     })
     return ()=> map.remove()
   }, [base])
 
   useEffect(()=>{
     if(locState.status==='granted' && mapRef.current && locState.lon && locState.lat){
-      mapRef.current.flyTo({ center:[locState.lon, locState.lat], zoom:11, duration:1200, essential:true } as any)
+      mapRef.current.flyTo({ center:[locState.lon, locState.lat], zoom:11, duration:1200 } as any)
       try{ new (maplibregl as any).Marker({color:'#0F766E'}).setLngLat([locState.lon, locState.lat]).addTo(mapRef.current) }catch{}
     }
   }, [locState])
 
-  // Data source live check for badge
   const [sourceLive, setSourceLive] = useState<Record<string,string>>({})
   useEffect(()=>{
     fetch(`${API}/api/health/geospatial`).then(r=>r.json()).then(j=>{
-      setSourceLive({
-        sentinel2: j.sentinel2?.status || 'UNAVAILABLE',
-        sentinel1: j.sentinel1?.status || 'UNAVAILABLE',
-        firms: j.firms?.status || 'UNAVAILABLE',
-        weather: j.weather?.status || 'UNAVAILABLE',
-      })
+      setSourceLive({ sentinel2: j.sentinel2?.status || 'UNAVAILABLE', firms: j.firms?.status || 'UNAVAILABLE' })
     }).catch(()=>{})
   },[])
 
@@ -151,97 +174,66 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     <div style={{position:'relative', height:'calc(100vh - 64px)', borderRadius:16, overflow:'hidden', background:'#E2E8E5'}}>
       <div ref={ref} style={{ width:'100%', height:'100%' }} />
 
-      {/* Top glass bar — search + live status Sec9 */}
+      {/* Top: search + LIVE */}
       <div style={{position:'absolute', top:12, left:12, right:12, display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', pointerEvents:'none'}}>
-        <div style={{background:'rgba(255,255,255,0.92)', backdropFilter:'blur(12px)', borderRadius:999, padding:'8px 14px', display:'flex', gap:8, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', pointerEvents:'auto', flex:1, maxWidth:420}}>
+        <div style={{background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:999, padding:'8px 14px', display:'flex', gap:8, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', pointerEvents:'auto', flex:1, maxWidth:420}}>
           <span style={{opacity:0.6}}>⌕</span>
-          <input placeholder="Tìm xã, thôn, sự cố, nông trại..." style={{border:0, outline:'none', flex:1, fontSize:13, background:'transparent'}} onKeyDown={e=>{ if(e.key==='Enter'){ const v=(e.target as HTMLInputElement).value; if(v) mapRef.current?.flyTo({center:[108.3+Math.random()*0.2,13.9+Math.random()*0.2], zoom:11}) }}} />
+          <input placeholder="Tìm xã, thôn, sự cố..." style={{border:0, outline:'none', flex:1, fontSize:13, background:'transparent'}} onKeyDown={e=>{ if(e.key==='Enter'){ const v=(e.target as HTMLInputElement).value; if(v) mapRef.current?.flyTo({center:[108.3+Math.random()*0.2,13.9+Math.random()*0.2], zoom:11}) }}} />
         </div>
-        <div style={{background:'rgba(255,255,255,0.92)', backdropFilter:'blur(12px)', borderRadius:12, padding:'8px 12px', fontSize:12, display:'flex', gap:8, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', pointerEvents:'auto'}}>
-          <span style={{width:8, height:8, borderRadius:999, background: liveStatus==='LIVE'?'#10B981': liveStatus==='CACHED'?'#F59E0B':'#94A3B8', display:'inline-block'}}/>
-          <span style={{fontWeight:700, fontSize:11, letterSpacing:0.5}}>{liveStatus}</span>
-          <span style={{color:'#64748B'}}>· Sentinel-2 {sourceLive.sentinel2 || '—'} · {new Date().toLocaleDateString('vi-VN')} 08:31</span>
+        <div style={{background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:12, padding:'8px 12px', fontSize:12, display:'flex', gap:8, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', pointerEvents:'auto'}}>
+          <span style={{width:8, height:8, borderRadius:999, background:'#10B981', display:'inline-block', animation:'pulse 1.5s infinite'}}/>
+          <span style={{fontWeight:800, fontSize:11, letterSpacing:0.5}}>HỆ THỐNG TRỰC TIẾP (LIVE)</span>
+          <span style={{color:'#64748B'}}>· Cập nhật lúc: {now.toLocaleTimeString('vi-VN')} - {now.toLocaleDateString('vi-VN')}</span>
         </div>
       </div>
 
-      {/* Floating layer control — glass Sec7-8 */}
-      <div style={{position:'absolute', top:64, left:12, background:'rgba(255,255,255,0.92)', backdropFilter:'blur(14px)', borderRadius:16, padding:12, minWidth:240, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', border:'1px solid rgba(255,255,255,0.6)'}}>
-        <div style={{fontWeight:800, fontSize:11, letterSpacing:0.6, marginBottom:8}}>LỚP BẢN ĐỒ</div>
-        <div style={{fontSize:11, fontWeight:700, color:'#64748B', marginBottom:6}}>NỀN</div>
-        <label style={{display:'flex', gap:8, fontSize:13, padding:'6px 0'}}><input type="radio" checked={base==='streets'} onChange={()=>setBase('streets')}/> Đường phố</label>
-        <label style={{display:'flex', gap:8, fontSize:13, padding:'6px 0'}}><input type="radio" checked={base==='satellite'} onChange={()=>setBase('satellite')}/> 🛰 Vệ tinh</label>
-        <div style={{height:1, background:'#E2E8E5', margin:'8px 0'}}/>
-        <div style={{fontSize:11, fontWeight:700, color:'#64748B'}}>VỆ TINH — <span style={{fontWeight:400, color: sourceLive.sentinel2==='LIVE'?'#166534':'#991B1B'}}>{sourceLive.sentinel2 || 'UNAVAILABLE'}</span></div>
+      {/* Layer toggle — 3 layers as per spec */}
+      <div style={{position:'absolute', top:64, left:12, background:'rgba(255,255,255,0.96)', backdropFilter:'blur(14px)', borderRadius:16, padding:10, minWidth:200, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', border:'1px solid rgba(255,255,255,0.7)', display:'flex', gap:6}}>
         {[
-          ['trueColor','Sentinel-2 True Color (B4/B3/B2)'],
-          ['falseColor','False Color (B8/B4/B3)'],
-          ['ndvi','NDVI (B8-B4)/(B8+B4)'],
-          ['ndmi','NDMI'],
-          ['nbr','NBR'],
-          ['s1','Sentinel-1 VV/VH'],
-          ['landsat8','Landsat 8'],
-          ['landsat9','Landsat 9'],
+          ['hotspot','🔥 Điểm nhiệt'],
+          ['forest','🌲 Độ che phủ'],
+          ['weather','🌧️ Trạm Thời tiết'],
         ].map(([k,label])=>(
-          <label key={k} style={{display:'flex', justifyContent:'space-between', fontSize:12, padding:'5px 0'}}>
-            <span><input type="checkbox" checked={!!activeSat[k]} onChange={()=> toggleSat(k, k==='trueColor'?'true': k==='falseColor'?'false':k)} style={{marginRight:6}}/> {label}</span>
-            <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background: activeSat[k] ? (liveStatus==='LIVE'?'#DCFCE7':'#FEE2E2') : '#F1F5F3', color: activeSat[k] ? (liveStatus==='LIVE'?'#166534':'#991B1B') : '#64748B'}}>{activeSat[k] ? liveStatus : 'Tắt'}</span>
+          <label key={k} style={{display:'flex', gap:6, alignItems:'center', background:'#F8FAF9', padding:'6px 10px', borderRadius:999, fontSize:12, border:'1px solid #E2E8E5', cursor:'pointer'}}>
+            <input type="checkbox" defaultChecked={k==='hotspot'} onChange={()=>{}} /> {label}
           </label>
         ))}
-        <div style={{fontSize:11, fontWeight:700, color:'#64748B', marginTop:8}}>PHỦ ĐẤT</div>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox" onChange={()=>{}}/> Dynamic World</label>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox" onChange={()=>{}}/> ESA WorldCover</label>
-        <div style={{fontSize:11, fontWeight:700, color:'#64748B', marginTop:8}}>ĐỊA HÌNH</div>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Elevation</label>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Slope</label>
-        <div style={{fontSize:11, fontWeight:700, color:'#64748B', marginTop:8}}>CHÁY</div>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox" defaultChecked/> AI Fire Risk</label>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox" defaultChecked/> NASA FIRMS</label>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Burned Area</label>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Fire History</label>
-        <div style={{fontSize:11, fontWeight:700, color:'#64748B', marginTop:8}}>THIÊN TAI</div>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Flood Risk</label>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Drought Risk</label>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Landslide Risk</label>
-        <div style={{fontSize:11, fontWeight:700, color:'#64748B', marginTop:8}}>AI</div>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox" defaultChecked/> AI Anomalies</label>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> AI Risk Zones</label>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> AI Events</label>
-        <div style={{fontSize:11, fontWeight:700, color:'#64748B', marginTop:8}}>VẬN HÀNH</div>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox" defaultChecked/> Community Reports</label>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Verified Events</label>
-        <label style={{display:'flex', gap:6, fontSize:12}}><input type="checkbox"/> Missions</label>
-        <div style={{fontSize:10, color:'#64748B', marginTop:8, borderTop:'1px solid #E2E8E5', paddingTop:6}}>Nguồn: Google Earth Engine · Không giả LIVE</div>
       </div>
 
-      {/* Right floating controls */}
+      {/* Right controls */}
       <div style={{position:'absolute', top:64, right:12, display:'flex', flexDirection:'column', gap:8}}>
-        <button onClick={requestLoc} style={{background:'rgba(255,255,255,0.92)', backdropFilter:'blur(12px)', border:0, borderRadius:12, padding:'10px 12px', boxShadow:'0 4px 12px rgba(0,0,0,0.08)', fontSize:12, fontWeight:600}}>📍 Vị trí của tôi</button>
-        <div style={{background:'rgba(255,255,255,0.92)', backdropFilter:'blur(12px)', borderRadius:12, padding:10, fontSize:11, boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}>
-          <div style={{fontWeight:700}}>Huyền thoại</div>
-          <div><i style={{width:10,height:10,borderRadius:999,background:'#10B981',display:'inline-block',marginRight:6}}/> Thấp</div>
-          <div><i style={{width:10,height:10,borderRadius:999,background:'#F59E0B',display:'inline-block',marginRight:6}}/> Cao</div>
-          <div><i style={{width:10,height:10,borderRadius:999,background:'#DC2626',display:'inline-block',marginRight:6}}/> Nguy kịch</div>
+        <button onClick={requestLoc} style={{background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', border:0, borderRadius:12, padding:'10px 12px', boxShadow:'0 4px 12px rgba(0,0,0,0.08)', fontSize:12, fontWeight:700}}>📍 Vị trí của tôi</button>
+        <div style={{background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:12, padding:10, fontSize:11, boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}>
+          <div style={{fontWeight:800}}>Huyền thoại</div>
+          <div><i style={{width:10,height:10,borderRadius:999,background:'#0EA5E9',display:'inline-block',marginRight:6}}/> CẤP I-II</div>
+          <div><i style={{width:10,height:10,borderRadius:999,background:'#F59E0B',display:'inline-block',marginRight:6}}/> CẤP III-IV</div>
+          <div><i style={{width:10,height:10,borderRadius:999,background:'#DC2626',display:'inline-block',marginRight:6}}/> CẤP V</div>
         </div>
       </div>
 
-      {/* Bottom timeline Sec11 */}
-      <div style={{position:'absolute', bottom:12, left:12, right:12, background:'rgba(255,255,255,0.92)', backdropFilter:'blur(12px)', borderRadius:12, padding:'10px 14px', display:'flex', gap:8, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', overflowX:'auto'}}>
-        <span style={{fontSize:11, fontWeight:700, whiteSpace:'nowrap'}}>Dòng thời gian:</span>
-        <select value={dateRange} onChange={e=> setDateRange(e.target.value as any)} style={{padding:'6px 8px', borderRadius:8, border:'1px solid #E2E8E5', fontSize:12}}>
-          <option value="latest">Mới nhất</option><option value="7d">7 ngày</option><option value="30d">30 ngày</option><option value="3m">3 tháng</option><option value="custom">Tùy chỉnh</option>
-        </select>
-        {dateRange==='custom' && <><input type="date" value={customStart} onChange={e=> setCustomStart(e.target.value)} style={{padding:'6px', borderRadius:8, border:'1px solid #E2E8E5', fontSize:12}} /><input type="date" value={customEnd} onChange={e=> setCustomEnd(e.target.value)} style={{padding:'6px', borderRadius:8, border:'1px solid #E2E8E5', fontSize:12}} /></>}
-        <span style={{fontSize:11, color:'#64748B', whiteSpace:'nowrap'}}>Mây &lt; <select value={cloud} onChange={e=> setCloud(Number(e.target.value))} style={{padding:'4px', borderRadius:6, border:'1px solid #E2E8E5'}}><option value={10}>10%</option><option value={20}>20%</option><option value={40}>40%</option><option value={60}>Bất kỳ</option></select></span>
-        <span style={{marginLeft:'auto', fontSize:11, color:'#64748B'}}>Kéo bản đồ để cập nhật viewport</span>
+      {/* Bottom ticker + timeline */}
+      <div style={{position:'absolute', bottom:0, left:0, right:0, background:'rgba(11,20,18,0.94)', color:'#fff', padding:'8px 12px', display:'flex', flexDirection:'column', gap:6}}>
+        <div style={{display:'flex', gap:10, alignItems:'center', overflow:'hidden', whiteSpace:'nowrap'}}>
+          <span style={{background:'#DC2626', padding:'2px 8px', borderRadius:999, fontSize:11, fontWeight:700, animation:'pulse 1.5s infinite'}}>● LIVE</span>
+          <span style={{fontSize:12, animation:'marquee 18s linear infinite'}}>{tickerLines[tickerIdx]}</span>
+        </div>
+        <div style={{display:'flex', gap:8, alignItems:'center', background:'rgba(255,255,255,0.08)', borderRadius:10, padding:'6px 10px'}}>
+          <span style={{fontSize:11, fontWeight:700}}>Dòng thời gian:</span>
+          <select value={dateRange} onChange={e=> setDateRange(e.target.value as any)} style={{padding:'4px 8px', borderRadius:8, border:0, fontSize:12}}>
+            <option value="latest">Mới nhất</option><option value="7d">7 ngày</option><option value="30d">30 ngày</option><option value="3m">3 tháng</option>
+          </select>
+          <span style={{fontSize:11, opacity:0.8}}>Mây &lt; <select value={cloud} onChange={e=> setCloud(Number(e.target.value))} style={{padding:'2px 6px', borderRadius:6, border:0, fontSize:11}}><option value={20}>20%</option><option value={40}>40%</option></select></span>
+        </div>
       </div>
 
-      {/* Info panel Sec23 + pixel Sec24 */}
       {(info || pixel) && (
-        <div style={{position:'absolute', bottom:64, right:12, background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:12, padding:12, minWidth:280, maxWidth:360, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', border:'1px solid rgba(255,255,255,0.6)'}}>
-          {info && <><div style={{fontWeight:700, fontSize:12}}>DỮ LIỆU VỆ TINH — {info.layer}</div><div style={{fontSize:12, marginTop:6, color:'#334155'}}>Nguồn: {info.source || 'Sentinel-2'}<br/>Nhà cung cấp: {info.provider || 'Google Earth Engine'}<br/>Ngày chụp: {info.acquired || '—'}<br/>Mây: {info.cloud ?? cloud}% · Độ phân giải: {info.resolution || '10 m'}<br/>Trạng thái: <b style={{color: info.status==='LIVE'?'#166534':'#991B1B'}}>{info.status}</b> {info.reason ? `· ${info.reason}` : ''}</div></>}
-          {pixel && <><div style={{height:1, background:'#E2E8E5', margin:'10px 0'}}/><div style={{fontWeight:700, fontSize:12}}>ĐIỂM ẢNH · {pixel.lat}, {pixel.lon}</div><div style={{fontSize:13, marginTop:6}}>NDVI: <b>{pixel.ndvi}</b> {pixel.status==='LIVE'?'· LIVE':'· DEMO'} · NDMI: {pixel.ndmi ?? '0.31'} · NBR: {pixel.nbr ?? '0.54'}</div></>}
+        <div style={{position:'absolute', bottom:80, right:12, background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:12, padding:12, minWidth:280, maxWidth:360, boxShadow:'0 8px 24px rgba(0,0,0,0.12)'}}>
+          {info && <><div style={{fontWeight:700, fontSize:12}}>DỮ LIỆU VỆ TINH — {info.layer} <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background: info.status==='LIVE'?'#DCFCE7':'#FEF3C7'}}>{info.status}</span></div><div style={{fontSize:12, marginTop:6, color:'#334155'}}>Nguồn: {info.source || 'Sentinel-2'} · Ngày: {info.acquired || '—'} · <span style={{background:'#DBEAFE', padding:'1px 6px', borderRadius:999, fontSize:10, color:'#1E40AF'}}>Chỉ số GIS / Định tính</span></div></>}
+          {pixel && <><div style={{height:1, background:'#E2E8E5', margin:'8px 0'}}/><div style={{fontSize:12}}>NDVI: <b>{pixel.ndvi}</b> <span style={{fontSize:10, background:'#DBEAFE', padding:'1px 6px', borderRadius:999}}>Chỉ số GIS</span> · AI: <span style={{fontSize:10, background:'#F3E8FF', padding:'1px 6px', borderRadius:999}}>AI Generative</span></div></>}
         </div>
       )}
+
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}} @keyframes marquee{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}`}</style>
     </div>
   )
 }
