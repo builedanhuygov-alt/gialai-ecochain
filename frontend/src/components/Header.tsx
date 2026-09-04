@@ -1,5 +1,6 @@
 import { Bell, Bot, Menu } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import ModeSwitch from './ModeSwitch'
 
 export default function Header({ onMenu }: { onMenu: ()=>void }) {
   const [now, setNow] = useState(new Date())
@@ -15,6 +16,7 @@ export default function Header({ onMenu }: { onMenu: ()=>void }) {
       <div className="scope">
         <span style={{fontWeight:700}}>Gia Lai</span>
         <span className="scope-badge">TRỰC TIẾP</span>
+        <ModeSwitch />
       </div>
       <div style={{flex:1, maxWidth:420, margin:'0 16px', display:'flex', alignItems:'center', background:'#F8FAF9', border:'1px solid #E2E8E5', borderRadius:999, padding:'6px 12px', gap:8}}>
         <span style={{opacity:0.5}}>⌕</span>

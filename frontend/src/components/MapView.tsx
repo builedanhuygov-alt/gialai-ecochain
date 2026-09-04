@@ -5,6 +5,16 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // Fallback nếu dùng Leaflet (không dùng nhưng giữ để tránh thiếu CSS)
 // import 'leaflet/dist/leaflet.css'; 
 import { useLocation } from '../hooks/useLocation'
+import DemoTour from './DemoTour'
+import { getMode } from './ModeSwitch'
+
+// Kịch bản DEMO: đủ hiện tượng tutorial — 1 điểm ĐANG CHÁY + 3 điểm NGHI NGỜ
+const DEMO_ALERTS = [
+  { village: 'Xã Hội Sơn', commune: 'Xã Hội Sơn', village_coords: [108.68, 13.92], fire_coords: [108.69, 13.93], distance_km: 2.4, acq_date: new Date().toISOString().slice(0, 10), confidence: 'h', level: 'CẢNH BÁO' },
+  { village: 'Thôn Trung Tâm', commune: 'Xã Hội Sơn', village_coords: [108.68, 13.92], fire_coords: [108.75, 13.95], distance_km: 9.1, acq_date: new Date().toISOString().slice(0, 10), confidence: 'n', level: 'THEO DÕI' },
+  { village: 'Xã Kông Bờ La', commune: 'Huyện Kbang', village_coords: [108.55, 14.10], fire_coords: [108.60, 14.12], distance_km: 12.6, acq_date: new Date().toISOString().slice(0, 10), confidence: 'n', level: 'THEO DÕI' },
+  { village: 'Xã Đak Trôi', commune: 'Huyện Mang Yang', village_coords: [108.20, 14.02], fire_coords: [108.25, 14.05], distance_km: 15.3, acq_date: new Date().toISOString().slice(0, 10), confidence: 'n', level: 'THEO DÕI' },
+]
 
 const API = ((import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000').replace(/[\r\n]/g, "").trim().replace(/\/$/, "")
 const TILE_FIX = (url: string) => url.replace(/[\r\n]/g, "").trim()
@@ -303,6 +313,8 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   void health
   const [villages, setVillages] = useState<any[]>([])
   const [fireAlerts, setFireAlerts] = useState<any[]>([])
+  const [mode, setMode] = useState<string>(() => getMode())
+  const [tourOpen, setTourOpen] = useState(false)
   const [bannerOff, setBannerOff] = useState<string>('')
   const burning = fireAlerts.filter((a:any)=>a.level==='CẢNH BÁO')
   const suspicious = fireAlerts.filter((a:any)=>a.level!=='CẢNH BÁO')
@@ -465,19 +477,36 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     }).catch(()=> setLiveStatus('UNAVAILABLE'))
     // Xã/thôn delineation
     fetch(`${API}/api/villages`).then(r=>r.json()).then(v=> setVillages(v)).catch(()=>{})
-    // 20km fire notification — poll mỗi 60s
+    // Chế độ DEMO/LIVE + tour tutorial
+    const onMode=(e:any)=>{
+      const m=e.detail?.mode||getMode()
+      setMode(m)
+      if(m==='demo'){ setFireAlerts(DEMO_ALERTS as any[]); try{ if(!sessionStorage.getItem('ecogl_tour_done')) setTourOpen(true) }catch{ setTourOpen(true) } }
+      else { setTourOpen(false); loadAlerts() }
+    }
+    const onTour=(e:any)=>{
+      const a=e.detail?.action
+      if(a==='burning' && mapRef.current) mapRef.current.flyTo({ center:[108.68, 13.92], zoom:11, duration:1000 } as any)
+      if(a==='layers') setShowLayers(true)
+      if(a==='hotspot') toggleSat('hotspot','VIIRS_SNPP_NRT')
+    }
+    window.addEventListener('ecochain-mode', onMode)
+    window.addEventListener('ecochain-tour', onTour)
+    // 20km fire notification — LIVE poll mỗi 60s; DEMO dùng kịch bản mẫu
     const loadAlerts=()=> fetch(TILE_FIX(`${API}/api/villages/fire-alert?t=${Date.now()}`), { cache:'no-store' }).then(r=>r.json()).then(j=>{
+      if(getMode()==='demo'){ setFireAlerts(DEMO_ALERTS as any[]); return }
       setFireAlerts(j.alerts || [])
       if(j.alerts?.length){
         const msg = `🔥 ${j.alerts.length} thôn/xã trong 20km có cháy: ${j.alerts.slice(0,2).map((a:any)=>`${a.village} (${a.distance_km}km)`).join(', ')}`
         console.warn(msg)
         if(Notification && Notification.permission==='granted') new Notification('Cảnh báo cháy 20km', { body: msg })
       }
-    }).catch(()=>{})
-    loadAlerts()
-    const int=setInterval(loadAlerts, 60000)
+    }).catch(()=>{ if(getMode()==='demo') setFireAlerts(DEMO_ALERTS as any[]) })
+    if(getMode()==='demo'){ setFireAlerts(DEMO_ALERTS as any[]); try{ if(!sessionStorage.getItem('ecogl_tour_done')) setTourOpen(true) }catch{ setTourOpen(true) } }
+    else loadAlerts()
+    const int=setInterval(()=>{ if(getMode()==='live') loadAlerts() }, 60000)
     if(Notification && Notification.permission==='default') Notification.requestPermission()
-    return ()=> clearInterval(int)
+    return ()=>{ clearInterval(int); window.removeEventListener('ecochain-mode', onMode); window.removeEventListener('ecochain-tour', onTour) }
   },[])
 
   return (
@@ -496,9 +525,9 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           {suggests.map((s:any)=> <button key={s.ma_xa} onClick={()=>selectCommune(s)} style={{display:'block', width:'100%', textAlign:'left', padding:'8px 12px', fontSize:12, border:0, background:'transparent', cursor:'pointer', borderBottom:'1px solid #F1F5F9'}}>{s.ten_xa} <span style={{color:'#94A3B8'}}>· {s.ma_xa}</span></button>)}
         </div>}
         </div>
-        <div title={`${liveStatus} · ${now.toLocaleTimeString('vi-VN')}`} style={{background:'rgba(15,23,42,0.75)', backdropFilter:'blur(12px)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:999, padding:'6px 10px', fontSize:11, display:'flex', gap:6, alignItems:'center', color:'#fff', pointerEvents:'auto', whiteSpace:'nowrap'}}>
-          <span style={{width:8, height:8, borderRadius:999, background: liveStatus==='LIVE'?'#10B981':'#EF4444', display:'inline-block'}}/>
-          <span style={{fontWeight:800}}>{liveStatus}</span>
+        <div title={`${mode==='demo'?'DEMO tutorial':liveStatus} · ${now.toLocaleTimeString('vi-VN')}`} style={{background:'rgba(15,23,42,0.75)', backdropFilter:'blur(12px)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:999, padding:'6px 10px', fontSize:11, display:'flex', gap:6, alignItems:'center', color:'#fff', pointerEvents:'auto', whiteSpace:'nowrap'}}>
+          <span style={{width:8, height:8, borderRadius:999, background: mode==='demo'?'#F59E0B':liveStatus==='LIVE'?'#10B981':'#EF4444', display:'inline-block'}}/>
+          <span style={{fontWeight:800}}>{mode==='demo'?'DEMO':liveStatus}</span>
         </div>
       </div>
 
@@ -625,6 +654,9 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           {pixel && <><div style={{height:1, background:'#E2E8E5', margin:'8px 0'}}/><div style={{fontSize:12}}>NDVI: <b>{pixel.ndvi}</b></div></>}
         </div>
       )}
+
+      {mode==='demo' && !tourOpen && <button onClick={()=>setTourOpen(true)} style={{position:'absolute', bottom:76, right:12, zIndex:20, border:0, borderRadius:999, background:'#F59E0B', color:'#000', fontWeight:800, fontSize:12, padding:'8px 14px', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,0,0,0.2)'}}>▶ Tutorial DEMO</button>}
+      {mode==='demo' && tourOpen && <DemoTour onDone={()=>setTourOpen(false)} />}
 
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}} @keyframes marquee{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}`}</style>
     </div>
