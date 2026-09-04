@@ -8,10 +8,11 @@ import { useLocation } from '../hooks/useLocation'
 import DemoTour from './DemoTour'
 import { getMode } from './ModeSwitch'
 
-// Điểm từng cháy Hè 2026 (nguồn: Cổng TTĐT Gia Lai, Hạt Kiểm lâm) — ghim lưu ý trên bản đồ
+// Điểm từng cháy Hè 2026 (nguồn: Cổng TTĐT Gia Lai, Tiền Phong, Hạt Kiểm lâm) — ghim lưu ý trên bản đồ
 const HIST_FIRES = [
-  { name: 'Cháy rừng dương Tân Phụng', place: 'Xã Phù Mỹ Đông', coords: [109.06, 14.13] as [number, number], note: '21/7/2026 · lan nhanh do nắng+gió · 378 CBCS · dập 20h30 cùng ngày' },
-  { name: 'Cháy thực bì TK213', place: 'Xã Hội Sơn – Hòa Hội', coords: [108.66, 13.90] as [number, number], note: 'Tháng 7-8/2026 · rừng trồng + thực bì · đã ngăn lan rộng' },
+  { name: 'Cháy rừng PH ven biển Tân Phụng (~30ha)', place: 'Xã Phù Mỹ Đông', coords: [109.06, 14.13] as [number, number], note: '20-21/7/2026 · phi lao/keo/điều · 500+ người + băng trắng · đã dập tắt' },
+  { name: 'Cháy rừng keo đèo Cây Cốc', place: 'Thôn An Chiểu, xã Hoài Ân', coords: [108.98, 14.27] as [number, number], note: '23-24/8/2026 · bùng lại trưa 24/8 · ~100 người · nguyên nhân: đốt thực bì' },
+  { name: 'Cháy TK213 + núi Đầu Voi', place: 'Xã Hội Sơn – Hòa Hội', coords: [108.66, 13.90] as [number, number], note: 'Tháng 7-8/2026 · Đầu Voi khống chế tối 22/8 · địa hình hiểm trở' },
   { name: 'Cháy núi Vũng Chua (4,23ha)', place: 'P. Quy Nhơn Nam', coords: [109.235, 13.745] as [number, number], note: '27/8/2026 · thiệt hại 4,23ha · đang điều tra nguyên nhân' },
 ]
 

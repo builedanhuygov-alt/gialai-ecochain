@@ -14,20 +14,25 @@ def seed_historical_fires():
     from app.models.fire import OfficialFireWarning
     db: Session = SessionLocal()
     try:
-        existing = {w.administrative_unit_id for w in db.query(OfficialFireWarning).all()}
+        by_uid = {w.administrative_unit_id: w for w in db.query(OfficialFireWarning).all()}
         items = [
             dict(uid="phu-my-dong", level="V", source="Cổng TTĐT tỉnh Gia Lai",
                  issued=datetime(2026, 7, 21, 20, 30),
-                 scope="21/7/2026 cháy rừng dương thôn Tân Phụng, xã Phù Mỹ Đông; nắng nóng kéo dài + gió mạnh, lan nhanh; 378 CBCS (Bộ CHQS tỉnh, Ban CHQS xã, Đồn BP Mỹ An, Trung đoàn 739, Lữ đoàn PB 572, 18 kiểm lâm, 6 xe chữa cháy); khống chế 20h30 cùng ngày."),
-            dict(uid="hoi-son-hoa-hoi", level="III", source="Cổng TTĐT tỉnh Gia Lai",
-                 issued=datetime(2026, 8, 15, 12, 0),
-                 scope="7-8/2026 cháy thực bì + rừng trồng sản xuất tiểu khu 213, xã Hội Sơn và Hòa Hội; lực lượng chức năng dập khẩn trương, ngăn lan rộng."),
+                 scope="20-21/7/2026 cháy rừng phòng hộ ven biển (phi lao, keo, điều) thôn Tân Phụng, xã Phù Mỹ Đông, ~30ha; bùng chiều 20/7, tái phát 21/7 do gió mạnh; 500+ người (kiểm lâm, công an, bộ đội, dân quân), đường băng trắng ngăn lan; nguyên nhân: nắng nóng, gió lớn, thực bì khô."),
+            dict(uid="hoi-son-hoa-hoi", level="III", source="Cổng TTĐT tỉnh Gia Lai + Tiền Phong 24/8/2026",
+                 issued=datetime(2026, 8, 22, 21, 0),
+                 scope="7-8/2026 cháy thực bì + rừng trồng tiểu khu 213 (xã Hội Sơn, Hòa Hội); núi Đầu Voi thôn Cát Lâm xã Hội Sơn khống chế tối 22/8 (đồi cao, hiểm trở, gió lớn); đang thống kê diện tích."),
+            dict(uid="hoai-an", level="III", source="UBND xã Hoài Ân (Tiền Phong 24/8/2026)",
+                 issued=datetime(2026, 8, 24, 12, 0),
+                 scope="23-24/8/2026 cháy rừng keo đèo Cây Cốc thôn An Chiểu, xã Hoài Ân; đã khống chế rồi bùng lại trưa 24/8; ~100 người + quân đội; nguyên nhân ban đầu: đốt thực bì; túc trực xử lý phát sinh."),
             dict(uid="vung-chua", level="III", source="Hạt Kiểm lâm Tuy Phước - Quy Nhơn (Đức Hồ, 30/8/2026)",
                  issued=datetime(2026, 8, 27, 12, 0),
                  scope="27/8/2026 cháy núi Vũng Chua, phường Quy Nhơn Nam; thiệt hại 4,23ha rừng (kiểm tra, đo đạc hiện trường 30/8)."),
         ]
         for it in items:
-            if it["uid"] in existing:
+            if it["uid"] in by_uid:
+                w = by_uid[it["uid"]]
+                w.level, w.source, w.issued_at, w.scope = it["level"], it["source"], it["issued"], it["scope"]
                 continue
             db.add(OfficialFireWarning(administrative_unit_id=it["uid"], level=it["level"],
                                        source=it["source"], issued_at=it["issued"], scope=it["scope"]))

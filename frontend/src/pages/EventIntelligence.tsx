@@ -91,10 +91,11 @@ export default function EventIntelligence(){
   )
 }
 
-// Vụ cháy thật Hè 2026 (nguồn: Cổng TTĐT tỉnh Gia Lai) — ghim đầu danh sách
+// Vụ cháy thật Hè 2026 (nguồn: Cổng TTĐT Gia Lai, Tiền Phong, Hạt Kiểm lâm) — ghim đầu danh sách
 const HISTORICAL = [
-  { id: 'phu-my-dong-0721', title: 'Cháy rừng dương thôn Tân Phụng', place: 'Xã Phù Mỹ Đông', dates: '21/7/2026 · khống chế 20h30 cùng ngày', level: 'CẤP IV-V', score: 92, forces: '378 CBCS (Bộ CHQS tỉnh, Ban CHQS xã, Đồn BP Mỹ An, Trung đoàn 739, Lữ đoàn PB 572, 18 kiểm lâm, 6 xe chữa cháy)', outcome: 'Đã dập tắt — bảo vệ rừng và tài sản dân', source: 'Cổng TTĐT tỉnh Gia Lai' },
-  { id: 'hoi-son-0708', title: 'Cháy thực bì + rừng trồng tiểu khu 213', place: 'Xã Hội Sơn và Hòa Hội', dates: 'Tháng 7-8/2026', level: 'CẤP III', score: 68, forces: 'Lực lượng chức năng địa phương', outcome: 'Dập khẩn trương — ngăn lan rộng', source: 'Cổng TTĐT tỉnh Gia Lai' },
+  { id: 'phu-my-dong-0721', title: 'Cháy rừng phòng hộ ven biển (phi lao, keo, điều)', place: 'Thôn Tân Phụng, xã Phù Mỹ Đông', dates: '20-21/7/2026 · ~30ha', level: 'CẤP V', score: 92, forces: '500+ người (kiểm lâm, công an, bộ đội, dân quân); đường băng trắng ngăn lan; bùng chiều 20/7, tái phát 21/7 do gió mạnh', outcome: 'Đã dập tắt — nguyên nhân: nắng nóng, gió lớn, thực bì khô', source: 'Cổng TTĐT tỉnh Gia Lai' },
+  { id: 'hoai-an-0823', title: 'Cháy rừng keo đèo Cây Cốc, thôn An Chiểu', place: 'Xã Hoài Ân', dates: '23-24/8/2026 · bùng lại trưa 24/8', level: 'CẤP III', score: 74, forces: '~100 người + quân đội hỗ trợ; túc trực xử lý phát sinh', outcome: 'Đã khống chế — nguyên nhân ban đầu: đốt thực bì', source: 'UBND xã Hoài Ân (Tiền Phong 24/8/2026)' },
+  { id: 'hoi-son-0708', title: 'Cháy thực bì + rừng trồng tiểu khu 213; núi Đầu Voi thôn Cát Lâm', place: 'Xã Hội Sơn và Hòa Hội', dates: 'Tháng 7-8/2026 · Đầu Voi khống chế tối 22/8', level: 'CẤP III', score: 68, forces: 'Lực lượng chức năng (đồi cao, hiểm trở, gió lớn)', outcome: 'Đã dập tắt — đang thống kê diện tích', source: 'Cổng TTĐT tỉnh Gia Lai + Tiền Phong 24/8/2026' },
   { id: 'vung-chua-0827', title: 'Cháy núi Vũng Chua — thiệt hại 4,23ha', place: 'Phường Quy Nhơn Nam', dates: '27/8/2026 (đo đạc hiện trường 30/8)', level: 'CẤP III', score: 71, forces: 'Hạt Kiểm lâm Tuy Phước - Quy Nhơn', outcome: 'Đã dập tắt — đang điều tra nguyên nhân', source: 'Hạt Kiểm lâm (Đức Hồ, 30/8/2026)' },
 ]
 
@@ -124,6 +125,7 @@ export function EventsList(){
       <h1>Event Intelligence</h1>
       <div style={{fontSize:11, color:'#64748B'}}>Nguồn: FIRMS + Weather + Sentinel · badge LIVE/DEMO theo /api/health/geospatial</div>
       <div style={{background:'#FFF7ED', border:'1px solid #FDBA74', borderRadius:12, padding:'10px 14px', fontSize:12, color:'#7C2D12'}}>⚠️ Bộ NN&MT cảnh báo: El Niño mạnh–rất mạnh từ 9/2026 đến cuối năm — khô hạn, nắng nóng, thiếu nước, nguy cơ cháy rừng Gia Lai tăng cao. Văn bản 11116/UBND-NNMT: 82 xã/phường nắng nóng; trực 24/24h kể cả lễ 2/9; cấp IV-V kiểm soát người vào rừng, cấm dùng lửa rừng/ven rừng; “4 tại chỗ” mức cao nhất; xem xét trách nhiệm người đứng đầu nếu buông lỏng.</div>
+      <div style={{background:'#F8FAF9', border:'1px solid #E2E8E5', borderRadius:12, padding:'10px 14px', fontSize:11, color:'#334155'}}>📌 Bối cảnh cả nước (Cục Lâm nghiệp & Kiểm lâm, 18/4/2025): từ đầu 2025 có 129 vụ/150ha, gấp đôi cùng kỳ 2024 — nguyên nhân không chỉ thời tiết cực đoan mà cả “lỗ hổng” ý thức (đốt rác, đốt ong, xử lý thực bì, tàn thuốc trong gió mạnh + ẩm thấp). Khuyến cáo: cảnh báo sớm bằng vệ tinh + cảm biến nhiệt + dự báo vi mô, lực lượng bán chuyên cấp xã, quản lý rừng cộng đồng — đúng hướng EcoChain đang làm.</div>
       <div style={{background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:12, padding:'10px 14px'}}>
         <div style={{fontSize:12, fontWeight:800, color:'#1E40AF'}}>📜 QĐ 49/2026/QĐ-UBND — 5 cấp dự báo cháy rừng (cơ sở hành động)</div>
         {QD49.map(q=>(
