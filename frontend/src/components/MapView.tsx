@@ -21,7 +21,8 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   const mapRef = useRef<maplibregl.Map | null>(null)
   void onSelect
   const [base] = useState<'streets'|'satellite'>('streets')
-  const [baseXyz, setBaseXyz] = useState<string>('carto')
+  // Mặc định Google Satellite để tránh CARTO Positron trắng do CORS/style GL
+  const [baseXyz, setBaseXyz] = useState<string>('google_s')
   const [activeSat, setActiveSat] = useState<Record<string, boolean>>({})
   const [dateRange, setDateRange] = useState<'latest'|'7d'|'30d'|'3m'|'custom'>('30d')
   const [cloud, setCloud] = useState(20)
@@ -191,14 +192,25 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
 
   useEffect(()=>{
     if(!mapContainer.current || mapRef.current) return
-    // ⚠️ BẮT BUỘC 2: Dùng Style miễn phí KHÔNG CẦN API KEY
+    // Mặc định Google Satellite (XYZ) để tránh CARTO trắng do CORS — fallback BaseMap
+    const initStyle = baseXyz==='carto' ? 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json' : 'https://demotiles.maplibre.org/style.json'
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+      style: initStyle,
       center: [108.35, 13.9],
       zoom: 9.2,
       maxBounds: [[106.5, 12.5],[110.0, 15.2]],
       attributionControl: false,
+    })
+    // Fallback nếu style CARTO lỗi CORS → chuyển Google Satellite
+    map.on('error', (e:any)=>{
+      if(e?.error?.message?.includes('style') || e?.styleURL?.includes('cartocdn')){
+        console.warn('CARTO style lỗi, fallback Google Satellite', e)
+        if(!map.getSource('base-xyz')){
+          map.addSource('base-xyz', { type:'raster', tiles:['https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'], tileSize:256, attribution:'© Google Satellite' } as any)
+          map.addLayer({ id:'base-xyz', type:'raster', source:'base-xyz' } as any)
+        }
+      }
     })
     mapRef.current = map as any
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
@@ -207,6 +219,14 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     map.on('load', ()=>{
       console.log('✅ MapLibre loaded successfully!')
       map.resize()
+      // Thêm nền Google Satellite mặc định nếu baseXyz != carto
+      if(baseXyz!=='carto' && !map.getSource('base-xyz')){
+        const tile = XYZ_TILES[baseXyz]
+        if(tile){
+          map.addSource('base-xyz', { type:'raster', tiles:[tile.url], tileSize:256, attribution: tile.attribution } as any)
+          map.addLayer({ id:'base-xyz', type:'raster', source:'base-xyz' } as any)
+        }
+      }
       // Gia Lai boundary
       map.addSource('gialai-boundary', { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[[107.3,13.1],[109.4,13.1],[109.4,14.7],[107.3,14.7],[107.3,13.1]]] }, properties:{} } })
       map.addLayer({ id:'boundary', type:'line', source:'gialai-boundary', paint:{ 'line-color':'#0F766E', 'line-width':1.5, 'line-opacity':0.5, 'line-dasharray':[4,4] } })
@@ -241,7 +261,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       }, 900)
     })
     return () => { map.remove(); (mapRef as any).current = null }
-  }, [base])
+  }, [base, baseXyz])
 
   useEffect(()=>{
     if(locState.status==='granted' && mapRef.current && locState.lon && locState.lat){
