@@ -38,6 +38,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   const [liveStatus, setLiveStatus] = useState<'LIVE'|'CACHED'|'STALE'|'CONFIGURATION_REQUIRED'|'UNAVAILABLE'|'DEMO'>('LIVE')
   const [now, setNow] = useState(new Date())
   const [tickerIdx, setTickerIdx] = useState(0)
+  const [showLayers, setShowLayers] = useState(false)
   const { state: locState, request: requestLoc } = useLocation()
 
   const tickerLines = [
@@ -247,6 +248,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
 
   const [sourceLive, setSourceLive] = useState<Record<string,string>>({})
   const [health, setHealth] = useState<any>(null)
+  void health
   const [villages, setVillages] = useState<any[]>([])
   const [fireAlerts, setFireAlerts] = useState<any[]>([])
   // Trigger resize sau khi DOM mount (fix height 0)
@@ -294,9 +296,9 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     const map = new maplibregl.Map({
       container: mapContainer.current,
       style: inlineStyle as any,
-      center: [108.6, 13.9],
-      zoom: 8.5,
-      maxBounds: [[107.0, 12.9],[109.6, 15.0]],
+      center: [108.41, 13.85],
+      zoom: 7.8,
+      maxBounds: [[107.0, 12.7],[109.7, 15.1]],
       attributionControl: false,
     })
     // Fallback nếu style CARTO lỗi CORS → chuyển Google Satellite
@@ -311,7 +313,8 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     })
     mapRef.current = map as any
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
-    map.fitBounds([[107.0, 12.9], [109.6, 15.0]], { padding:20, duration:0 })
+    // Toàn cảnh Gia Lai: bounds thực từ gialai_135.geojson [107.45,12.99,109.36,14.70]
+    map.fitBounds([[107.45, 12.99], [109.36, 14.70]], { padding:30, duration:0 })
     map.addControl(new (maplibregl as any).AttributionControl({ compact:true }), 'bottom-left')
     map.on('load', ()=>{
       console.log('✅ MapLibre loaded successfully!')
@@ -324,9 +327,36 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           map.addLayer({ id:'base-xyz', type:'raster', source:'base-xyz' } as any)
         }
       }
-      // Gia Lai mới (sáp nhập Bình Định) — 15,536 km2, 58 xã/phường — biên Campuchia đến Biển Đông
-      map.addSource('gialai-boundary', { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[[107.0,12.9],[109.6,12.9],[109.6,15.0],[107.0,15.0],[107.0,12.9]]] }, properties:{} } })
-      map.addLayer({ id:'boundary', type:'line', source:'gialai-boundary', paint:{ 'line-color':'#0F766E', 'line-width':1.5, 'line-opacity':0.5, 'line-dasharray':[4,4] } })
+      // Ranh tỉnh Gia Lai thực (dissolve từ 134 xã, simplify 100m) — thay bbox chữ nhật cũ
+      fetch('/gialai_province.geojson').then(r=>r.json()).then((prov:any)=>{
+        if(!map.getSource('gialai-boundary')){
+          map.addSource('gialai-boundary', { type:'geojson', data: prov })
+          map.addLayer({ id:'boundary-fill', type:'fill', source:'gialai-boundary', paint:{ 'fill-color':'#0F766E', 'fill-opacity':0.04 } })
+          map.addLayer({ id:'boundary', type:'line', source:'gialai-boundary', paint:{ 'line-color':'#B91C1C', 'line-width':3, 'line-opacity':1 } })
+          map.addLayer({ id:'province-label', type:'symbol', source:'gialai-boundary', layout:{ 'text-field':'TỈNH GIA LAI', 'text-size':16, 'text-font':['Open Sans ExtraBold','Arial Unicode MS Bold'] } as any, paint:{ 'text-color':'#B91C1C', 'text-halo-color':'#fff', 'text-halo-width':2 } })
+        }
+      }).catch(()=>{ // fallback bbox nếu thiếu file
+        map.addSource('gialai-boundary', { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[[107.0,12.9],[109.6,12.9],[109.6,15.0],[107.0,15.0],[107.0,12.9]]] }, properties:{} } })
+        map.addLayer({ id:'boundary', type:'line', source:'gialai-boundary', paint:{ 'line-color':'#0F766E', 'line-width':1.5, 'line-opacity':0.5, 'line-dasharray':[4,4] } })
+      })
+      fetch('/gialai_135.geojson').then(r=>r.json()).then((fc:any)=>{
+        const feats = fc.features || []
+        console.log(`✅ Đã tải ${feats.length} xã/phường Gia Lai`)
+        if(!map.getSource('gialai-communes')){
+          map.addSource('gialai-communes', { type:'geojson', data: fc })
+          // Màu pastel phân biệt từng xã như ảnh mẫu baogialai — categorical theo ma_xa % 12
+          const pastel = ['#fbb4ae','#b3cde3','#ccebc5','#decbe4','#fed9a6','#ffffcc','#e5d8bd','#fddaec','#f2f2f2','#b3e2cd','#cbd5e8','#e6f5c9'] as any
+          const fillExpr = ['match', ['%', ['to-number', ['get','ma_xa']], 12], 0, pastel[0], 1, pastel[1], 2, pastel[2], 3, pastel[3], 4, pastel[4], 5, pastel[5], 6, pastel[6], 7, pastel[7], 8, pastel[8], 9, pastel[9], 10, pastel[10], pastel[11]] as any
+          map.addLayer({ id:'communes-fill', type:'fill', source:'gialai-communes', paint:{ 'fill-color': fillExpr, 'fill-opacity': 0.85 } })
+          map.addLayer({ id:'communes-line', type:'line', source:'gialai-communes', paint:{ 'line-color':'#ffffff', 'line-width':1.2, 'line-opacity':1 } })
+          map.addLayer({ id:'communes-label', type:'symbol', source:'gialai-communes', minzoom:7.5, layout:{ 'text-field':['get','ten_xa'], 'text-size':11, 'text-allow-overlap':false, 'text-ignore-placement':false, 'text-font':['Open Sans Bold','Arial Unicode MS Bold'] } as any, paint:{ 'text-color':'#111', 'text-halo-color':'#fff', 'text-halo-width':1.5 } })
+          map.on('click','communes-fill',(e:any)=>{
+            const f=e.features?.[0]?.properties
+            if(!f) return
+            new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' }).setLngLat(e.lngLat).setHTML(`<div style="font-family:Inter,sans-serif"><b>${f.ten_xa||''}</b><br/>mã ${f.ma_xa||''} · ${f.dtich_km2||''} km² · dân số ${f.dan_so||''}<br/><span style="font-size:11px;color:#64748B">${f.sap_nhap||''}</span></div>`).addTo(map)
+          })
+        }
+      }).catch(e=>console.warn('Không tải được gialai_135.geojson', e))
       STATIONS.forEach(st=>{
         const isHigh = st.level==='IV' || st.level==='V'
         const el=document.createElement('div')
@@ -351,11 +381,8 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: st.name, level: st.level }}))
         })
       })
-      setTimeout(()=>{
-        map.flyTo({ center:[108.68, 13.92], zoom:11, duration:1200 })
-        window.dispatchEvent(new CustomEvent('ecochain-demo', { detail:{ area:'Xã Hội Sơn', level:'V' }}))
-        window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area:'Xã Hội Sơn', level:'V' }}))
-      }, 900)
+      // Giữ toàn cảnh tỉnh — không auto zoom vào xã; chỉ fit lại sau khi tải communes
+      map.once('idle', ()=> map.fitBounds([[107.45, 12.99], [109.36, 14.70]], { padding:30, duration:0 }))
     })
     return () => { map.remove(); (mapRef as any).current = null }
   }, [])
@@ -393,53 +420,57 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
 
   return (
     // ⚠️ BẮT BUỘC 3: Div chứa map PHẢI CÓ height/width cố định (Tránh h-0) + resize trigger
-    <div className="relative w-full h-[calc(100vh-64px)] min-h-[500px] bg-slate-900 relative z-0" style={{position:'relative', height:'calc(100vh - 64px)', borderRadius:16, overflow:'hidden', background:'#0f172a'}}>
+    <div className="relative w-full h-[calc(100vh-56px)] min-h-[500px] bg-slate-900 relative z-0" style={{position:'relative', height:'calc(100vh - 56px)', borderRadius:0, overflow:'hidden', background:'#0f172a'}}>
       <div ref={mapContainer} className="w-full h-full min-h-[500px] relative z-0 absolute inset-0" style={{ width:'100%', height:'100%', minHeight:'500px' }} />
 
-      {/* Top: search + honest LIVE status */}
-      <div style={{position:'absolute', top:12, left:12, right:12, display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', pointerEvents:'none'}}>
-        <div style={{background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:999, padding:'8px 14px', display:'flex', gap:8, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', pointerEvents:'auto', flex:1, maxWidth:420}}>
+      {/* Top: gọn để full view — search nhỏ + dot LIVE */}
+      <div style={{position:'absolute', top:10, left:60, right:60, display:'flex', gap:8, alignItems:'center', justifyContent:'center', pointerEvents:'none'}}>
+        <div style={{background:'rgba(255,255,255,0.92)', backdropFilter:'blur(12px)', borderRadius:999, padding:'6px 12px', display:'flex', gap:6, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', pointerEvents:'auto', width:280, maxWidth:'40vw'}}>
           <span style={{opacity:0.6}}>⌕</span>
-          <input placeholder="Tìm xã, thôn, sự cố..." style={{border:0, outline:'none', flex:1, fontSize:13, background:'transparent'}} onKeyDown={e=>{ if(e.key==='Enter'){ const v=(e.target as HTMLInputElement).value; if(v) mapRef.current?.flyTo({center:[108.3+Math.random()*0.2,13.9+Math.random()*0.2], zoom:11}) }}} />
-          <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background: health?.firms?.status==='LIVE'?'#DCFCE7': health?.firms?.status==='DEMO'?'#FEF3C7':'#FEE2E2'}}>{health?.firms?.status || liveStatus}</span>
+          <input placeholder="Tìm xã..." style={{border:0, outline:'none', flex:1, fontSize:12, background:'transparent', minWidth:0}} onKeyDown={e=>{ if(e.key==='Enter'){ const v=(e.target as HTMLInputElement).value; if(v) mapRef.current?.flyTo({center:[108.3+Math.random()*0.2,13.9+Math.random()*0.2], zoom:11}) }}} />
         </div>
-        <div style={{background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:12, padding:'8px 12px', fontSize:12, display:'flex', gap:8, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', pointerEvents:'auto'}}>
-          <span style={{width:8, height:8, borderRadius:999, background: liveStatus==='LIVE'?'#10B981': liveStatus==='CACHED'?'#F59E0B': liveStatus==='CONFIGURATION_REQUIRED'?'#F59E0B':'#EF4444', display:'inline-block', animation: liveStatus==='LIVE'?'pulse 1.5s infinite':''}}/>
-          <span style={{fontWeight:800, fontSize:11, letterSpacing:0.5}}>{liveStatus==='LIVE'?'HỆ THỐNG TRỰC TIẾP (LIVE)': liveStatus==='CACHED'?'DỮ LIỆU ĐỆM (CACHED)': liveStatus==='CONFIGURATION_REQUIRED'?'CẦN CẤU HÌNH': liveStatus==='DEMO'?'CHẾ ĐỘ DEMO':'KHÔNG KHẢ DỤNG'}</span>
-          <span style={{color:'#64748B'}}>· Cập nhật lúc: {now.toLocaleTimeString('vi-VN')} - {now.toLocaleDateString('vi-VN')}</span>
-          {health && <span style={{fontSize:10, background:'#F1F5F9', padding:'2px 6px', borderRadius:999}}>GEE:{health.gee?.status} FIRMS:{health.firms?.status} Sentinel:{health.sentinel2?.status}</span>}
+        <div title={`${liveStatus} · ${now.toLocaleTimeString('vi-VN')}`} style={{background:'rgba(15,23,42,0.75)', backdropFilter:'blur(12px)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:999, padding:'6px 10px', fontSize:11, display:'flex', gap:6, alignItems:'center', color:'#fff', pointerEvents:'auto', whiteSpace:'nowrap'}}>
+          <span style={{width:8, height:8, borderRadius:999, background: liveStatus==='LIVE'?'#10B981':'#EF4444', display:'inline-block'}}/>
+          <span style={{fontWeight:800}}>{liveStatus}</span>
         </div>
       </div>
 
-      {/* Layer toggle — functional + XYZ base */}
-      <div style={{position:'absolute', top:64, left:12, background:'rgba(255,255,255,0.96)', backdropFilter:'blur(14px)', borderRadius:16, padding:10, minWidth:260, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', border:'1px solid rgba(255,255,255,0.7)', display:'flex', flexDirection:'column', gap:6}}>
-        <div style={{fontSize:11, fontWeight:700}}>Nền bản đồ (XYZ — dán trực tiếp MapLibre/Leaflet)</div>
-        <select value={baseXyz} onChange={e=> switchBaseXyz(e.target.value)} style={{padding:'6px 10px', borderRadius:999, border:'1px solid #E2E8E5', fontSize:12, background:'#F8FAF9'}}>
-          <option value="carto">CARTO Positron (Vector xám nhẹ) — https://basemaps.cartocdn.com/gl/positron-gl-style/style.json</option>
-          <option value="esri">Esri World Imagery — https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{'{'}z{'}'}/{'{'}y{'}'}/{'{'}x{'}'}</option>
-          <option value="google_s">Google Satellite — https://mt1.google.com/vt/lyrs=s&x={`{x}`}&y={`{y}`}&z={`{z}`}</option>
-          <option value="google_y">Google Hybrid — https://mt1.google.com/vt/lyrs=y&x={`{x}`}&y={`{y}`}&z={`{z}`}</option>
-          <option value="eox">EOX Sentinel-2 cloudless — https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{'{'}z{'}'}/{'{'}y{'}'}/{'{'}x{'}'}.jpg</option>
+      {/* Control Panel — Glassmorphism + Collapse/Expand, logic giữ nguyên */}
+      {!showLayers ? (
+        <button onClick={()=>setShowLayers(true)} title="Mở bảng điều khiển lớp phủ" style={{position:'absolute', top:64, left:12, zIndex:10, width:38, height:38, display:'grid', placeItems:'center', background:'rgba(15,23,42,0.75)', backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:12, color:'#fff', fontSize:16, cursor:'pointer', boxShadow:'0 8px 24px rgba(0,0,0,0.25)', transition:'transform .25s ease, opacity .25s ease'}}>⚙️</button>
+      ) : (
+      <div style={{position:'absolute', top:64, left:12, zIndex:10, width:270, maxHeight:'calc(100% - 220px)', overflow:'auto', background:'rgba(15,23,42,0.75)', backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)', borderRadius:12, border:'1px solid rgba(255,255,255,0.15)', boxShadow:'0 8px 24px rgba(0,0,0,0.25)', padding:10, display:'flex', flexDirection:'column', gap:8, color:'#fff', transition:'transform .3s ease, opacity .3s ease', transform:'translateX(0)', opacity:1}}>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+          <div style={{fontSize:12, fontWeight:800, letterSpacing:.3}}>Lớp phủ bản đồ</div>
+          <button onClick={()=>setShowLayers(false)} title="Thu gọn" style={{width:26, height:26, display:'grid', placeItems:'center', background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:8, color:'#fff', fontSize:13, cursor:'pointer'}}>━</button>
+        </div>
+        <div style={{fontSize:11, fontWeight:700, opacity:.9}}>Nền bản đồ</div>
+        <select value={baseXyz} onChange={e=> switchBaseXyz(e.target.value)} style={{padding:'6px 8px', borderRadius:8, border:'1px solid rgba(255,255,255,0.15)', fontSize:12, background:'rgba(255,255,255,0.1)', color:'#fff', maxWidth:'100%'}}>
+          <option value="esri" style={{color:'#000'}}>Esri Vệ tinh</option>
+          <option value="osm" style={{color:'#000'}}>OSM Đường phố</option>
+          <option value="carto" style={{color:'#000'}}>CARTO Xám nhẹ</option>
+          <option value="google_s" style={{color:'#000'}}>Google Vệ tinh</option>
+          <option value="google_y" style={{color:'#000'}}>Google Hybrid</option>
+          <option value="eox" style={{color:'#000'}}>Sentinel-2 cloudless</option>
         </select>
-        <div style={{fontSize:10, color:'#64748B'}}>Nguồn: <a href="https://earthengine.google.com" target="_blank">GEE</a> · <a href="https://dataspace.copernicus.eu" target="_blank">Copernicus</a> · <a href="https://planetarycomputer.microsoft.com" target="_blank">Planetary Computer</a> · <a href="https://firms.modaps.eosdis.nasa.gov" target="_blank">NASA FIRMS</a></div>
-        <div style={{height:1, background:'#E2E8E5', margin:'4px 0'}}/>
-        <div style={{fontSize:11, fontWeight:700}}>Lớp AI/GEE (overlay)</div>
+        <div style={{height:1, background:'rgba(255,255,255,0.15)'}}/>
+        <div style={{fontSize:11, fontWeight:700, opacity:.9}}>Lớp AI/GEE</div>
         {[
           ['hotspot','🔥 Điểm nhiệt FIRMS', 'hotspot', 'VIIRS_SNPP_NRT'],
           ['ndvi','🌿 NDVI', 'ndvi', 'ndvi'],
           ['s1','📡 Sentinel-1 VV/VH', 's1', 's1'],
         ].map(([k,label, key, geeLayer])=>(
-          <label key={k} style={{display:'flex', gap:6, alignItems:'center', background: activeSat[key]?'#DCFCE7':'#F8FAF9', padding:'6px 10px', borderRadius:999, fontSize:12, border:'1px solid #E2E8E5', cursor:'pointer'}}>
+          <label key={k} style={{display:'flex', gap:6, alignItems:'center', background: activeSat[key]?'rgba(16,185,129,0.25)':'rgba(255,255,255,0.08)', padding:'6px 8px', borderRadius:8, fontSize:12, border:'1px solid rgba(255,255,255,0.15)', cursor:'pointer', color:'#fff'}}>
             <input type="checkbox" checked={!!activeSat[key as string]} onChange={()=> toggleSat(key as string, geeLayer as string)} /> {label}
-            <span style={{fontSize:10, padding:'1px 6px', borderRadius:999, background: sourceLive[key==='hotspot'?'firms': key==='ndvi'?'sentinel2':'sentinel1']==='LIVE'?'#DCFCE7':'#FEF3C7'}}>{sourceLive[key==='hotspot'?'firms': key==='ndvi'?'sentinel2':'sentinel1'] || '...'}</span>
+            <span style={{fontSize:10, padding:'1px 6px', borderRadius:999, background: sourceLive[key==='hotspot'?'firms': key==='ndvi'?'sentinel2':'sentinel1']==='LIVE'?'#DCFCE7':'#FEF3C7', color:'#000'}}>{sourceLive[key==='hotspot'?'firms': key==='ndvi'?'sentinel2':'sentinel1'] || '...'}</span>
           </label>
         ))}
-        <div style={{fontSize:10, color:'#64748B'}}>Gia Lai bbox 107.0,12.9,109.6,15.0 · Zoom ~9.2</div>
-      </div>
+        <div style={{fontSize:11, opacity:0.6, color:'#e2e8f0'}}>Gia Lai bbox 107.0,12.9,109.6,15.0 · Zoom ~9.2</div>
+      </div>)}
 
-      {/* Right controls */}
-      <div style={{position:'absolute', top:64, right:12, display:'flex', flexDirection:'column', gap:8}}>
-        <button onClick={requestLoc} style={{background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', border:0, borderRadius:12, padding:'10px 12px', boxShadow:'0 4px 12px rgba(0,0,0,0.08)', fontSize:12, fontWeight:700}}>📍 Vị trí của tôi</button>
+      {/* Right controls — icon gọn để full view */}
+      <div style={{position:'absolute', top:64, right:12, display:'flex', flexDirection:'column', gap:8, zIndex:10}}>
+        <button onClick={requestLoc} title="Vị trí của tôi" style={{width:38, height:38, display:'grid', placeItems:'center', background:'rgba(255,255,255,0.92)', border:0, borderRadius:12, boxShadow:'0 4px 12px rgba(0,0,0,0.08)', fontSize:16}}>📍</button>
         <button onClick={async()=>{
           const bounds = mapRef.current?.getBounds()
           const bbox = bounds ? `${bounds.getWest().toFixed(1)},${bounds.getSouth().toFixed(1)},${bounds.getEast().toFixed(1)},${bounds.getNorth().toFixed(1)}` : '107.0,12.9,109.6,15.0'

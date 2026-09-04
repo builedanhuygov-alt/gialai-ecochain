@@ -69,7 +69,7 @@ class OpenAIProvider(LLMProvider):
         return {"status": "LIVE" if self.api_key else "CONFIGURATION_REQUIRED", "provider": "OpenAI", "model": self.model}
 
 class GeminiProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "gemini-3.6-flash"):
+    def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
         self.api_key = api_key
         self.model = model
     async def generate(self, system, user, schema=None):
@@ -140,12 +140,12 @@ def get_llm_provider() -> LLMProvider:
     if provider == "openai" and openai_key:
         return OpenAIProvider(openai_key, model or "gpt-4o-mini")
     if provider == "gemini" and gemini_key:
-        return GeminiProvider(gemini_key, model or "gemini-3.6-flash")
+        return GeminiProvider(gemini_key, model or "gemini-2.5-flash")
     if provider == "groq" and groq_key:
         return GroqProvider(groq_key, model or "llama-3.1-70b-versatile")
     # Auto-detect by available key
     if gemini_key:
-        return GeminiProvider(gemini_key, model or "gemini-3.6-flash" if provider in ("", "gemini") else model)
+        return GeminiProvider(gemini_key, model or "gemini-2.5-flash" if provider in ("", "gemini") else model)
     if groq_key:
         return GroqProvider(groq_key, model or "llama-3.1-70b-versatile")
     if openai_key:

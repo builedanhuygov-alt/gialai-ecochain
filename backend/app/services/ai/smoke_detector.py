@@ -32,7 +32,7 @@ async def detect_smoke_from_tile(tile_url: str = None, lat: float=13.9, lon: flo
             Chỉ trả JSON."""
             # Send image as inline data
             resp = client.models.generate_content(
-                model="gemini-3.6-flash",
+                model="gemini-2.5-flash",
                 contents=[prompt, {"inline_data": {"mime_type": "image/jpeg", "data": image_b64[:200000]}}],
                 config={"response_mime_type": "application/json", "temperature": 0.2}
             )
@@ -41,7 +41,7 @@ async def detect_smoke_from_tile(tile_url: str = None, lat: float=13.9, lon: flo
             # Auto create alert if smoke
             if data.get("is_smoke"):
                 data["alert"] = {"level": "CRITICAL", "message": f"Phát hiện khói tại {lat},{lon} - {data.get('reason')}", "bbox": bbox, "timestamp": time.time(), "source": "Gemini Vision", "tile_url": tile_url}
-            return {"status": "LIVE", "provider": "Gemini Vision 3.6", "result": data, "tile_url": tile_url}
+            return {"status": "LIVE", "provider": "Gemini Vision 2.5", "result": data, "tile_url": tile_url}
         except Exception as e:
             pass
     # Fallback heuristic DEMO — screenshot bạn gửi có vệt khói trắng rõ trên rừng Gia Lai
