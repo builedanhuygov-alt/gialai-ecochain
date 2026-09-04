@@ -49,8 +49,8 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
         </nav>
 
         <div className="sidebar-foot">
-          <a><Settings size={16}/> Cài đặt</a>
-          <a><HelpCircle size={16}/> Trợ giúp</a>
+          <NavLink to="/admin" className="nav-link" onClick={onClose}><Settings size={16}/> Cài đặt</NavLink>
+          <NavLink to="/reports" className="nav-link" onClick={onClose}><HelpCircle size={16}/> Trợ giúp</NavLink>
           <div className="profile"><div className="avatar">QT</div><div><div className="pname">Quản trị Tỉnh</div><div className="prole">Gia Lai</div></div></div>
         </div>
       </aside>
