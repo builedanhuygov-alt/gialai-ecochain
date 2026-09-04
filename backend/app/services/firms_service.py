@@ -62,6 +62,8 @@ async def fetch_firms(lat:float, lon:float, area: str="world", day_range:int=2)-
     key=_get_key()
     cache_key=f"{lat:.1f},{lon:.1f},{day_range}"
     now=time.time()
+    import datetime
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
     if cache_key in CACHE:
         age=now-CACHE[cache_key]["ts"]
         if age < TTL:
@@ -69,12 +71,18 @@ async def fetch_firms(lat:float, lon:float, area: str="world", day_range:int=2)-
             d["status"]="CACHED"
             d["cache_status"]="CACHED"
             d["timestamp"]=now
+            d["date"]=date_str
+            d["acquired"]=date_str
+            d["acquired_at"]=now
             return d
         elif age < TTL*2:
             d=CACHE[cache_key]["data"].copy()
             d["status"]="STALE"
             d["cache_status"]="STALE"
             d["timestamp"]=now
+            d["date"]=date_str
+            d["acquired"]=date_str
+            d["acquired_at"]=now
             return d
     if not key:
         if s.is_demo:
@@ -94,9 +102,10 @@ async def fetch_firms(lat:float, lon:float, area: str="world", day_range:int=2)-
                     if k not in seen:
                         seen.add(k)
                         uniq.append(f)
-                # timestamp validation: filter fires with valid acq_date
+                import datetime
+                date_str = datetime.datetime.now().strftime("%Y-%m-%d")
                 now_ts=now
-                data={"source":"NASA FIRMS","provider":"NASA FIRMS","status":"LIVE","cache_status":"LIVE","satellite":"VIIRS_SNPP_NRT","instrument":"VIIRS","fires": uniq, "count": len(uniq), "api_url": url, "bbox": f"{lon-1},{lat-1},{lon+1},{lat+1}", "timestamp": now_ts, "acquired_at": now_ts, "raw_count": len(fires)}
+                data={"source":"NASA FIRMS","provider":"NASA FIRMS","status":"LIVE","cache_status":"LIVE","satellite":"VIIRS_SNPP_NRT","instrument":"VIIRS","fires": uniq, "count": len(uniq), "api_url": url, "bbox": f"{lon-1},{lat-1},{lon+1},{lat+1}", "timestamp": now_ts, "acquired_at": now_ts, "date": date_str, "acquired": date_str, "raw_count": len(fires)}
                 CACHE[cache_key]={"ts": now, "data": data}
                 return data
             if s.is_demo:
@@ -113,6 +122,8 @@ async def fetch_firms_gialai(day_range:int=1, source:str="VIIRS_SNPP_NRT")->Dict
     key=_get_key()
     cache_key=f"gialai_bbox:{day_range}:{source}"
     now=time.time()
+    import datetime
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
     if cache_key in CACHE:
         age=now-CACHE[cache_key]["ts"]
         if age < TTL:
@@ -120,12 +131,18 @@ async def fetch_firms_gialai(day_range:int=1, source:str="VIIRS_SNPP_NRT")->Dict
             d["status"]="CACHED"
             d["cache_status"]="CACHED"
             d["timestamp"]=now
+            d["date"]=date_str
+            d["acquired"]=date_str
+            d["acquired_at"]=now
             return d
         elif age < TTL*2:
             d=CACHE[cache_key]["data"].copy()
             d["status"]="STALE"
             d["cache_status"]="STALE"
             d["timestamp"]=now
+            d["date"]=date_str
+            d["acquired"]=date_str
+            d["acquired_at"]=now
             return d
     if not key:
         if s.is_demo:
@@ -150,8 +167,10 @@ async def fetch_firms_gialai(day_range:int=1, source:str="VIIRS_SNPP_NRT")->Dict
                             f["confidence"]=f.get("confidence","n")
                             f["timestamp"]=now
                             uniq.append(f)
+                    import datetime
+                    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
                     # stale detection: if fires empty, still LIVE with 0 count
-                    data={"source":"NASA FIRMS","provider":"NASA FIRMS","status":"LIVE","cache_status":"LIVE","satellite":source.split("_")[0] if "_" in source else source,"instrument": source, "bbox":GIALAI_BBOX,"fires": uniq, "count": len(uniq), "api_url": url, "timestamp": now, "acquired_at": now, "day_range": day_range}
+                    data={"source":"NASA FIRMS","provider":"NASA FIRMS","status":"LIVE","cache_status":"LIVE","satellite":source.split("_")[0] if "_" in source else source,"instrument": source, "bbox":GIALAI_BBOX,"fires": uniq, "count": len(uniq), "api_url": url, "timestamp": now, "acquired_at": now, "date": date_str, "acquired": date_str, "day_range": day_range}
                     CACHE[cache_key]={"ts": now, "data": data}
                     return data
                 if s.is_demo:

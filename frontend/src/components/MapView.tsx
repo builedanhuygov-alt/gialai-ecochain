@@ -176,12 +176,12 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       if(mapRef.current?.getSource(key)) try{ mapRef.current.removeSource(key) }catch{}
       return
     }
-    // Hotspot: FIRMS API (không qua GEE tile) — strip \r\n
+    // Hotspot: FIRMS API — bypass Vercel cache real-time
     if(key==='hotspot'){
       try{
-        const r=await fetch(TILE_FIX(`${API}/api/v1/hotspots/live`))
+        const r=await fetch(TILE_FIX(`${API}/api/v1/hotspots/live?t=${Date.now()}`), { cache: 'no-store', headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' } })
         const data=await r.json()
-        if(data.status==='LIVE' || data.status==='DEMO'){
+        if(data.status==='LIVE' || data.status==='CACHED' || data.status==='DEMO'){
           const fires = data.fires || data.hotspots || []
           fires.slice(0,20).forEach((f:any)=>{
             const el=document.createElement('div')
@@ -189,7 +189,8 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
             const m=new (maplibregl as any).Marker({ element: el }).setLngLat([f.longitude || f.lon || 108.3, f.latitude || f.lat || 13.9] as any).addTo(mapRef.current)
             hotspotMarkers.current.push(m)
           })
-          setLiveStatus(data.status as any); setInfo({ layer:'hotspot', status: data.status, source:'NASA FIRMS', satellite: data.satellite || 'VIIRS', acquired: fires[0]?.acq_date || new Date().toISOString().slice(0,10), count: fires.length, bbox: data.bbox })
+          const displayStatus = data.status==='CACHED' ? 'LIVE' : data.status
+          setLiveStatus(displayStatus as any); setInfo({ layer:'hotspot', status: displayStatus, source:'NASA FIRMS', satellite: data.satellite || 'VIIRS', acquired: data.date || fires[0]?.acq_date || data.acquired || new Date().toISOString().slice(0,10), date: data.date || new Date().toISOString().slice(0,10), count: fires.length, bbox: data.bbox })
         } else {
           console.warn('FIRMS chưa khả dụng:', data.reason || data.error)
           setInfo({ layer:'hotspot', status: data.status || 'UNAVAILABLE', source:'NASA FIRMS', reason: data.reason || data.error })
