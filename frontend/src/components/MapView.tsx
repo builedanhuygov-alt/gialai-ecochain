@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
-// ⚠️ BẮT BUỘC 1: Import CSS của MapLibre (Nếu thiếu map sẽ trắng/vỡ)
+// ⚠️ BẮT BUỘC 1: Import CSS của MapLibre (Nếu thiếu map sẽ trắng/vỡ) — phải ở đầu file
 import 'maplibre-gl/dist/maplibre-gl.css'
+// Fallback nếu dùng Leaflet (không dùng nhưng giữ để tránh thiếu CSS)
+// import 'leaflet/dist/leaflet.css'; 
 import { useLocation } from '../hooks/useLocation'
 
 const API = ((import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000').replace(/[\r\n]/g, "").trim().replace(/\/$/, "")
@@ -240,6 +242,12 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     }
   }
 
+  // Trigger resize sau khi DOM mount (fix height 0)
+  useEffect(()=>{
+    if(!mapRef.current) return
+    const t=setTimeout(()=> mapRef.current?.resize(), 300)
+    return ()=> clearTimeout(t)
+  }, [])
   // Effect 1 — chỉ init map một lần (không re-create khi đổi baseXyz)
   useEffect(()=>{
     if(!mapContainer.current || mapRef.current) return
@@ -332,9 +340,9 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   },[])
 
   return (
-    // ⚠️ BẮT BUỘC 3: Div chứa map PHẢI CÓ height/width cố định rõ ràng (Tránh h-0)
-    <div className="relative w-full h-[calc(100vh-64px)] min-h-[500px] bg-slate-900" style={{position:'relative', height:'calc(100vh - 64px)', borderRadius:16, overflow:'hidden', background:'#0f172a'}}>
-      <div ref={mapContainer} className="absolute inset-0 w-full h-full" style={{ width:'100%', height:'100%' }} />
+    // ⚠️ BẮT BUỘC 3: Div chứa map PHẢI CÓ height/width cố định (Tránh h-0) + resize trigger
+    <div className="relative w-full h-[calc(100vh-64px)] min-h-[500px] bg-slate-900 relative z-0" style={{position:'relative', height:'calc(100vh - 64px)', borderRadius:16, overflow:'hidden', background:'#0f172a'}}>
+      <div ref={mapContainer} className="w-full h-full min-h-[500px] relative z-0 absolute inset-0" style={{ width:'100%', height:'100%', minHeight:'500px' }} />
 
       {/* Top: search + honest LIVE status */}
       <div style={{position:'absolute', top:12, left:12, right:12, display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', pointerEvents:'none'}}>
