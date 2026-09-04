@@ -4,7 +4,8 @@ import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useLocation } from '../hooks/useLocation'
 
-const API = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'
+const API = ((import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000').replace(/[\r\n]/g, "").trim().replace(/\/$/, "")
+const TILE_FIX = (url: string) => url.replace(/[\r\n]/g, "").trim()
 
 // 6 điểm phủ toàn tỉnh Gia Lai mới (Tây Nguyên + Bình Định cũ)
 const STATIONS = [
@@ -64,12 +65,12 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     return { start:'2026-08-01', end:'2026-09-01' }
   }
 
-  // XYZ Tile URLs — dán trực tiếp vào MapLibre/Leaflet/OpenLayers (không cần API Key)
+  // XYZ Tile URLs — dán trực tiếp vào MapLibre/Leaflet/OpenLayers (không cần API Key) — strip \r\n
   const XYZ_TILES: Record<string, { url: string, attribution: string }> = {
-    esri: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '© Esri World Imagery' },
-    google_s: { url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', attribution: '© Google Satellite' },
-    google_y: { url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attribution: '© Google Hybrid' },
-    eox: { url: 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg', attribution: '© EOX Sentinel-2 cloudless' },
+    esri: { url: TILE_FIX('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'), attribution: '© Esri World Imagery' },
+    google_s: { url: TILE_FIX('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'), attribution: '© Google Satellite' },
+    google_y: { url: TILE_FIX('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'), attribution: '© Google Hybrid' },
+    eox: { url: TILE_FIX('https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg'), attribution: '© EOX Sentinel-2 cloudless' },
   }
   // ⚠️ BẮT BUỘC 2: Dùng Style miễn phí KHÔNG CẦN API KEY của CARTO/OSM
   const baseStyles: Record<string, string> = {
@@ -88,29 +89,31 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       params.set('east', String(bounds.getEast())); params.set('west', String(bounds.getWest()))
     }
     try{
-      const r=await fetch(`${API}/api/satellite/tile/${layer}?${params}`)
+      const r=await fetch(TILE_FIX(`${API}/api/satellite/tile/${layer}?${params}`))
       if(!r.ok) throw new Error('GEE Service chưa sẵn sàng')
-      return await r.json()
+      const j=await r.json()
+      if(j.tile_url) j.tile_url = TILE_FIX(j.tile_url)
+      return j
     }catch(e){
-      // 🛡️ CHỐNG SẬP: Nếu GEE lỗi, log cảnh báo nhẹ, KHÔNG CRASH bản đồ chính
       console.warn(`Lớp ${layer} chưa khả dụng (Chế độ Fallback BaseMap):`, e)
       return { status:'UNAVAILABLE', error:String(e) }
     }
   }
 
-  // 🛡️ Fallback chống sập khi Backend GEE trả về CONFIGURATION_REQUIRED
+  // 🛡️ Fallback chống sập khi Backend GEE trả về CONFIGURATION_REQUIRED — strip \r\n
   const addGEETileLayer = async (layerId: string, tileType: string) => {
     const map = mapRef.current
     if (!map) return
     try {
-      const res = await fetch(`${API}/api/satellite/tile/${tileType}?layer=${tileType}&lat=13.85&lon=108.5&start=2026-08-10&end=2026-09-03&cloud=20`)
+      const res = await fetch(TILE_FIX(`${API}/api/satellite/tile/${tileType}?layer=${tileType}&lat=13.85&lon=108.5&start=2026-08-10&end=2026-09-03&cloud=20`))
       if (!res.ok) throw new Error('GEE Service chưa sẵn sàng')
       const data = await res.json()
       if (data.tile_url) {
+        const url = TILE_FIX(data.tile_url)
         if (map.getSource(layerId)) {
-          (map.getSource(layerId) as maplibregl.RasterTileSource).setTiles([data.tile_url])
+          (map.getSource(layerId) as maplibregl.RasterTileSource).setTiles([url])
         } else {
-          map.addSource(layerId, { type:'raster', tiles:[data.tile_url], tileSize:256 })
+          map.addSource(layerId, { type:'raster', tiles:[url], tileSize:256 })
           map.addLayer({ id:layerId, type:'raster', source:layerId, paint:{ 'raster-opacity': 0.8 } })
         }
       }
@@ -124,13 +127,12 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     setBaseXyz(id)
     const map = mapRef.current
     if(!map) return
-    // Remove previous base xyz
     if(map.getLayer('base-xyz')) try{ map.removeLayer('base-xyz')}catch{}
     if(map.getSource('base-xyz')) try{ map.removeSource('base-xyz')}catch{}
-    if(id==='carto') return // CARTO Positron đã là style gốc
+    if(id==='carto') return
     const tile = XYZ_TILES[id]
     if(!tile) return
-    map.addSource('base-xyz', { type:'raster', tiles:[tile.url], tileSize:256, attribution: tile.attribution } as any)
+    map.addSource('base-xyz', { type:'raster', tiles:[TILE_FIX(tile.url)], tileSize:256, attribution: tile.attribution } as any)
     map.addLayer({ id:'base-xyz', type:'raster', source:'base-xyz', paint:{ 'raster-opacity': 1 } } as any, 'boundary')
   }
 
@@ -148,10 +150,10 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       if(mapRef.current?.getSource(key)) try{ mapRef.current.removeSource(key) }catch{}
       return
     }
-    // Hotspot: FIRMS API (không qua GEE tile)
+    // Hotspot: FIRMS API (không qua GEE tile) — strip \r\n
     if(key==='hotspot'){
       try{
-        const r=await fetch(`${API}/api/v1/hotspots/live`)
+        const r=await fetch(TILE_FIX(`${API}/api/v1/hotspots/live`))
         const data=await r.json()
         if(data.status==='LIVE' || data.status==='DEMO'){
           const fires = data.fires || data.hotspots || []
