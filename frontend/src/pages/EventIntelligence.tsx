@@ -95,6 +95,15 @@ export default function EventIntelligence(){
 const HISTORICAL = [
   { id: 'phu-my-dong-0721', title: 'Cháy rừng dương thôn Tân Phụng', place: 'Xã Phù Mỹ Đông', dates: '21/7/2026 · khống chế 20h30 cùng ngày', level: 'CẤP IV-V', score: 92, forces: '378 CBCS (Bộ CHQS tỉnh, Ban CHQS xã, Đồn BP Mỹ An, Trung đoàn 739, Lữ đoàn PB 572, 18 kiểm lâm, 6 xe chữa cháy)', outcome: 'Đã dập tắt — bảo vệ rừng và tài sản dân', source: 'Cổng TTĐT tỉnh Gia Lai' },
   { id: 'hoi-son-0708', title: 'Cháy thực bì + rừng trồng tiểu khu 213', place: 'Xã Hội Sơn và Hòa Hội', dates: 'Tháng 7-8/2026', level: 'CẤP III', score: 68, forces: 'Lực lượng chức năng địa phương', outcome: 'Dập khẩn trương — ngăn lan rộng', source: 'Cổng TTĐT tỉnh Gia Lai' },
+  { id: 'vung-chua-0827', title: 'Cháy núi Vũng Chua — thiệt hại 4,23ha', place: 'Phường Quy Nhơn Nam', dates: '27/8/2026 (đo đạc hiện trường 30/8)', level: 'CẤP III', score: 71, forces: 'Hạt Kiểm lâm Tuy Phước - Quy Nhơn', outcome: 'Đã dập tắt — đang điều tra nguyên nhân', source: 'Hạt Kiểm lâm (Đức Hồ, 30/8/2026)' },
+]
+
+const QD49 = [
+  { lv: 'I', name: 'Thấp', action: 'PCCCR theo phương án; kiểm tra, tuyên truyền, phát dọn thực bì, đốt nương rẫy đúng quy định.' },
+  { lv: 'II', name: 'Trung bình', action: 'Tăng kiểm tra, bố trí người canh phòng, sẵn sàng dập khi mới phát cháy; hướng dẫn kỹ thuật nương rẫy.' },
+  { lv: 'III', name: 'Cao', action: 'Phối hợp Hạt Kiểm lâm, kiểm soát đốt nương rẫy; trực 10/24h (10h-20h), cao điểm 11h-19h; Chủ tịch xã được huy động lực lượng.' },
+  { lv: 'IV', name: 'Nguy hiểm', action: 'Trực 12/24h (9h-21h), cao điểm 11h-19h; kiểm tra nghiêm vùng trọng điểm; vượt khả năng báo cáo tỉnh.' },
+  { lv: 'V', name: 'Cực kỳ nguy hiểm', action: 'Chủ tịch tỉnh chỉ đạo; trực 24/24h; kiểm soát người/phương tiện vào rừng; cấm dùng lửa rừng/ven rừng; vượt khả năng đề nghị Trung ương chi viện.' },
 ]
 
 export function EventsList(){
@@ -114,7 +123,14 @@ export function EventsList(){
     <div style={{display:'grid', gap:12}}>
       <h1>Event Intelligence</h1>
       <div style={{fontSize:11, color:'#64748B'}}>Nguồn: FIRMS + Weather + Sentinel · badge LIVE/DEMO theo /api/health/geospatial</div>
-      <div style={{background:'#FFF7ED', border:'1px solid #FDBA74', borderRadius:12, padding:'10px 14px', fontSize:12, color:'#7C2D12'}}>⚠️ Bộ NN&MT cảnh báo: El Niño mạnh–rất mạnh từ 9/2026 đến cuối năm — khô hạn, nắng nóng, thiếu nước, nguy cơ cháy rừng Gia Lai tăng cao.</div>
+      <div style={{background:'#FFF7ED', border:'1px solid #FDBA74', borderRadius:12, padding:'10px 14px', fontSize:12, color:'#7C2D12'}}>⚠️ Bộ NN&MT cảnh báo: El Niño mạnh–rất mạnh từ 9/2026 đến cuối năm — khô hạn, nắng nóng, thiếu nước, nguy cơ cháy rừng Gia Lai tăng cao. Văn bản 11116/UBND-NNMT: 82 xã/phường nắng nóng; trực 24/24h kể cả lễ 2/9; cấp IV-V kiểm soát người vào rừng, cấm dùng lửa rừng/ven rừng; “4 tại chỗ” mức cao nhất; xem xét trách nhiệm người đứng đầu nếu buông lỏng.</div>
+      <div style={{background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:12, padding:'10px 14px'}}>
+        <div style={{fontSize:12, fontWeight:800, color:'#1E40AF'}}>📜 QĐ 49/2026/QĐ-UBND — 5 cấp dự báo cháy rừng (cơ sở hành động)</div>
+        {QD49.map(q=>(
+          <div key={q.lv} style={{fontSize:11, color:'#1E3B8A', marginTop:6}}><b>Cấp {q.lv} ({q.name}):</b> {q.action}</div>
+        ))}
+        <div style={{fontSize:10, color:'#64748B', marginTop:6}}>Sở NN&MT hướng dẫn bảng tra cấp dự báo theo quyết định.</div>
+      </div>
       {HISTORICAL.map(h=>(
         <Link key={h.id} to={`/events/${h.id}`} style={{background:'#fff', border:'2px solid #DC2626', borderRadius:12, padding:16, textDecoration:'none', color:'inherit'}}>
           <div><b>{h.title}</b> <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:'#DC2626', color:'#fff'}}>SỰ KIỆN THẬT</span></div>

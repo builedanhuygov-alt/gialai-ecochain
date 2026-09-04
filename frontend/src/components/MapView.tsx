@@ -8,6 +8,13 @@ import { useLocation } from '../hooks/useLocation'
 import DemoTour from './DemoTour'
 import { getMode } from './ModeSwitch'
 
+// Điểm từng cháy Hè 2026 (nguồn: Cổng TTĐT Gia Lai, Hạt Kiểm lâm) — ghim lưu ý trên bản đồ
+const HIST_FIRES = [
+  { name: 'Cháy rừng dương Tân Phụng', place: 'Xã Phù Mỹ Đông', coords: [109.06, 14.13] as [number, number], note: '21/7/2026 · lan nhanh do nắng+gió · 378 CBCS · dập 20h30 cùng ngày' },
+  { name: 'Cháy thực bì TK213', place: 'Xã Hội Sơn – Hòa Hội', coords: [108.66, 13.90] as [number, number], note: 'Tháng 7-8/2026 · rừng trồng + thực bì · đã ngăn lan rộng' },
+  { name: 'Cháy núi Vũng Chua (4,23ha)', place: 'P. Quy Nhơn Nam', coords: [109.235, 13.745] as [number, number], note: '27/8/2026 · thiệt hại 4,23ha · đang điều tra nguyên nhân' },
+]
+
 // Kịch bản DEMO: đủ hiện tượng tutorial — 1 điểm ĐANG CHÁY + 3 điểm NGHI NGỜ
 const DEMO_ALERTS = [
   { village: 'Xã Hội Sơn', commune: 'Xã Hội Sơn', village_coords: [108.68, 13.92], fire_coords: [108.69, 13.93], distance_km: 2.4, acq_date: new Date().toISOString().slice(0, 10), confidence: 'h', level: 'CẢNH BÁO' },
@@ -468,6 +475,18 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: st.name, level: st.level }}))
         })
       })
+      // Điểm từng cháy — marker đen/xám + ghi chú, phân biệt điểm nóng FIRMS live
+      HIST_FIRES.forEach(h=>{
+        const el=document.createElement('div')
+        el.style.width='24px'; el.style.height='24px'; el.style.borderRadius='999px'; el.style.display='grid'; el.style.placeItems='center'
+        el.style.background='#1F2937'; el.style.color='#FBBF24'; el.style.fontSize='13px'; el.style.border='2px solid #FBBF24'; el.style.cursor='pointer'
+        el.textContent='🔥'; el.title=`${h.name} — ${h.place} (từng cháy)`
+        el.addEventListener('click', ()=>{
+          new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' }).setLngLat(h.coords as any)
+            .setHTML(`<div style="font-family:Inter,sans-serif"><b>${h.name}</b><br/>${h.place}<br/><span style="font-size:11px;color:#92400E">⚠ TỪNG CHÁY — ${h.note}</span><br/><span style="font-size:10px;color:#64748B">Khu vực cần lưu ý khi cấp III-V</span></div>`).addTo(map)
+        })
+        new (maplibregl as any).Marker({ element: el }).setLngLat(h.coords as any).addTo(map)
+      })
       // Giữ toàn cảnh tỉnh — không auto zoom vào xã; chỉ fit lại sau khi tải communes
       map.once('idle', ()=> map.fitBounds([[107.45, 12.99], [109.36, 14.70]], { padding:30, duration:0 }))
     })
@@ -610,6 +629,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           <div><i style={{width:10,height:10,borderRadius:999,background:'#0EA5E9',display:'inline-block',marginRight:6}}/> CẤP I-II</div>
           <div><i style={{width:10,height:10,borderRadius:999,background:'#F59E0B',display:'inline-block',marginRight:6}}/> CẤP III-IV</div>
           <div><i style={{width:10,height:10,borderRadius:999,background:'#DC2626',display:'inline-block',marginRight:6}}/> CẤP V</div>
+          <div><i style={{width:10,height:10,borderRadius:999,background:'#1F2937',border:'2px solid #FBBF24',display:'inline-block',marginRight:6}}/> Từng cháy Hè 2026</div>
           {info?.layer==='smoke' && info?.is_smoke && <div style={{marginTop:6, padding:'6px 8px', background:'#FEE2E2', borderRadius:8, color:'#991B1B', fontWeight:700}}>🚨 {info.alert?.message || 'Phát hiện khói'}<br/><span style={{fontWeight:400, fontSize:10}}>Độ tin cậy {(info.confidence*100).toFixed(0)}% · {info.reason}</span></div>}
           {info?.layer==='smoke' && info?.is_smoke===false && <div style={{marginTop:6, padding:'6px 8px', background:'#DCFCE7', borderRadius:8, color:'#065F46'}}>✓ Không có khói — an toàn</div>}
         </div>

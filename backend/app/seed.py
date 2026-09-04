@@ -22,6 +22,9 @@ def seed_historical_fires():
             dict(uid="hoi-son-hoa-hoi", level="III", source="Cổng TTĐT tỉnh Gia Lai",
                  issued=datetime(2026, 8, 15, 12, 0),
                  scope="7-8/2026 cháy thực bì + rừng trồng sản xuất tiểu khu 213, xã Hội Sơn và Hòa Hội; lực lượng chức năng dập khẩn trương, ngăn lan rộng."),
+            dict(uid="vung-chua", level="III", source="Hạt Kiểm lâm Tuy Phước - Quy Nhơn (Đức Hồ, 30/8/2026)",
+                 issued=datetime(2026, 8, 27, 12, 0),
+                 scope="27/8/2026 cháy núi Vũng Chua, phường Quy Nhơn Nam; thiệt hại 4,23ha rừng (kiểm tra, đo đạc hiện trường 30/8)."),
         ]
         for it in items:
             if it["uid"] in existing:
