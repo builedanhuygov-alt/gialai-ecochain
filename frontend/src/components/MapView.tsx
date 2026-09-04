@@ -303,6 +303,10 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   void health
   const [villages, setVillages] = useState<any[]>([])
   const [fireAlerts, setFireAlerts] = useState<any[]>([])
+  const [bannerOff, setBannerOff] = useState<string>('')
+  const burning = fireAlerts.filter((a:any)=>a.level==='CẢNH BÁO')
+  const suspicious = fireAlerts.filter((a:any)=>a.level!=='CẢNH BÁO')
+  const burnKey = burning.map((a:any)=>a.village).join('|')
   // Trigger resize sau khi DOM mount (fix height 0)
   useEffect(()=>{
     if(!mapRef.current) return
@@ -498,6 +502,16 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         </div>
       </div>
 
+      {/* Banner treo: ĐANG CHÁY (đỏ) / NGHI NGỜ warning (vàng) — từ quét FIRMS 20km mỗi 60s */}
+      {burnKey && bannerOff!==burnKey ? (
+        <div style={{position:'absolute', top:56, left:'50%', transform:'translateX(-50%)', zIndex:15, background:'#DC2626', color:'#fff', borderRadius:999, padding:'8px 12px 8px 16px', display:'flex', gap:10, alignItems:'center', boxShadow:'0 8px 24px rgba(220,38,38,0.5)', fontSize:12, fontWeight:800, maxWidth:'92vw', animation:'pulse 1.5s infinite'}}>
+          <span>🔥 ĐANG CHÁY: {burning[0]?.village} ({burning[0]?.commune}){burning.length>1?` +${burning.length-1} điểm`:''} · {burning[0]?.distance_km}km · {burning[0]?.acq_date||''}</span>
+          <button onClick={()=>setBannerOff(burnKey)} title="Ẩn banner" style={{border:0, borderRadius:999, background:'rgba(255,255,255,0.25)', color:'#fff', width:22, height:22, cursor:'pointer', fontWeight:800}}>✕</button>
+        </div>
+      ) : !burnKey && suspicious.length>0 ? (
+        <div style={{position:'absolute', top:56, left:'50%', transform:'translateX(-50%)', zIndex:15, background:'rgba(245,158,11,0.95)', color:'#451A03', borderRadius:999, padding:'6px 14px', fontSize:11, fontWeight:700, boxShadow:'0 4px 12px rgba(0,0,0,0.15)', maxWidth:'92vw', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>⚠ {suspicious.length} điểm nghi ngờ trong 20km — quét FIRMS mỗi 60s</div>
+      ) : null}
+
       {/* Control Panel — Glassmorphism + Collapse/Expand, logic giữ nguyên */}
       {!showLayers ? (
         <button onClick={()=>setShowLayers(true)} title="Mở bảng điều khiển lớp phủ" style={{position:'absolute', top:64, left:12, zIndex:10, width:38, height:38, display:'grid', placeItems:'center', background:'rgba(15,23,42,0.75)', backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:12, color:'#fff', fontSize:16, cursor:'pointer', boxShadow:'0 8px 24px rgba(0,0,0,0.25)', transition:'transform .25s ease, opacity .25s ease'}}>⚙️</button>
@@ -508,14 +522,11 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           <button onClick={()=>setShowLayers(false)} title="Thu gọn" style={{width:26, height:26, display:'grid', placeItems:'center', background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:8, color:'#fff', fontSize:13, cursor:'pointer'}}>━</button>
         </div>
         <div style={{fontSize:11, fontWeight:700, opacity:.9}}>Nền bản đồ</div>
-        <select value={baseXyz} onChange={e=> switchBaseXyz(e.target.value)} style={{padding:'6px 8px', borderRadius:8, border:'1px solid rgba(255,255,255,0.15)', fontSize:12, background:'rgba(255,255,255,0.1)', color:'#fff', maxWidth:'100%'}}>
-          <option value="esri" style={{color:'#000'}}>Esri Vệ tinh</option>
-          <option value="osm" style={{color:'#000'}}>OSM Đường phố</option>
-          <option value="carto" style={{color:'#000'}}>CARTO Xám nhẹ</option>
-          <option value="google_s" style={{color:'#000'}}>Google Vệ tinh</option>
-          <option value="google_y" style={{color:'#000'}}>Google Hybrid</option>
-          <option value="eox" style={{color:'#000'}}>Sentinel-2 cloudless</option>
-        </select>
+        <div style={{display:'flex', background:'rgba(255,255,255,0.1)', borderRadius:999, padding:3, gap:3}}>
+          {([['osm','🗺️ Thường'],['esri','🛰️ Vệ tinh']] as [string,string][]).map(([v,label])=>(
+            <button key={v} onClick={()=>switchBaseXyz(v)} style={{flex:1, border:0, borderRadius:999, padding:'6px 0', fontSize:12, fontWeight:700, cursor:'pointer', background:baseXyz===v?'#fff':'transparent', color:baseXyz===v?'#0B1412':'#fff'}}>{label}</button>
+          ))}
+        </div>
         <div style={{height:1, background:'rgba(255,255,255,0.15)'}}/>
         <div style={{fontSize:11, fontWeight:700, opacity:.9}}>Lớp AI/GEE</div>
         {[
@@ -577,20 +588,28 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         </div>
       </div>
 
-      {/* Panel xã/thôn 20km cảnh báo */}
+      {/* Panel quét FIRMS: ĐANG CHÁY (đỏ) + NGHI NGỜ warning (vàng) */}
       {fireAlerts.length>0 && (
-        <div style={{position:'absolute', bottom:80, left:12, background:'rgba(255,255,255,0.98)', backdropFilter:'blur(12px)', borderRadius:12, padding:12, minWidth:280, maxWidth:360, boxShadow:'0 8px 24px rgba(0,0,0,0.15)', border: fireAlerts.some((a:any)=>a.level==='CẢNH BÁO') ? '2px solid #DC2626' : '1px solid #F59E0B'}}>
-          <div style={{fontWeight:800, fontSize:12, color: fireAlerts.some((a:any)=>a.level==='CẢNH BÁO') ? '#DC2626' : '#92400E'}}>🔥 Cảnh báo cháy trong 20km ({fireAlerts.length} thôn/xã)</div>
-          <div style={{fontSize:11, color:'#475569', marginTop:4}}>Tự động thông báo khi điểm nhiệt FIRMS trong 20km</div>
-          <div style={{maxHeight:120, overflow:'auto', marginTop:8, display:'flex', flexDirection:'column', gap:6}}>
-            {fireAlerts.map((a:any, i:number)=>(
-              <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', background: a.level==='CẢNH BÁO' ? '#FEE2E2' : '#FEF3C7', padding:'6px 8px', borderRadius:8, fontSize:11}}>
+        <div style={{position:'absolute', bottom:80, left:12, background:'rgba(255,255,255,0.98)', backdropFilter:'blur(12px)', borderRadius:12, padding:12, minWidth:280, maxWidth:360, boxShadow:'0 8px 24px rgba(0,0,0,0.15)', border: burning.length ? '2px solid #DC2626' : '1px solid #F59E0B'}}>
+          {burning.length>0 && <div style={{fontWeight:800, fontSize:12, color:'#DC2626'}}>🔥 ĐANG CHÁY ≤5km ({burning.length})</div>}
+          {burning.length>0 && <div style={{maxHeight:110, overflow:'auto', marginTop:6, display:'flex', flexDirection:'column', gap:6}}>
+            {burning.map((a:any, i:number)=>(
+              <div key={'b'+i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#FEE2E2', padding:'6px 8px', borderRadius:8, fontSize:11}}>
                 <div><b>{a.village}</b> <span style={{color:'#64748B'}}>({a.commune})</span><br/><span style={{fontSize:10, color:'#334155'}}>{a.distance_km}km từ cháy · {a.acq_date || '2026-09-04'}</span></div>
-                <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background: a.level==='CẢNH BÁO' ? '#DC2626' : '#F59E0B', color:'#fff'}}>{a.level}</span>
+                <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:'#DC2626', color:'#fff'}}>CHÁY</span>
               </div>
             ))}
-          </div>
-          <div style={{fontSize:10, color:'#64748B', marginTop:6}}>Bán kính 20km · Cập nhật mỗi 60s · BBox Gia Lai 107.0,12.9,109.6,15.0</div>
+          </div>}
+          {suspicious.length>0 && <div style={{fontWeight:800, fontSize:12, color:'#92400E', marginTop:burning.length?8:0}}>⚠ NGHI NGỜ ≤20km — warning ({suspicious.length})</div>}
+          {suspicious.length>0 && <div style={{maxHeight:100, overflow:'auto', marginTop:6, display:'flex', flexDirection:'column', gap:6}}>
+            {suspicious.map((a:any, i:number)=>(
+              <div key={'s'+i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#FEF3C7', padding:'6px 8px', borderRadius:8, fontSize:11}}>
+                <div><b>{a.village}</b> <span style={{color:'#64748B'}}>({a.commune})</span><br/><span style={{fontSize:10, color:'#334155'}}>{a.distance_km}km từ điểm nhiệt · {a.acq_date || '2026-09-04'}</span></div>
+                <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:'#F59E0B', color:'#fff'}}>THEO DÕI</span>
+              </div>
+            ))}
+          </div>}
+          <div style={{fontSize:10, color:'#64748B', marginTop:6}}>Quét FIRMS mỗi 60s · Bán kính 20km · Gia Lai 107.0,12.9,109.6,15.0</div>
         </div>
       )}
       {fireAlerts.length===0 && villages.length>0 && (
