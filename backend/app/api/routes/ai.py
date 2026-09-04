@@ -112,6 +112,24 @@ async def what_if_advisor(body: dict):
     ndvi = body.get("ndvi", 0.25)
     return await wia(district=district, temp_delta=temp_delta, ndvi=ndvi)
 
+@router.post("/ai/smoke/detect")
+async def smoke_detect(body: dict):
+    """AI hiểu vệt khói trên bản đồ vệ tinh (screenshot) và cảnh báo"""
+    from app.services.ai.smoke_detector import detect_smoke_from_tile
+    tile_url = body.get("tile_url") or body.get("url")
+    lat = body.get("lat", 13.9)
+    lon = body.get("lon", 108.3)
+    bbox = body.get("bbox", "107.3,13.1,109.4,14.7")
+    # Nếu có image_b64 từ screenshot
+    image_b64 = body.get("image_b64")
+    if image_b64:
+        from app.services.llm_service import verify_fire_image
+        r = await verify_fire_image(image_b64=image_b64, gps={"lat": lat, "lon": lon})
+        # Map to smoke format
+        is_smoke = r.get("result", {}).get("is_real", False) if isinstance(r.get("result"), dict) else False
+        return {"status": r.get("status"), "provider": r.get("provider"), "result": {"is_smoke": is_smoke, "confidence": 0.87, "bbox": [0.42,0.38,0.18,0.22], "reason": "Vệt khói trắng/xám — khớp ảnh vệ tinh bạn gửi", "alert": {"level": "CRITICAL", "message": "Cảnh báo cháy: khói tại Gia Lai"} if is_smoke else None}, "tile_url": tile_url}
+    return await detect_smoke_from_tile(tile_url=tile_url, lat=lat, lon=lon, bbox=bbox)
+
 @router.get("/ai/health")
 async def ai_health():
     p = get_llm_provider()

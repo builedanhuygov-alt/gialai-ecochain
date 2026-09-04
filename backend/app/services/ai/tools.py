@@ -114,6 +114,11 @@ async def run_fire_simulation(temp_delta: float=3, rain_delta: float=-30, wind_d
 async def generate_report(intent: str="FIRE_RISK", location: str="Gia Lai") -> Dict:
     return {"tool": "generate_report", "status": "LIVE", "data": {"intent": intent, "location": location, "timestamp": time.time(), "sections": ["evidence","sources"]}}
 
+async def detect_smoke_from_tile(tile_url: str=None, lat: float=13.9, lon: float=108.3, bbox: str="107.3,13.1,109.4,14.7") -> Dict:
+    from app.services.ai.smoke_detector import detect_smoke_from_tile as _detect
+    r = await _detect(tile_url=tile_url, lat=lat, lon=lon, bbox=bbox)
+    return {"tool": "detect_smoke_from_tile", "status": r.get("status"), "data": r.get("result"), "tile_url": tile_url}
+
 TOOL_MAP = {
     "get_current_weather": get_current_weather,
     "get_historical_weather": get_historical_weather,
@@ -132,4 +137,5 @@ TOOL_MAP = {
     "create_mission": create_mission,
     "run_fire_simulation": run_fire_simulation,
     "generate_report": generate_report,
+    "detect_smoke_from_tile": detect_smoke_from_tile,
 }
