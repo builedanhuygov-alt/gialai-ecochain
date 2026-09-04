@@ -3,9 +3,12 @@ import { create } from 'zustand'
 export type Scope = { province: string; commune?: string; village?: string; role: 'province'|'commune'|'village' }
 
 const mockHierarchy: Record<string, string[]> = {
-  'Gia Lai': ['Huyện Chư Prông','Huyện Krông Chro','Vườn Quốc gia Kon Ka Kinh','Xã Ia Mơr'],
-  'Huyện Chư Prông': ['Xã Ia Mơr','Thôn 1'],
+  'Gia Lai': ['Huyện Chư Prông','TP Pleiku','Vườn Quốc gia Kon Ka Kinh','TX An Khê','Huyện Krông Chro','TP Quy Nhơn','TX An Nhơn','Huyện Phù Mỹ','Huyện Hoài Nhơn','Xã Hội Sơn','Xã Ia Grai'],
+  'Huyện Chư Prông': ['Xã Ia Mơr','Xã Ia Băng','Thôn 1'],
+  'TP Quy Nhơn': ['Phường Quy Nhơn','Phường Thị Nại'],
+  'TX An Nhơn': ['Phường Bình Định','Xã Nhơn Mỹ'],
   'Vườn Quốc gia Kon Ka Kinh': ['Khu A','Khu B'],
+  'Huyện Krông Chro': ['Xã Đak Sơmei','Thôn 2'],
 }
 
 export const useScope = create<{

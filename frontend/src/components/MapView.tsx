@@ -9,14 +9,16 @@ import { useLocation } from '../hooks/useLocation'
 const API = ((import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000').replace(/[\r\n]/g, "").trim().replace(/\/$/, "")
 const TILE_FIX = (url: string) => url.replace(/[\r\n]/g, "").trim()
 
-// 6 điểm phủ toàn tỉnh Gia Lai mới (Tây Nguyên + Bình Định cũ)
+// 8 điểm phủ Gia Lai mới (Tây Nguyên + Bình Định cũ — sáp nhập 2025, 15,536km2)
 const STATIONS = [
-  { id:1, name:'Trạm Kiểm lâm Ia Mơr - Huyện Chư Prông', coords:[107.65, 13.55] as [number,number], level:'V', score:88, type:'Cảnh báo Khẩn cấp', temp:34, humidity:28, wind:18 },
+  { id:1, name:'Trạm Kiểm lâm Ia Mơr - Huyện Chư Prông (Biên giới Campuchia)', coords:[107.65, 13.55] as [number,number], level:'V', score:88, type:'Cảnh báo Khẩn cấp', temp:34, humidity:28, wind:18 },
   { id:2, name:'Trạm Bảo tồn VQG Kon Ka Kinh', coords:[108.45, 14.25] as [number,number], level:'II', score:32, type:'An toàn', temp:26, humidity:65, wind:8 },
   { id:3, name:'Trạm Đèo An Khê (TX. An Khê - gió phơn)', coords:[108.65, 13.98] as [number,number], level:'V', score:91, type:'Điểm nóng', temp:36, humidity:22, wind:24 },
   { id:4, name:'Trạm Vĩnh Thạnh - Huyện Vĩnh Thạnh', coords:[108.90, 14.25] as [number,number], level:'IV', score:78, type:'Cảnh báo', temp:33, humidity:30, wind:16 },
-  { id:5, name:'Trạm Phù Cát / Quy Nhơn - Ven biển', coords:[109.10, 13.90] as [number,number], level:'III', score:45, type:'Giám sát', temp:29, humidity:55, wind:10 },
-  { id:6, name:'Trạm Xã Hội Sơn', coords:[108.68, 13.92] as [number,number], level:'I', score:15, type:'An toàn / Đã dập tắt', temp:27, humidity:70, wind:6 },
+  { id:5, name:'Trạm Quy Nhơn - Ven biển (Bình Định cũ)', coords:[109.21, 13.78] as [number,number], level:'III', score:45, type:'Giám sát ven biển', temp:29, humidity:55, wind:10 },
+  { id:6, name:'Trạm Bồng Sơn - Hoài Nhơn (Bắc Gia Lai mới)', coords:[109.02, 14.42] as [number,number], level:'II', score:28, type:'An toàn ven biển', temp:27, humidity:68, wind:7 },
+  { id:7, name:'Trạm An Nhơn - Đồng bằng', coords:[109.01, 13.89] as [number,number], level:'III', score:52, type:'Giám sát đồng bằng', temp:30, humidity:52, wind:9 },
+  { id:8, name:'Trạm Xã Hội Sơn', coords:[108.68, 13.92] as [number,number], level:'I', score:15, type:'An toàn / Đã dập tắt', temp:27, humidity:70, wind:6 },
 ]
 
 export default function MapView({ onSelect }: { onSelect?: (type:string, id:string)=>void }) {
@@ -215,7 +217,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         }
         // Fallback Sentinel Hub NDVI stats
         console.warn(`NDVI GEE UNAVAILABLE, fallback Sentinel Hub`, res.reason)
-        const r2=await fetch(TILE_FIX(`${API}/api/v1/satellite/ndvi?bbox=107.3,13.1,109.4,14.7`))
+        const r2=await fetch(TILE_FIX(`${API}/api/v1/satellite/ndvi?bbox=107.0,12.9,109.6,15.0`))
         const j2=await r2.json()
         setInfo({ layer:'ndvi', status: j2.status || 'DEMO', source: j2.source || 'Sentinel Hub', satellite: j2.satellite, acquired: j2.acquired || j2.acquired_at || new Date().toISOString().slice(0,10), ndvi: j2.ndvi, reason: j2.reason, bbox: j2.bbox })
         return
@@ -292,9 +294,9 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     const map = new maplibregl.Map({
       container: mapContainer.current,
       style: inlineStyle as any,
-      center: [108.35, 13.9],
-      zoom: 9.2,
-      maxBounds: [[106.5, 12.5],[110.0, 15.2]],
+      center: [108.6, 13.9],
+      zoom: 8.5,
+      maxBounds: [[107.0, 12.9],[109.6, 15.0]],
       attributionControl: false,
     })
     // Fallback nếu style CARTO lỗi CORS → chuyển Google Satellite
@@ -309,7 +311,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     })
     mapRef.current = map as any
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
-    map.fitBounds([[107.3, 13.1], [109.4, 14.7]], { padding:20, duration:0 })
+    map.fitBounds([[107.0, 12.9], [109.6, 15.0]], { padding:20, duration:0 })
     map.addControl(new (maplibregl as any).AttributionControl({ compact:true }), 'bottom-left')
     map.on('load', ()=>{
       console.log('✅ MapLibre loaded successfully!')
@@ -322,8 +324,8 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           map.addLayer({ id:'base-xyz', type:'raster', source:'base-xyz' } as any)
         }
       }
-      // Gia Lai boundary
-      map.addSource('gialai-boundary', { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[[107.3,13.1],[109.4,13.1],[109.4,14.7],[107.3,14.7],[107.3,13.1]]] }, properties:{} } })
+      // Gia Lai mới (sáp nhập Bình Định) — 15,536 km2, 58 xã/phường — biên Campuchia đến Biển Đông
+      map.addSource('gialai-boundary', { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[[107.0,12.9],[109.6,12.9],[109.6,15.0],[107.0,15.0],[107.0,12.9]]] }, properties:{} } })
       map.addLayer({ id:'boundary', type:'line', source:'gialai-boundary', paint:{ 'line-color':'#0F766E', 'line-width':1.5, 'line-opacity':0.5, 'line-dasharray':[4,4] } })
       STATIONS.forEach(st=>{
         const isHigh = st.level==='IV' || st.level==='V'
@@ -432,7 +434,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
             <span style={{fontSize:10, padding:'1px 6px', borderRadius:999, background: sourceLive[key==='hotspot'?'firms': key==='ndvi'?'sentinel2':'sentinel1']==='LIVE'?'#DCFCE7':'#FEF3C7'}}>{sourceLive[key==='hotspot'?'firms': key==='ndvi'?'sentinel2':'sentinel1'] || '...'}</span>
           </label>
         ))}
-        <div style={{fontSize:10, color:'#64748B'}}>Gia Lai bbox 107.3,13.1,109.4,14.7 · Zoom ~9.2</div>
+        <div style={{fontSize:10, color:'#64748B'}}>Gia Lai bbox 107.0,12.9,109.6,15.0 · Zoom ~9.2</div>
       </div>
 
       {/* Right controls */}
@@ -440,7 +442,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         <button onClick={requestLoc} style={{background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', border:0, borderRadius:12, padding:'10px 12px', boxShadow:'0 4px 12px rgba(0,0,0,0.08)', fontSize:12, fontWeight:700}}>📍 Vị trí của tôi</button>
         <button onClick={async()=>{
           const bounds = mapRef.current?.getBounds()
-          const bbox = bounds ? `${bounds.getWest().toFixed(1)},${bounds.getSouth().toFixed(1)},${bounds.getEast().toFixed(1)},${bounds.getNorth().toFixed(1)}` : '107.3,13.1,109.4,14.7'
+          const bbox = bounds ? `${bounds.getWest().toFixed(1)},${bounds.getSouth().toFixed(1)},${bounds.getEast().toFixed(1)},${bounds.getNorth().toFixed(1)}` : '107.0,12.9,109.6,15.0'
           const center = mapRef.current?.getCenter()
           const tileUrl = XYZ_TILES[baseXyz]?.url || 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
           setInfo({ layer:'smoke', status:'ANALYZING', source:'Gemini Vision' })
@@ -494,7 +496,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
               </div>
             ))}
           </div>
-          <div style={{fontSize:10, color:'#64748B', marginTop:6}}>Bán kính 20km · Cập nhật mỗi 60s · BBox Gia Lai 107.3,13.1,109.4,14.7</div>
+          <div style={{fontSize:10, color:'#64748B', marginTop:6}}>Bán kính 20km · Cập nhật mỗi 60s · BBox Gia Lai 107.0,12.9,109.6,15.0</div>
         </div>
       )}
       {fireAlerts.length===0 && villages.length>0 && (

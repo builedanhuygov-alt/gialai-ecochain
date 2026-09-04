@@ -8,7 +8,7 @@ CACHE={}
 TTL=600
 
 # Gia Lai Bounding Box
-GIALAI_BBOX = "107.3,13.1,109.4,14.7"
+GIALAI_BBOX = "107.0,12.9,109.6,15.0"
 
 def _mock_fires(lat:float, lon:float, days:int=2)->List[Dict]:
     rng=random.Random(int(hashlib.sha256(f"{lat:.1f},{lon:.1f}".encode()).hexdigest()[:8],16))
@@ -117,7 +117,7 @@ async def fetch_firms(lat:float, lon:float, area: str="world", day_range:int=2)-
         return {"source":"NASA FIRMS","provider":"NASA FIRMS","status":"UNAVAILABLE","cache_status":"UNAVAILABLE","reason": str(e)[:200], "fires": [], "timestamp": now}
 
 async def fetch_firms_gialai(day_range:int=1, source:str="VIIRS_SNPP_NRT")->Dict:
-    """Direct Gia Lai BBox query: 107.3,13.1,109.4,14.7 - supports VIIRS/MODIS/NOAA-20/21"""
+    """Direct Gia Lai BBox query: 107.0,12.9,109.6,15.0 - supports VIIRS/MODIS/NOAA-20/21"""
     s=get_settings()
     key=_get_key()
     cache_key=f"gialai_bbox:{day_range}:{source}"

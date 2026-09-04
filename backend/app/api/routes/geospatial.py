@@ -214,7 +214,7 @@ async def geospatial_overview(lat: float = Query(default=13.9), lon: float = Que
     return {"aoi":{"name":"Gia Lai","bbox":[108.0,13.5,108.8,14.3]}, "layers": layers, "fires": fires[:5], "fireRisk": fire_risk}
 
 @router.get("/satellite/ndvi")
-async def satellite_ndvi(bbox: Optional[str] = Query(default="107.3,13.1,109.4,14.7", description="Gia Lai bbox west,south,east,north"), start: str = Query(default="2026-08-10"), end: str = Query(default="2026-09-03")):
+async def satellite_ndvi(bbox: Optional[str] = Query(default="107.0,12.9,109.6,15.0", description="Gia Lai bbox west,south,east,north"), start: str = Query(default="2026-08-10"), end: str = Query(default="2026-09-03")):
     """Sentinel Hub NDVI — Process API for Gia Lai BBox. Uses SENTINELHUB_CLIENT_ID/SECRET OAuth2."""
     from app.services.sentinel_service import fetch_ndvi, GIALAI_BBOX_STR
     # parse bbox string
@@ -224,11 +224,11 @@ async def satellite_ndvi(bbox: Optional[str] = Query(default="107.3,13.1,109.4,1
             if len(parts)==4:
                 bbox_arr = parts
             else:
-                bbox_arr = [107.3,13.1,109.4,14.7]
+                bbox_arr = [107.0,12.9,109.6,15.0]
         else:
-            bbox_arr = [107.3,13.1,109.4,14.7]
+            bbox_arr = [107.0,12.9,109.6,15.0]
     except:
-        bbox_arr = [107.3,13.1,109.4,14.7]
+        bbox_arr = [107.0,12.9,109.6,15.0]
     data = await fetch_ndvi(bbox=bbox_arr, start_date=start, end_date=end)
     data["metadata"]={"source": data.get("source"), "provider":"Sentinel Hub", "timestamp": time.time(), "status": data.get("status"), "satellite": data.get("satellite"), "bbox": data.get("bbox"), "cache_status": data.get("cache")}
     return data
@@ -242,7 +242,7 @@ async def fire_firms(lat: float = Query(..., ge=-90, le=90), lon: float = Query(
 
 @router.get("/hotspots/live")
 async def hotspots_live(day_range: int = Query(default=1, ge=1, le=7), source: str = Query(default="VIIRS_SNPP_NRT", regex="^(VIIRS_SNPP_NRT|MODIS_NRT|VIIRS_NOAA20_NRT|VIIRS_NOAA21_NRT)$")):
-    """NASA FIRMS Area query — Gia Lai BBox 107.3,13.1,109.4,14.7 — requires NASA_FIRMS_MAP_KEY env"""
+    """NASA FIRMS Area query — Gia Lai BBox 107.0,12.9,109.6,15.0 — requires NASA_FIRMS_MAP_KEY env"""
     from app.services.firms_service import fetch_firms_gialai, GIALAI_BBOX
     data=await fetch_firms_gialai(day_range=day_range, source=source)
     # Enrich with metadata for frontend consistency

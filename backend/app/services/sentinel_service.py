@@ -1,4 +1,4 @@
-"""Sentinel Hub NDVI service — OAuth2 + Process API for Gia Lai BBox [107.3,13.1,109.4,14.7]"""
+"""Sentinel Hub NDVI service — OAuth2 + Process API for Gia Lai BBox [107.0,12.9,109.6,15.0]"""
 import time, hashlib, random, json
 from typing import Dict, Optional
 import httpx
@@ -6,7 +6,7 @@ from app.core.config import get_settings
 
 # Gia Lai BBox as per task: [west, south, east, north]
 GIALAI_BBOX = [107.3, 13.1, 109.4, 14.7]
-GIALAI_BBOX_STR = "107.3,13.1,109.4,14.7"
+GIALAI_BBOX_STR = "107.0,12.9,109.6,15.0"
 
 CACHE: Dict = {}
 TTL = 600
