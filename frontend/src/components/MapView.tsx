@@ -21,9 +21,10 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   void onSelect
-  const [base] = useState<'streets'|'satellite'>('streets')
-  // Mặc định Google Satellite để tránh CARTO Positron trắng do CORS/style GL
-  const [baseXyz, setBaseXyz] = useState<string>('google_s')
+  const [_base] = useState<'streets'|'satellite'>('streets')
+  void _base
+  // Priority 1: Default Esri World Imagery (ổn định nhất) — không google_s
+  const [baseXyz, setBaseXyz] = useState<string>('esri')
   const [activeSat, setActiveSat] = useState<Record<string, boolean>>({})
   const [dateRange, setDateRange] = useState<'latest'|'7d'|'30d'|'3m'|'custom'>('30d')
   const [cloud, setCloud] = useState(20)
@@ -65,13 +66,16 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     return { start:'2026-08-01', end:'2026-09-01' }
   }
 
-  // XYZ Tile URLs — dán trực tiếp vào MapLibre/Leaflet/OpenLayers (không cần API Key) — strip \r\n
+  // XYZ Tile URLs — Esri mặc định, OSM fallback, không Google làm default
   const XYZ_TILES: Record<string, { url: string, attribution: string }> = {
     esri: { url: TILE_FIX('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'), attribution: '© Esri World Imagery' },
+    osm: { url: TILE_FIX('https://tile.openstreetmap.org/{z}/{x}/{y}.png'), attribution: '© OpenStreetMap' },
     google_s: { url: TILE_FIX('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'), attribution: '© Google Satellite' },
     google_y: { url: TILE_FIX('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'), attribution: '© Google Hybrid' },
     eox: { url: TILE_FIX('https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg'), attribution: '© EOX Sentinel-2 cloudless' },
   }
+  const DEFAULT_TILE_URL = XYZ_TILES.esri.url
+  void DEFAULT_TILE_URL
   // ⚠️ BẮT BUỘC 2: Dùng Style miễn phí KHÔNG CẦN API KEY của CARTO/OSM
   const baseStyles: Record<string, string> = {
     streets: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
@@ -125,16 +129,36 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
 
   const switchBaseXyz = (id: string)=>{
     setBaseXyz(id)
+  }
+
+  // Effect 2 — đổi basemap không destroy map (tránh race)
+  useEffect(()=>{
     const map = mapRef.current
     if(!map) return
-    if(map.getLayer('base-xyz')) try{ map.removeLayer('base-xyz')}catch{}
-    if(map.getSource('base-xyz')) try{ map.removeSource('base-xyz')}catch{}
-    if(id==='carto') return
-    const tile = XYZ_TILES[id]
+    if(!map.isStyleLoaded()) {
+      map.once('load', ()=> switchBaseXyz(baseXyz))
+      return
+    }
+    const sourceId = "base-xyz"
+    const layerId = "base-xyz"
+    if(map.getLayer(layerId)) try{ map.removeLayer(layerId)}catch{}
+    if(map.getSource(sourceId)) try{ map.removeSource(sourceId)}catch{}
+    if(baseXyz==='carto') return
+    const tile = XYZ_TILES[baseXyz]
     if(!tile) return
-    map.addSource('base-xyz', { type:'raster', tiles:[TILE_FIX(tile.url)], tileSize:256, attribution: tile.attribution } as any)
-    map.addLayer({ id:'base-xyz', type:'raster', source:'base-xyz', paint:{ 'raster-opacity': 1 } } as any, 'boundary')
-  }
+    // Fallback Esri → OSM → static
+    try{
+      map.addSource(sourceId, { type:'raster', tiles:[TILE_FIX(tile.url)], tileSize:256, attribution: tile.attribution } as any)
+      map.addLayer({ id: layerId, type:'raster', source: sourceId } as any, 'boundary')
+    }catch(e){
+      console.warn('Base tile add failed, fallback OSM', e)
+      const osm = XYZ_TILES.osm
+      try{
+        map.addSource(sourceId, { type:'raster', tiles:[osm.url], tileSize:256, attribution: osm.attribution } as any)
+        map.addLayer({ id: layerId, type:'raster', source: sourceId } as any, 'boundary')
+      }catch{}
+    }
+  }, [baseXyz])
 
   const hotspotMarkers = useRef<any[]>([])
   const toggleSat = async (key:string, geeLayer:string)=>{
@@ -192,10 +216,10 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     }
   }
 
+  // Effect 1 — chỉ init map một lần (không re-create khi đổi baseXyz)
   useEffect(()=>{
     if(!mapContainer.current || mapRef.current) return
-    // Mặc định Google Satellite (XYZ) để tránh CARTO trắng do CORS — fallback BaseMap
-    const initStyle = baseXyz==='carto' ? 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json' : 'https://demotiles.maplibre.org/style.json'
+    const initStyle = 'https://demotiles.maplibre.org/style.json'
     const map = new maplibregl.Map({
       container: mapContainer.current,
       style: initStyle,
@@ -263,7 +287,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       }, 900)
     })
     return () => { map.remove(); (mapRef as any).current = null }
-  }, [base, baseXyz])
+  }, [])
 
   useEffect(()=>{
     if(locState.status==='granted' && mapRef.current && locState.lon && locState.lat){
