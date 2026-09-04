@@ -4,13 +4,11 @@
       "root": "frontend",
       "framework": "vite",
       "buildCommand": "npm run build",
-      "outputDirectory": "dist",
-      "route": "/"
+      "outputDirectory": "dist"
     },
     "backend": {
       "root": "backend",
-      "framework": "fastapi",
-      "route": "/api"
+      "framework": "fastapi"
     }
   }
 }
