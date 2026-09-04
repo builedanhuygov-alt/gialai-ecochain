@@ -243,12 +243,42 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     }
   }
 
+  const [sourceLive, setSourceLive] = useState<Record<string,string>>({})
+  const [health, setHealth] = useState<any>(null)
+  const [villages, setVillages] = useState<any[]>([])
+  const [fireAlerts, setFireAlerts] = useState<any[]>([])
   // Trigger resize sau khi DOM mount (fix height 0)
   useEffect(()=>{
     if(!mapRef.current) return
     const t=setTimeout(()=> mapRef.current?.resize(), 300)
     return ()=> clearTimeout(t)
   }, [])
+  // Hiển thị xã/thôn phân định + highlight 20km khi có cháy
+  useEffect(()=>{
+    if(!mapRef.current || !villages.length) return
+    const existing = (mapRef.current as any)._villageMarkers as any[] || []
+    existing.forEach((m:any)=>{ try{ m.remove()}catch{} })
+    const markers:any[]=[]
+    villages.forEach((v:any)=>{
+      const alert = fireAlerts.find((a:any)=> a.village===v.village)
+      const el=document.createElement('div')
+      el.style.padding='4px 6px'; el.style.borderRadius='8px'; el.style.fontSize='10px'; el.style.fontWeight='700'
+      el.style.background= alert ? (alert.level==='CẢNH BÁO' ? '#DC2626' : '#F59E0B') : 'rgba(255,255,255,0.95)'
+      el.style.color= alert ? '#fff' : '#334155'; el.style.border= alert ? '2px solid #fff' : '1px solid #E2E8E5'
+      el.style.boxShadow='0 2px 6px rgba(0,0,0,0.15)'; el.textContent= v.village
+      if(alert) el.title=`${v.commune} — ${alert.distance_km}km từ điểm cháy ${alert.fire_coords?.join(',')} — ${alert.level}`
+      const m=new (maplibregl as any).Marker({ element: el, anchor:'bottom' }).setLngLat(v.coords as any).addTo(mapRef.current!)
+      markers.push(m)
+      if(alert && !mapRef.current!.getSource(`circle-${v.id}`)){
+        const circle={ type:'Feature', geometry:{ type:'Point', coordinates: v.coords }, properties:{ radius: 20 } }
+        mapRef.current!.addSource(`circle-${v.id}`, { type:'geojson', data: circle })
+        try{
+          mapRef.current!.addLayer({ id:`circle-${v.id}`, type:'circle', source:`circle-${v.id}`, paint:{ 'circle-radius': 40, 'circle-color': alert.level==='CẢNH BÁO' ? '#DC2626' : '#F59E0B', 'circle-opacity': 0.12, 'circle-stroke-width': 2, 'circle-stroke-color': alert.level==='CẢNH BÁO' ? '#DC2626' : '#F59E0B' } })
+        }catch{}
+      }
+    })
+    ;(mapRef.current as any)._villageMarkers = markers
+  }, [villages, fireAlerts])
   // Effect 1 — chỉ init map một lần — dùng inline style OSM để tránh CORS style JSON
   useEffect(()=>{
     if(!mapContainer.current || mapRef.current) return
@@ -335,8 +365,6 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     }
   }, [locState])
 
-  const [sourceLive, setSourceLive] = useState<Record<string,string>>({})
-  const [health, setHealth] = useState<any>(null)
   useEffect(()=>{
     fetch(`${API}/api/health/geospatial`).then(r=>r.json()).then(j=>{
       setSourceLive({ sentinel2: j.sentinel2?.status || 'UNAVAILABLE', firms: j.firms?.status || 'UNAVAILABLE', gee: j.gee?.status || 'UNAVAILABLE' })
@@ -344,6 +372,21 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       const overall = j.summary?.all_live ? 'LIVE' : (j.firms?.status==='CONFIGURATION_REQUIRED' ? 'CONFIGURATION_REQUIRED' : 'UNAVAILABLE')
       setLiveStatus(overall as any)
     }).catch(()=> setLiveStatus('UNAVAILABLE'))
+    // Xã/thôn delineation
+    fetch(`${API}/api/villages`).then(r=>r.json()).then(v=> setVillages(v)).catch(()=>{})
+    // 20km fire notification — poll mỗi 60s
+    const loadAlerts=()=> fetch(TILE_FIX(`${API}/api/villages/fire-alert?t=${Date.now()}`), { cache:'no-store' }).then(r=>r.json()).then(j=>{
+      setFireAlerts(j.alerts || [])
+      if(j.alerts?.length){
+        const msg = `🔥 ${j.alerts.length} thôn/xã trong 20km có cháy: ${j.alerts.slice(0,2).map((a:any)=>`${a.village} (${a.distance_km}km)`).join(', ')}`
+        console.warn(msg)
+        if(Notification && Notification.permission==='granted') new Notification('Cảnh báo cháy 20km', { body: msg })
+      }
+    }).catch(()=>{})
+    loadAlerts()
+    const int=setInterval(loadAlerts, 60000)
+    if(Notification && Notification.permission==='default') Notification.requestPermission()
+    return ()=> clearInterval(int)
   },[])
 
   return (
@@ -438,9 +481,32 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         </div>
       </div>
 
+      {/* Panel xã/thôn 20km cảnh báo */}
+      {fireAlerts.length>0 && (
+        <div style={{position:'absolute', bottom:80, left:12, background:'rgba(255,255,255,0.98)', backdropFilter:'blur(12px)', borderRadius:12, padding:12, minWidth:280, maxWidth:360, boxShadow:'0 8px 24px rgba(0,0,0,0.15)', border: fireAlerts.some((a:any)=>a.level==='CẢNH BÁO') ? '2px solid #DC2626' : '1px solid #F59E0B'}}>
+          <div style={{fontWeight:800, fontSize:12, color: fireAlerts.some((a:any)=>a.level==='CẢNH BÁO') ? '#DC2626' : '#92400E'}}>🔥 Cảnh báo cháy trong 20km ({fireAlerts.length} thôn/xã)</div>
+          <div style={{fontSize:11, color:'#475569', marginTop:4}}>Tự động thông báo khi điểm nhiệt FIRMS trong 20km</div>
+          <div style={{maxHeight:120, overflow:'auto', marginTop:8, display:'flex', flexDirection:'column', gap:6}}>
+            {fireAlerts.map((a:any, i:number)=>(
+              <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', background: a.level==='CẢNH BÁO' ? '#FEE2E2' : '#FEF3C7', padding:'6px 8px', borderRadius:8, fontSize:11}}>
+                <div><b>{a.village}</b> <span style={{color:'#64748B'}}>({a.commune})</span><br/><span style={{fontSize:10, color:'#334155'}}>{a.distance_km}km từ cháy · {a.acq_date || '2026-09-04'}</span></div>
+                <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background: a.level==='CẢNH BÁO' ? '#DC2626' : '#F59E0B', color:'#fff'}}>{a.level}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:10, color:'#64748B', marginTop:6}}>Bán kính 20km · Cập nhật mỗi 60s · BBox Gia Lai 107.3,13.1,109.4,14.7</div>
+        </div>
+      )}
+      {fireAlerts.length===0 && villages.length>0 && (
+        <div style={{position:'absolute', bottom:80, left:12, background:'rgba(255,255,255,0.9)', backdropFilter:'blur(12px)', borderRadius:12, padding:'10px 12px', fontSize:11, boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>
+          ✓ {villages.length} thôn/xã Gia Lai đang theo dõi — không có cháy trong 20km
+        </div>
+      )}
       {(info || pixel) && (
         <div style={{position:'absolute', bottom:80, right:12, background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:12, padding:12, minWidth:280, maxWidth:360, boxShadow:'0 8px 24px rgba(0,0,0,0.12)'}}>
-          {info && <><div style={{fontWeight:700, fontSize:12}}>DỮ LIỆU VỆ TINH — {info.layer} <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background: info.status==='LIVE'?'#DCFCE7': info.status==='DEMO'?'#FEF3C7': info.status==='CONFIGURATION_REQUIRED'?'#FEF3C7':'#FEE2E2'}}>{info.status==='CONFIGURATION_REQUIRED' ? 'DEMO · Cache Vệ tinh Gia Lai' : info.status}</span></div><div style={{fontSize:12, marginTop:6, color:'#334155'}}>Nguồn: {info.status==='CONFIGURATION_REQUIRED' ? 'Esri/Sentinel Tile tĩnh · DEMO Cache' : (info.source || 'Sentinel-2')} · Ngày: {info.acquired || '—'} {info.status==='CONFIGURATION_REQUIRED' && <span style={{color:'#F59E0B'}}>· Fallback BaseMap</span>}</div></>}
+          {info && <><div style={{fontWeight:700, fontSize:12}}>DỮ LIỆU VỆ TINH — {info.layer} <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background: info.status==='LIVE'?'#DCFCE7': info.status==='DEMO'?'#FEF3C7': info.status==='CONFIGURATION_REQUIRED'?'#FEF3C7':'#FEE2E2'}}>{info.status==='CONFIGURATION_REQUIRED' ? 'DEMO · Cache Vệ tinh Gia Lai' : info.status}</span></div><div style={{fontSize:12, marginTop:6, color:'#334155'}}>Nguồn: {info.status==='CONFIGURATION_REQUIRED' ? 'Esri/Sentinel Tile tĩnh · DEMO Cache' : (info.source || 'Sentinel-2')} · Ngày: {info.acquired || info.date || '—'} {info.status==='CONFIGURATION_REQUIRED' && <span style={{color:'#F59E0B'}}>· Fallback BaseMap</span>}</div>
+          {info.layer==='smoke' && info.is_smoke && <div style={{marginTop:6, padding:'6px 8px', background:'#FEE2E2', borderRadius:8, color:'#991B1B', fontSize:11, fontWeight:700}}>🚨 {info.alert?.message}<br/><span style={{fontWeight:400}}>Độ tin cậy {(info.confidence*100).toFixed(0)}% · {info.reason}</span></div>}
+          </>}
           {pixel && <><div style={{height:1, background:'#E2E8E5', margin:'8px 0'}}/><div style={{fontSize:12}}>NDVI: <b>{pixel.ndvi}</b></div></>}
         </div>
       )}

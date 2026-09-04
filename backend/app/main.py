@@ -1,5 +1,5 @@
 """ECOGL 1.0 — Phase 5 Production (Fail-safe, Observability, Security)."""
-import logging, time
+import logging, time, os
 from contextlib import asynccontextmanager
 from collections import defaultdict
 
@@ -17,9 +17,15 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    init_db()
-    logger.info("DB initialized")
+    # Startup - fail-safe for Vercel
+    try:
+        if os.getenv("VERCEL"):
+            logger.info("Vercel env - skip DB init")
+        else:
+            init_db()
+            logger.info("DB initialized")
+    except Exception as e:
+        logger.warning(f"DB init skipped: {e}")
     # seed demo data if empty
     try:
         from app.seed import seed_demo
@@ -98,6 +104,7 @@ def create_app() -> FastAPI:
     from app.api.routes.fire import router as fire_router
     from app.api.routes.model_switch import router as model_router
     from app.api.routes.ai import router as ai_router
+    from app.api.routes.villages import router as villages_router
 
     app.include_router(health_router, prefix="/api", tags=["Health"])
     app.include_router(admin_router, prefix="/api", tags=["Administrative"])
@@ -115,6 +122,7 @@ def create_app() -> FastAPI:
     app.include_router(fire_router, prefix="/api", tags=["Fire"])
     app.include_router(model_router, prefix="/api", tags=["ModelSwitch"])
     app.include_router(ai_router, prefix="/api", tags=["AI"])
+    app.include_router(villages_router, prefix="/api", tags=["Villages"])
     # Sec77 versioned alias
     app.include_router(geo_router, prefix="/api/v1", tags=["Geospatial-v1"])
 
