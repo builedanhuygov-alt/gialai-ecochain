@@ -70,11 +70,11 @@ class OpenAIProvider(LLMProvider):
 
 class GeminiProvider(LLMProvider):
     def __init__(self, api_key: str, model: str = "gemini-3.6-flash"):
-        self.api_key = api_key
-        self.model = model
+        self.api_key = api_key.strip() if api_key else api_key
+        self.model = model.strip() if model else model
     async def generate(self, system, user, schema=None):
         # Gemini API: https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key.strip()}"
         payload = {"contents": [{"parts": [{"text": system + "\n\n" + user}]}], "generationConfig": {"temperature": 0.3}}
         if schema:
             payload["generationConfig"]["responseMimeType"] = "application/json"
