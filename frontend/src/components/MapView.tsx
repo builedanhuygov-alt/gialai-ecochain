@@ -133,12 +133,42 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     map.addLayer({ id:'base-xyz', type:'raster', source:'base-xyz', paint:{ 'raster-opacity': 1 } } as any, 'boundary')
   }
 
+  const hotspotMarkers = useRef<any[]>([])
   const toggleSat = async (key:string, geeLayer:string)=>{
     const checked = !activeSat[key]
     setActiveSat(s=> ({...s, [key]: checked}))
     if(!checked){
+      if(key==='hotspot'){
+        hotspotMarkers.current.forEach((m:any)=>{ try{ m.remove() }catch{} }); hotspotMarkers.current=[]
+        setInfo(null)
+        return
+      }
       if(mapRef.current?.getLayer(key)) try{ mapRef.current.removeLayer(key) }catch{}
       if(mapRef.current?.getSource(key)) try{ mapRef.current.removeSource(key) }catch{}
+      return
+    }
+    // Hotspot: FIRMS API (không qua GEE tile)
+    if(key==='hotspot'){
+      try{
+        const r=await fetch(`${API}/api/v1/hotspots/live`)
+        const data=await r.json()
+        if(data.status==='LIVE' || data.status==='DEMO'){
+          const fires = data.fires || data.hotspots || []
+          fires.slice(0,20).forEach((f:any)=>{
+            const el=document.createElement('div')
+            el.style.width='14px'; el.style.height='14px'; el.style.borderRadius='999px'; el.style.background='#DC2626'; el.style.border='2px solid #fff'; el.style.boxShadow='0 0 8px rgba(220,38,38,0.8)'
+            const m=new (maplibregl as any).Marker({ element: el }).setLngLat([f.longitude || f.lon || 108.3, f.latitude || f.lat || 13.9] as any).addTo(mapRef.current)
+            hotspotMarkers.current.push(m)
+          })
+          setLiveStatus(data.status as any); setInfo({ layer:'hotspot', status: data.status, source:'NASA FIRMS', satellite: data.satellite || 'VIIRS', acquired: fires[0]?.acq_date || new Date().toISOString().slice(0,10), count: fires.length, bbox: data.bbox })
+        } else {
+          console.warn('FIRMS chưa khả dụng:', data.reason || data.error)
+          setInfo({ layer:'hotspot', status: data.status || 'UNAVAILABLE', source:'NASA FIRMS', reason: data.reason || data.error })
+        }
+      }catch(err){
+        console.warn('FIRMS hotspot lỗi:', err)
+        setInfo({ layer:'hotspot', status:'UNAVAILABLE', source:'NASA FIRMS', reason:String(err) })
+      }
       return
     }
     try{
@@ -148,11 +178,10 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         if(mapRef.current?.getSource(key)) try{ mapRef.current.removeSource(key) }catch{}
         mapRef.current.addSource(key, { type:'raster', tiles:[res.tile_url], tileSize:256 })
         mapRef.current.addLayer({ id:key, type:'raster', source:key, paint:{ 'raster-opacity': 0.85 } } as any)
-        setLiveStatus('LIVE'); setInfo({ layer: key, ...res })
+        setLiveStatus('LIVE'); setInfo({ layer: key, source: res.source || 'Sentinel-2', ...res })
       } else {
-        // GEE CONFIGURATION_REQUIRED → fallback, không crash
         console.warn(`Lớp ${geeLayer} chưa khả dụng (Fallback BaseMap):`, res.reason || res.error)
-        setInfo({ layer: key, status: res.status || 'UNAVAILABLE', reason: res.reason || res.error })
+        setInfo({ layer: key, status: res.status || 'UNAVAILABLE', source: res.source || 'Sentinel-2', reason: res.reason || res.error, acquired: res.acquired })
       }
     }catch(err){
       console.warn(`Lớp ${geeLayer} lỗi:`, err)
