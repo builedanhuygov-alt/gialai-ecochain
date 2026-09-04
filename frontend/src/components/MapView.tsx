@@ -198,17 +198,41 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       }
       return
     }
+    // NDVI fallback: GEE tile UNAVAILABLE → Sentinel Hub NDVI stats
+    if(key==='ndvi'){
+      try{
+        const res=await fetchTile(geeLayer)
+        if(res.status==='LIVE' && res.tile_url && mapRef.current){
+          if(mapRef.current?.getLayer(key)) try{ mapRef.current.removeLayer(key) }catch{}
+          if(mapRef.current?.getSource(key)) try{ mapRef.current.removeSource(key) }catch{}
+          mapRef.current.addSource(key, { type:'raster', tiles:[TILE_FIX(res.tile_url)], tileSize:256 })
+          mapRef.current.addLayer({ id:key, type:'raster', source:key, paint:{ 'raster-opacity': 0.85 } } as any)
+          setLiveStatus('LIVE'); setInfo({ layer: key, source: res.source || 'Sentinel-2', ...res, acquired: res.acquired || res.metadata?.acquired })
+          return
+        }
+        // Fallback Sentinel Hub NDVI stats
+        console.warn(`NDVI GEE UNAVAILABLE, fallback Sentinel Hub`, res.reason)
+        const r2=await fetch(TILE_FIX(`${API}/api/v1/satellite/ndvi?bbox=107.3,13.1,109.4,14.7`))
+        const j2=await r2.json()
+        setInfo({ layer:'ndvi', status: j2.status || 'DEMO', source: j2.source || 'Sentinel Hub', satellite: j2.satellite, acquired: j2.acquired || j2.acquired_at || new Date().toISOString().slice(0,10), ndvi: j2.ndvi, reason: j2.reason, bbox: j2.bbox })
+        return
+      }catch(err){
+        console.warn('NDVI fallback lỗi:', err)
+        setInfo({ layer:'ndvi', status:'UNAVAILABLE', source:'Sentinel Hub', reason:String(err) })
+        return
+      }
+    }
     try{
       const res=await fetchTile(geeLayer)
       if(res.status==='LIVE' && res.tile_url && mapRef.current){
         if(mapRef.current?.getLayer(key)) try{ mapRef.current.removeLayer(key) }catch{}
         if(mapRef.current?.getSource(key)) try{ mapRef.current.removeSource(key) }catch{}
-        mapRef.current.addSource(key, { type:'raster', tiles:[res.tile_url], tileSize:256 })
+        mapRef.current.addSource(key, { type:'raster', tiles:[TILE_FIX(res.tile_url)], tileSize:256 })
         mapRef.current.addLayer({ id:key, type:'raster', source:key, paint:{ 'raster-opacity': 0.85 } } as any)
-        setLiveStatus('LIVE'); setInfo({ layer: key, source: res.source || 'Sentinel-2', ...res })
+        setLiveStatus('LIVE'); setInfo({ layer: key, source: res.source || 'Sentinel-2', ...res, acquired: res.acquired || res.metadata?.acquired })
       } else {
         console.warn(`Lớp ${geeLayer} chưa khả dụng (Fallback BaseMap):`, res.reason || res.error)
-        setInfo({ layer: key, status: res.status || 'UNAVAILABLE', source: res.source || 'Sentinel-2', reason: res.reason || res.error, acquired: res.acquired })
+        setInfo({ layer: key, status: res.status || 'UNAVAILABLE', source: res.source || 'Sentinel-2', reason: res.reason || res.error, acquired: res.acquired || res.metadata?.acquired })
       }
     }catch(err){
       console.warn(`Lớp ${geeLayer} lỗi:`, err)
