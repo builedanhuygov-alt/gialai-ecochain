@@ -8,7 +8,7 @@ export default function Community(){
       <h1>Cộng đồng — Trí tuệ công dân</h1>
       <StaggerContainer>
         <div className="feed">
-          <StaggerItem><div className="post"><img src="https://picsum.photos/600/300?random=1" alt="" loading="lazy"/><div className="meta">Báo cháy · Thôn 1 · 12 phút trước · <span className="badge">Cộng đồng đã xác minh</span> · 2 xác nhận · AI 87% <button>Xem xét</button></div></div></StaggerItem>
+          <StaggerItem><div className="post"><img src="https://picsum.photos/600/300?random=1" alt="" loading="lazy"/><div className="meta">Báo cháy · Thôn 1 · 12 phút trước · <span className="badge">Cộng đồng đã xác minh</span> · 2 xác nhận · AI 87% <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:'#FEF3C7'}}>DEMO DATA</span> <button>Xem xét</button></div><div style={{fontSize:11, color:'#64748B', padding:'0 12px 12px'}}>Ảnh minh họa picsum · Chờ Vision Gemini 2.5 xác minh thật qua /api/ai/smoke/detect</div></div></StaggerItem>
           <div className="upload"><button onClick={()=>setOpen(true)}>📷 Tải ảnh</button><button>🎥 Video</button><button>📍 Vị trí</button></div>
           <Modal open={open} onClose={()=>setOpen(false)} title="Tải lên báo cáo"><div style={{display:'grid', gap:8}}><input placeholder="Mô tả" style={{padding:'8px', border:'1px solid #E2E8E5', borderRadius:8}}/><button style={{background:'#0F766E', color:'#fff', border:0, padding:'8px 12px', borderRadius:999}}>Gửi báo cáo</button><div style={{fontSize:12, color:'#64748B'}}>Ảnh được hash · Xác minh cộng đồng · Lưu chuỗi bằng chứng</div></div></Modal>
           <div className="flow">BÁO CÁO → XÁC MINH CỘNG ĐỒNG → DUYỆT QUẢN TRỊ → ĐÃ XÁC NHẬN</div>

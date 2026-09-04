@@ -17,7 +17,7 @@ export default function Admin(){
     <div className="page">
       <h1>Quản trị — Người dùng · Vai trò · Nguồn dữ liệu · Agent · Sức khỏe hệ thống</h1>
       <div className="health"><div>Cơ sở dữ liệu ● Trực tuyến</div><div>API ● Trực tuyến</div><div>GEE ● Chưa cấu hình (cần key)</div><div>AI Services ● Trực tuyến</div></div>
-      <div className="agents"><div>AGENT RỪNG ● TRỰC TUYẾN 99.1%</div><div>AGENT THIÊN TAI ● TRỰC TUYẾN</div><div>AGENT LOGISTICS ● TRỰC TUYẾN</div></div>
+      <div className="agents"><div>AGENT RỪNG ● TRỰC TUYẾN 99.1% <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:'#FEF3C7'}}>DEMO DATA</span></div><div>AGENT THIÊN TAI ● TRỰC TUYẾN</div><div>AGENT LOGISTICS ● TRỰC TUYẾN</div></div>
 
       <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:16, marginTop:12}}>
         <h3>1. Nhập API Bản đồ hiển thị (Map Tiles — cho Bản đồ trực tiếp)</h3>

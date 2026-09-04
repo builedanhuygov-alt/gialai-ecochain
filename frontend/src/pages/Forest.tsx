@@ -9,7 +9,7 @@ export default function Forest(){
       <MapView />
       <div className="grid">
         <div className="card">NDVI Trend — Healthy vs Change (GEE Sentinel-2 ● Connected, 14:32)</div>
-        <div className="card">AI Detections — 🔥 High fire risk · 2 community confirmations · 87% confidence <button>Review</button></div>
+        <div className="card">AI Detections — 🔥 High fire risk · 2 community confirmations · 87% confidence <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:'#FEF3C7'}}>DEMO DATA</span> <button>Review</button><div style={{fontSize:11, color:'#64748B', marginTop:6}}>Công thức Nesterov/FWI + NDVI (deterministic) · LLM Gemini 2.5 chỉ diễn giải văn bản</div></div>
       </div>
       <style>{`.page{display:flex; flex-direction:column; gap:16px} .kpis{display:flex; gap:12px} .kpis div{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:12px; flex:1} .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px} .card{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:16px} h1{font-size:18px; font-weight:800}`}</style>
     </div>

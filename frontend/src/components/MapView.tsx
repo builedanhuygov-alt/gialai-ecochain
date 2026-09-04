@@ -35,7 +35,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   const [info, setInfo] = useState<any>(null)
   const [pixel] = useState<any>(null)
   void pixel
-  const [liveStatus, setLiveStatus] = useState<'LIVE'|'CACHED'|'STALE'|'CONFIGURATION_REQUIRED'|'UNAVAILABLE'|'DEMO'>('LIVE')
+  const [liveStatus, setLiveStatus] = useState<'LIVE'|'CACHED'|'STALE'|'CONFIGURATION_REQUIRED'|'UNAVAILABLE'|'DEMO'>('UNAVAILABLE')
   const [now, setNow] = useState(new Date())
   const [tickerIdx, setTickerIdx] = useState(0)
   const [showLayers, setShowLayers] = useState(false)
@@ -192,7 +192,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
             const m=new (maplibregl as any).Marker({ element: el }).setLngLat([f.longitude || f.lon || 108.3, f.latitude || f.lat || 13.9] as any).addTo(mapRef.current)
             hotspotMarkers.current.push(m)
           })
-          const displayStatus = data.status==='CACHED' ? 'LIVE' : data.status
+          const displayStatus = data.status
           setLiveStatus(displayStatus as any); setInfo({ layer:'hotspot', status: displayStatus, source:'NASA FIRMS', satellite: data.satellite || 'VIIRS', acquired: data.date || fires[0]?.acq_date || data.acquired || new Date().toISOString().slice(0,10), date: data.date || new Date().toISOString().slice(0,10), count: fires.length, bbox: data.bbox })
         } else {
           console.warn('FIRMS chưa khả dụng:', data.reason || data.error)
