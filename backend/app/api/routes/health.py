@@ -57,9 +57,12 @@ def health_geospatial():
         # configured but not connected -> try authenticate once
         try:
             st = gee_auth.authenticate()
-            return "LIVE" if st.value=="CONNECTED" else "UNAVAILABLE"
+            if st.value=="CONNECTED":
+                return "LIVE"
+            # Auth failed but DEMO_MODE true → show DEMO cache instead of red
+            return "DEMO" if s.is_demo else "UNAVAILABLE"
         except:
-            return "UNAVAILABLE"
+            return "DEMO" if s.is_demo else "UNAVAILABLE"
     def _sentinel_status():
         if not s.sentinelhub_configured:
             return "DEMO" if s.is_demo else "CONFIGURATION_REQUIRED"
