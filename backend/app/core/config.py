@@ -71,8 +71,13 @@ class Settings(BaseSettings):
     @property
     def gee_configured(self) -> bool:
         import os
-        has_key = bool(self.gee_private_key or self.gee_key_file or os.getenv("GEE_PRIVATE_KEY") or os.getenv("GEE_KEY_FILE"))
-        return bool(self.gee_project_id and self.gee_service_account and has_key)
+        # strip \r\n ẩn do Pipe PowerShell
+        pid = (self.gee_project_id or os.getenv("GEE_PROJECT_ID") or "").strip()
+        sa = (self.gee_service_account or os.getenv("GEE_SERVICE_ACCOUNT") or "").strip()
+        pk = (self.gee_private_key or os.getenv("GEE_PRIVATE_KEY") or "").strip()
+        kf = (self.gee_key_file or os.getenv("GEE_KEY_FILE") or "").strip()
+        has_key = bool(pk or kf)
+        return bool(pid and sa and has_key)
 
     @property
     def llm_configured(self) -> bool:
@@ -116,4 +121,14 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    # triệt để strip \r\n ẩn do Pipe PowerShell
+    if s.gee_project_id:
+        s.gee_project_id = s.gee_project_id.strip()
+    if s.gee_service_account:
+        s.gee_service_account = s.gee_service_account.strip()
+    if s.gee_private_key:
+        s.gee_private_key = s.gee_private_key.replace("\\n", "\n").strip()
+    if s.gee_key_file:
+        s.gee_key_file = s.gee_key_file.strip()
+    return s

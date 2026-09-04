@@ -33,10 +33,9 @@ async def synthesis_pccc(fire_score: int, firms_count: int, weather: Dict, distr
     # Try new google-genai SDK first (gemini-3.6-flash)
     try:
         from google import genai as genai_new
-        api_key = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or get_settings().gemini_api_key or "").strip()
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or get_settings().gemini_api_key
         if not api_key:
             raise RuntimeError("GEMINI_API_KEY not configured")
-        # Use new google-genai SDK with gemini-3.6-flash
         client = genai_new.Client(api_key=api_key)
         prompt = f"""
 Bạn là chuyên gia PCCC Tỉnh Gia Lai. Phân tích dữ liệu THÔ (không tự tính toán):
@@ -90,7 +89,7 @@ async def verify_fire_image(image_b64: str, gps: Dict) -> Dict:
     """Vai trò 2: Vision multimodal Text+Image"""
     try:
         from google import genai as genai_new
-        api_key = (os.getenv("GEMINI_API_KEY") or get_settings().gemini_api_key or "").strip()
+        api_key = os.getenv("GEMINI_API_KEY") or get_settings().gemini_api_key
         if not api_key:
             raise RuntimeError("GEMINI_API_KEY not configured")
         client = genai_new.Client(api_key=api_key)
@@ -106,7 +105,7 @@ async def what_if_advisor(district: str, temp_delta: float, ndvi: float) -> Dict
     """Vai trò 3: What-if Advisor"""
     try:
         from google import genai as genai_new
-        api_key = (os.getenv("GEMINI_API_KEY") or get_settings().gemini_api_key or "").strip()
+        api_key = os.getenv("GEMINI_API_KEY") or get_settings().gemini_api_key
         if not api_key:
             raise RuntimeError("GEMINI_API_KEY not configured")
         client = genai_new.Client(api_key=api_key)

@@ -77,22 +77,27 @@ class GEEAuthManager:
         try:
             # Prefer key file, fallback to in-memory credentials
             if s.gee_key_file:
+                sa = (s.gee_service_account or "").strip()
+                pid = (s.gee_project_id or "").strip()
                 credentials = ee.ServiceAccountCredentials(
-                    s.gee_service_account, s.gee_key_file  # type: ignore[arg-type]
+                    sa, s.gee_key_file.strip()  # type: ignore[arg-type]
                 )
-                ee.Initialize(credentials, project=s.gee_project_id)  # type: ignore
+                ee.Initialize(credentials, project=pid)  # type: ignore
             else:
                 # Private key from env (handle escaped newlines)
                 import json
                 import tempfile
                 import os
 
-                pk = (s.gee_private_key or "").replace("\\n", "\n")
+                pk = (s.gee_private_key or "").replace("\\n", "\n").strip()
+                # strip service_account và project_id khỏi \r\n ẩn
+                sa = (s.gee_service_account or "").strip()
+                pid = (s.gee_project_id or "").strip()
                 key_dict = {
                     "type": "service_account",
-                    "project_id": s.gee_project_id,
+                    "project_id": pid,
                     "private_key": pk,
-                    "client_email": s.gee_service_account,
+                    "client_email": sa,
                     "token_uri": "https://oauth2.googleapis.com/token",
                 }
                 # Write temp file for EE (EE expects file path)
