@@ -39,7 +39,53 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   const [now, setNow] = useState(new Date())
   const [tickerIdx, setTickerIdx] = useState(0)
   const [showLayers, setShowLayers] = useState(false)
+  const communesRef = useRef<any>(null)
+  const [communesCount, setCommunesCount] = useState<number>(0)
+  const [communesError, setCommunesError] = useState<string>('')
+  const [search, setSearch] = useState('')
+  const [suggests, setSuggests] = useState<any[]>([])
   const { state: locState, request: requestLoc } = useLocation()
+
+  // URL tài sản tương thích cả Vercel (/) và GitHub Pages (/gialai-ecochain/)
+  const assetUrl = (f:string)=>{
+    const b = ((import.meta as any).env?.BASE_URL || '/') as string
+    return (b.endsWith('/') ? b : b + '/') + f
+  }
+  const fetchJson = async (files:string[])=>{
+    let last:any = null
+    for(const f of files){
+      for(const u of [assetUrl(f), f, '/' + f]){
+        try{ const r = await fetch(u); if(r.ok) return await r.json() }catch(e){ last = e }
+      }
+    }
+    throw last || new Error('fetch failed: ' + files.join(','))
+  }
+  // Lớp nền raster luôn nằm dưới cùng (trước layer vector thấp nhất hiện có)
+  const bottomLayerId = (map:any)=>{
+    for(const id of ['boundary-fill','boundary','communes-fill']) try{ if(map.getLayer(id)) return id }catch{}
+    return undefined
+  }
+  const communePopup = (f:any, lngLat:any, map:any)=>{
+    new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' }).setLngLat(lngLat).setHTML(`<div style="font-family:Inter,sans-serif"><b>${f.ten_xa||''}</b><br/>mã ${f.ma_xa||''} · ${f.dtich_km2||''} km² · dân số ${f.dan_so||''}<br/><span style="font-size:11px;color:#64748B">${f.sap_nhap||''}</span></div>`).addTo(map)
+  }
+  const communeBounds = (feat:any)=>{
+    let minx=1e9, miny=1e9, maxx=-1e9, maxy=-1e9
+    const walk=(c:any)=>{ if(typeof c[0]==='number'){ if(c[0]<minx)minx=c[0]; if(c[0]>maxx)maxx=c[0]; if(c[1]<miny)miny=c[1]; if(c[1]>maxy)maxy=c[1] } else c.forEach(walk) }
+    walk(feat.geometry.coordinates)
+    return [[minx,miny],[maxx,maxy]]
+  }
+  const selectCommune = (props:any)=>{
+    const map = mapRef.current
+    if(!map || !communesRef.current) return
+    const feat = communesRef.current.features?.find((f:any)=> String(f.properties?.ma_xa)===String(props.ma_xa))
+    if(!feat) return
+    try{
+      map.fitBounds(communeBounds(feat) as any, { padding:40, duration:800 })
+      const cx=(communeBounds(feat)[0][0]+communeBounds(feat)[1][0])/2, cy=(communeBounds(feat)[0][1]+communeBounds(feat)[1][1])/2
+      communePopup(feat.properties, [cx,cy], map)
+    }catch{}
+    setSuggests([]); setSearch(props.ten_xa||'')
+  }
 
   const tickerLines = [
     "15:02:10 - Trạm An Khê vừa gửi chỉ số Độ ẩm: 32% (Cảnh báo gió phơn)",
@@ -151,16 +197,19 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     if(baseXyz==='carto') return
     const tile = XYZ_TILES[baseXyz]
     if(!tile) return
-    // Fallback Esri → OSM → static
+    // Fallback Esri → OSM → static — nền luôn nằm DƯỚI vector (boundary/communes)
+    const before = bottomLayerId(map)
     try{
       map.addSource(sourceId, { type:'raster', tiles:[TILE_FIX(tile.url)], tileSize:256, attribution: tile.attribution } as any)
-      map.addLayer({ id: layerId, type:'raster', source: sourceId } as any, 'boundary')
+      if(before) map.addLayer({ id: layerId, type:'raster', source: sourceId } as any, before)
+      else map.addLayer({ id: layerId, type:'raster', source: sourceId } as any)
     }catch(e){
       console.warn('Base tile add failed, fallback OSM', e)
       const osm = XYZ_TILES.osm
       try{
         map.addSource(sourceId, { type:'raster', tiles:[osm.url], tileSize:256, attribution: osm.attribution } as any)
-        map.addLayer({ id: layerId, type:'raster', source: sourceId } as any, 'boundary')
+        if(before && map.getLayer(before)) map.addLayer({ id: layerId, type:'raster', source: sourceId } as any, before)
+        else map.addLayer({ id: layerId, type:'raster', source: sourceId } as any)
       }catch{}
     }
   }, [baseXyz])
@@ -327,8 +376,8 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           map.addLayer({ id:'base-xyz', type:'raster', source:'base-xyz' } as any)
         }
       }
-      // Ranh tỉnh Gia Lai thực (dissolve từ 134 xã, simplify 100m) — thay bbox chữ nhật cũ
-      fetch('/gialai_province.geojson').then(r=>r.json()).then((prov:any)=>{
+      // Ranh tỉnh Gia Lai thực (viền ngoài, không lỗ) — file nhẹ 26KB
+      fetchJson(['gialai_province.geojson']).then((prov:any)=>{
         if(!map.getSource('gialai-boundary')){
           map.addSource('gialai-boundary', { type:'geojson', data: prov })
           map.addLayer({ id:'boundary-fill', type:'fill', source:'gialai-boundary', paint:{ 'fill-color':'#0F766E', 'fill-opacity':0.04 } })
@@ -336,11 +385,17 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           map.addLayer({ id:'province-label', type:'symbol', source:'gialai-boundary', layout:{ 'text-field':'TỈNH GIA LAI', 'text-size':16, 'text-font':['Open Sans ExtraBold','Arial Unicode MS Bold'] } as any, paint:{ 'text-color':'#B91C1C', 'text-halo-color':'#fff', 'text-halo-width':2 } })
         }
       }).catch(()=>{ // fallback bbox nếu thiếu file
-        map.addSource('gialai-boundary', { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[[107.0,12.9],[109.6,12.9],[109.6,15.0],[107.0,15.0],[107.0,12.9]]] }, properties:{} } })
-        map.addLayer({ id:'boundary', type:'line', source:'gialai-boundary', paint:{ 'line-color':'#0F766E', 'line-width':1.5, 'line-opacity':0.5, 'line-dasharray':[4,4] } })
+        if(!map.getSource('gialai-boundary')){
+          map.addSource('gialai-boundary', { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[[107.0,12.9],[109.6,12.9],[109.6,15.0],[107.0,15.0],[107.0,12.9]]] }, properties:{} } })
+          map.addLayer({ id:'boundary', type:'line', source:'gialai-boundary', paint:{ 'line-color':'#0F766E', 'line-width':1.5, 'line-opacity':0.5, 'line-dasharray':[4,4] } })
+        }
       })
-      fetch('/gialai_135.geojson').then(r=>r.json()).then((fc:any)=>{
+      // 135 xã: bản nhẹ 836KB trước, rớt mới tải bản full 3.8MB
+      fetchJson(['gialai_135_light.geojson','gialai_135.geojson']).then((fc:any)=>{
         const feats = fc.features || []
+        communesRef.current = fc
+        setCommunesCount(feats.length)
+        setCommunesError('')
         console.log(`✅ Đã tải ${feats.length} xã/phường Gia Lai`)
         if(!map.getSource('gialai-communes')){
           map.addSource('gialai-communes', { type:'geojson', data: fc })
@@ -353,10 +408,10 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           map.on('click','communes-fill',(e:any)=>{
             const f=e.features?.[0]?.properties
             if(!f) return
-            new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' }).setLngLat(e.lngLat).setHTML(`<div style="font-family:Inter,sans-serif"><b>${f.ten_xa||''}</b><br/>mã ${f.ma_xa||''} · ${f.dtich_km2||''} km² · dân số ${f.dan_so||''}<br/><span style="font-size:11px;color:#64748B">${f.sap_nhap||''}</span></div>`).addTo(map)
+            communePopup(f, e.lngLat, map)
           })
         }
-      }).catch(e=>console.warn('Không tải được gialai_135.geojson', e))
+      }).catch(e=>{ console.warn('Không tải được ranh xã', e); setCommunesError('Không tải được ranh xã — kiểm tra file public/') })
       STATIONS.forEach(st=>{
         const isHigh = st.level==='IV' || st.level==='V'
         const el=document.createElement('div')
@@ -425,9 +480,14 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
 
       {/* Top: gọn để full view — search nhỏ + dot LIVE */}
       <div style={{position:'absolute', top:10, left:60, right:60, display:'flex', gap:8, alignItems:'center', justifyContent:'center', pointerEvents:'none'}}>
-        <div style={{background:'rgba(255,255,255,0.92)', backdropFilter:'blur(12px)', borderRadius:999, padding:'6px 12px', display:'flex', gap:6, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', pointerEvents:'auto', width:280, maxWidth:'40vw'}}>
+        <div style={{position:'relative', pointerEvents:'auto', width:280, maxWidth:'40vw'}}>
+        <div style={{background:'rgba(255,255,255,0.92)', backdropFilter:'blur(12px)', borderRadius:999, padding:'6px 12px', display:'flex', gap:6, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', width:'100%'}}>
           <span style={{opacity:0.6}}>⌕</span>
-          <input placeholder="Tìm xã..." style={{border:0, outline:'none', flex:1, fontSize:12, background:'transparent', minWidth:0}} onKeyDown={e=>{ if(e.key==='Enter'){ const v=(e.target as HTMLInputElement).value; if(v) mapRef.current?.flyTo({center:[108.3+Math.random()*0.2,13.9+Math.random()*0.2], zoom:11}) }}} />
+          <input value={search} placeholder={`Tìm xã...${communesCount?` (${communesCount} xã)`:''}`} style={{border:0, outline:'none', flex:1, fontSize:12, background:'transparent', minWidth:0}} onChange={e=>{ const v=e.target.value; setSearch(v); const all=communesRef.current?.features||[]; const q=v.trim().toLowerCase(); setSuggests(!q?[]:all.filter((f:any)=> (f.properties?.ten_xa||'').toLowerCase().includes(q)).slice(0,8).map((f:any)=>f.properties)) }} onKeyDown={e=>{ if(e.key==='Enter' && suggests[0]) selectCommune(suggests[0]) }} />
+        </div>
+        {suggests.length>0 && <div style={{position:'absolute', top:'100%', left:0, right:0, marginTop:6, background:'#fff', borderRadius:12, boxShadow:'0 8px 24px rgba(0,0,0,0.15)', overflow:'hidden', zIndex:20}}>
+          {suggests.map((s:any)=> <button key={s.ma_xa} onClick={()=>selectCommune(s)} style={{display:'block', width:'100%', textAlign:'left', padding:'8px 12px', fontSize:12, border:0, background:'transparent', cursor:'pointer', borderBottom:'1px solid #F1F5F9'}}>{s.ten_xa} <span style={{color:'#94A3B8'}}>· {s.ma_xa}</span></button>)}
+        </div>}
         </div>
         <div title={`${liveStatus} · ${now.toLocaleTimeString('vi-VN')}`} style={{background:'rgba(15,23,42,0.75)', backdropFilter:'blur(12px)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:999, padding:'6px 10px', fontSize:11, display:'flex', gap:6, alignItems:'center', color:'#fff', pointerEvents:'auto', whiteSpace:'nowrap'}}>
           <span style={{width:8, height:8, borderRadius:999, background: liveStatus==='LIVE'?'#10B981':'#EF4444', display:'inline-block'}}/>
@@ -465,7 +525,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
             <span style={{fontSize:10, padding:'1px 6px', borderRadius:999, background: sourceLive[key==='hotspot'?'firms': key==='ndvi'?'sentinel2':'sentinel1']==='LIVE'?'#DCFCE7':'#FEF3C7', color:'#000'}}>{sourceLive[key==='hotspot'?'firms': key==='ndvi'?'sentinel2':'sentinel1'] || '...'}</span>
           </label>
         ))}
-        <div style={{fontSize:11, opacity:0.6, color:'#e2e8f0'}}>Gia Lai bbox 107.0,12.9,109.6,15.0 · Zoom ~9.2</div>
+        <div style={{fontSize:11, opacity:0.6, color:'#e2e8f0'}}>{communesError ? communesError : `Đã tải ${communesCount||'…'} xã · bbox 107.0,12.9,109.6,15.0`}</div>
       </div>)}
 
       {/* Right controls — icon gọn để full view */}
