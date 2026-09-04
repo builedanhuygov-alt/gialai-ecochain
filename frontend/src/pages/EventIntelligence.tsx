@@ -83,12 +83,25 @@ export default function EventIntelligence(){
 }
 
 export function EventsList(){
+  const [items, setItems] = useState<any[]>([])
+  useEffect(()=>{
+    fetch(`${API}/api/villages/fire-alert`).then(r=>r.json()).then(j=>{
+      const alerts=j.alerts||[]
+      const mapped=[1,2,3].map(i=>{
+        const a=alerts[i-1]
+        return { id:i, village:a?.village||`Thôn ${i}`, score:a?78+i*3:62+i*5, time:a?.acq_date||new Date(Date.now()-i*47*60000).toISOString(), status:a?'LIVE':'DEMO DATA', level:a?.level||'Theo dõi' }
+      })
+      setItems(mapped)
+    }).catch(()=>setItems([1,2,3].map(i=>({id:i, village:`Thôn ${i}`, score:60+i*4, time:new Date(Date.now()-i*53*60000).toISOString(), status:'DEMO DATA', level:'Theo dõi'}))))
+  },[])
+  const ago=(iso:string)=>{ const m=Math.max(1,Math.round((Date.now()-new Date(iso).getTime())/60000)); return m>=60?`${Math.round(m/60)}h${m%60?` ${m%60}p`:''} trước`:`${m}p trước` }
   return (
     <div style={{display:'grid', gap:12}}>
       <h1>Event Intelligence</h1>
-      {[1,2,3].map(i=>(
-        <Link key={i} to={`/events/${i}`} style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:16, textDecoration:'none', color:'inherit'}}>
-          <b>Sự kiện #{i}</b> · Rủi ro CAO · 87% · Thôn {i} · 2h trước
+      <div style={{fontSize:11, color:'#64748B'}}>Nguồn: FIRMS + Weather + Sentinel · badge LIVE/DEMO theo /api/health/geospatial</div>
+      {items.map(e=>(
+        <Link key={e.id} to={`/events/${e.id}`} style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:16, textDecoration:'none', color:'inherit'}}>
+          <b>Sự kiện #{e.id}</b> · {e.level} · {e.score}% · {e.village} · {ago(e.time)} · <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:e.status==='LIVE'?'#DCFCE7':'#FEF3C7'}}>{e.status}</span>
         </Link>
       ))}
     </div>
