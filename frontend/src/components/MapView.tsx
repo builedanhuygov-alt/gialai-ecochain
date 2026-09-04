@@ -51,10 +51,13 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     const b = ((import.meta as any).env?.BASE_URL || '/') as string
     return (b.endsWith('/') ? b : b + '/') + f
   }
+  // Cache-buster cho geojson tĩnh — tăng GEOJSON_V mỗi lần regenerate để diệt CDN/browser cache cũ
+  const GEOJSON_V = 'v4'
   const fetchJson = async (files:string[])=>{
     let last:any = null
     for(const f of files){
-      for(const u of [assetUrl(f), f, '/' + f]){
+      const busted = f.includes('?') ? f : `${f}?v=${GEOJSON_V}`
+      for(const u of [assetUrl(busted), busted, '/' + busted]){
         try{ const r = await fetch(u); if(r.ok) return await r.json() }catch(e){ last = e }
       }
     }
