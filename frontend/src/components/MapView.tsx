@@ -248,13 +248,19 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     const t=setTimeout(()=> mapRef.current?.resize(), 300)
     return ()=> clearTimeout(t)
   }, [])
-  // Effect 1 — chỉ init map một lần (không re-create khi đổi baseXyz)
+  // Effect 1 — chỉ init map một lần — dùng inline style OSM để tránh CORS style JSON
   useEffect(()=>{
     if(!mapContainer.current || mapRef.current) return
-    const initStyle = 'https://demotiles.maplibre.org/style.json'
+    const inlineStyle: any = {
+      version: 8,
+      sources: {
+        osm: { type:'raster', tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize:256, attribution:'© OpenStreetMap' }
+      },
+      layers: [{ id:'osm', type:'raster', source:'osm' }]
+    }
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: initStyle,
+      style: inlineStyle as any,
       center: [108.35, 13.9],
       zoom: 9.2,
       maxBounds: [[106.5, 12.5],[110.0, 15.2]],
