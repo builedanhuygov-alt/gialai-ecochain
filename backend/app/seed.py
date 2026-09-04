@@ -1,10 +1,36 @@
 """Demo seed — Gia Lai hierarchy + demo NDVI data (marked is_demo=True)."""
 import json
+from datetime import datetime
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models.administrative import AdministrativeUnit
 from app.models.query_log import AutomationStatus
 from app.core.enums import AdministrativeLevel
+
+
+def seed_historical_fires():
+    """Vụ cháy thật Hè 2026 (nguồn: Cổng TTĐT tỉnh Gia Lai) — official warnings lịch sử.
+    Level là ước tính biên tập theo mô tả (chờ phân loại chính thức của Kiểm lâm)."""
+    from app.models.fire import OfficialFireWarning
+    db: Session = SessionLocal()
+    try:
+        existing = {w.administrative_unit_id for w in db.query(OfficialFireWarning).all()}
+        items = [
+            dict(uid="phu-my-dong", level="V", source="Cổng TTĐT tỉnh Gia Lai",
+                 issued=datetime(2026, 7, 21, 20, 30),
+                 scope="21/7/2026 cháy rừng dương thôn Tân Phụng, xã Phù Mỹ Đông; nắng nóng kéo dài + gió mạnh, lan nhanh; 378 CBCS (Bộ CHQS tỉnh, Ban CHQS xã, Đồn BP Mỹ An, Trung đoàn 739, Lữ đoàn PB 572, 18 kiểm lâm, 6 xe chữa cháy); khống chế 20h30 cùng ngày."),
+            dict(uid="hoi-son-hoa-hoi", level="III", source="Cổng TTĐT tỉnh Gia Lai",
+                 issued=datetime(2026, 8, 15, 12, 0),
+                 scope="7-8/2026 cháy thực bì + rừng trồng sản xuất tiểu khu 213, xã Hội Sơn và Hòa Hội; lực lượng chức năng dập khẩn trương, ngăn lan rộng."),
+        ]
+        for it in items:
+            if it["uid"] in existing:
+                continue
+            db.add(OfficialFireWarning(administrative_unit_id=it["uid"], level=it["level"],
+                                       source=it["source"], issued_at=it["issued"], scope=it["scope"]))
+        db.commit()
+    finally:
+        db.close()
 
 
 DEMO_GEOMETRIES = {
@@ -32,6 +58,10 @@ DEMO_GEOMETRIES = {
 
 
 def seed_demo():
+    try:
+        seed_historical_fires()
+    except Exception as exc:
+        print(f"[seed] historical fires skipped: {exc}")
     db: Session = SessionLocal()
     try:
         if db.query(AdministrativeUnit).first():

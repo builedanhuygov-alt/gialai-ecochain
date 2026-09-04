@@ -46,6 +46,15 @@ export default function EventIntelligence(){
         <div style={{fontSize:13, color:'#64748B'}}>Thôn 1 · Gia Lai · 2 giờ trước · <VerificationBadge status="PENDING" /> · Nguồn: {evidence ? 'Sentinel-2 · Weather · FIRMS' : 'Đang tải...'}</div>
       </div>
 
+      {(() => { const h = HISTORICAL.find(x => x.id === id); if (!h) return null
+        return (<div style={{background:'#FFF7ED', border:'2px solid #DC2626', borderRadius:16, padding:16}}>
+          <h3>📜 Hồ sơ vụ cháy thật — {h.title}</h3>
+          <div style={{fontSize:13}}><b>{h.place}</b> · {h.dates} · {h.level} · Risk {h.score}/100</div>
+          <div style={{fontSize:13, marginTop:6}}>Lực lượng: {h.forces}</div>
+          <div style={{fontSize:13, marginTop:4, color:'#065F46'}}>Kết quả: {h.outcome}</div>
+          <div style={{fontSize:11, color:'#64748B', marginTop:6}}>Nguồn: {h.source} · Mức cấp là ước tính biên tập theo mô tả, chờ phân loại chính thức của Kiểm lâm</div>
+        </div>) })()}
+
       <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:16, padding:16}}>
         <h3>TẠI SAO AI PHÁT HIỆN? — Chuỗi bằng chứng</h3>
         {!evidence ? <div style={{fontSize:13, color:'#64748B'}}>Đang tải bằng chứng thực...</div> : (
@@ -82,6 +91,12 @@ export default function EventIntelligence(){
   )
 }
 
+// Vụ cháy thật Hè 2026 (nguồn: Cổng TTĐT tỉnh Gia Lai) — ghim đầu danh sách
+const HISTORICAL = [
+  { id: 'phu-my-dong-0721', title: 'Cháy rừng dương thôn Tân Phụng', place: 'Xã Phù Mỹ Đông', dates: '21/7/2026 · khống chế 20h30 cùng ngày', level: 'CẤP IV-V', score: 92, forces: '378 CBCS (Bộ CHQS tỉnh, Ban CHQS xã, Đồn BP Mỹ An, Trung đoàn 739, Lữ đoàn PB 572, 18 kiểm lâm, 6 xe chữa cháy)', outcome: 'Đã dập tắt — bảo vệ rừng và tài sản dân', source: 'Cổng TTĐT tỉnh Gia Lai' },
+  { id: 'hoi-son-0708', title: 'Cháy thực bì + rừng trồng tiểu khu 213', place: 'Xã Hội Sơn và Hòa Hội', dates: 'Tháng 7-8/2026', level: 'CẤP III', score: 68, forces: 'Lực lượng chức năng địa phương', outcome: 'Dập khẩn trương — ngăn lan rộng', source: 'Cổng TTĐT tỉnh Gia Lai' },
+]
+
 export function EventsList(){
   const [items, setItems] = useState<any[]>([])
   useEffect(()=>{
@@ -99,6 +114,16 @@ export function EventsList(){
     <div style={{display:'grid', gap:12}}>
       <h1>Event Intelligence</h1>
       <div style={{fontSize:11, color:'#64748B'}}>Nguồn: FIRMS + Weather + Sentinel · badge LIVE/DEMO theo /api/health/geospatial</div>
+      <div style={{background:'#FFF7ED', border:'1px solid #FDBA74', borderRadius:12, padding:'10px 14px', fontSize:12, color:'#7C2D12'}}>⚠️ Bộ NN&MT cảnh báo: El Niño mạnh–rất mạnh từ 9/2026 đến cuối năm — khô hạn, nắng nóng, thiếu nước, nguy cơ cháy rừng Gia Lai tăng cao.</div>
+      {HISTORICAL.map(h=>(
+        <Link key={h.id} to={`/events/${h.id}`} style={{background:'#fff', border:'2px solid #DC2626', borderRadius:12, padding:16, textDecoration:'none', color:'inherit'}}>
+          <div><b>{h.title}</b> <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:'#DC2626', color:'#fff'}}>SỰ KIỆN THẬT</span></div>
+          <div style={{fontSize:12, color:'#334155', marginTop:4}}>{h.place} · {h.dates} · {h.level} · Risk {h.score}/100</div>
+          <div style={{fontSize:11, color:'#475569', marginTop:4}}>Lực lượng: {h.forces}</div>
+          <div style={{fontSize:11, color:'#065F46', marginTop:2}}>✓ {h.outcome}</div>
+          <div style={{fontSize:10, color:'#64748B', marginTop:4}}>Nguồn: {h.source}</div>
+        </Link>
+      ))}
       {items.map(e=>(
         <Link key={e.id} to={`/events/${e.id}`} style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:16, textDecoration:'none', color:'inherit'}}>
           <b>Sự kiện #{e.id}</b> · {e.level} · {e.score}% · {e.village} · {ago(e.time)} · <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:e.status==='LIVE'?'#DCFCE7':'#FEF3C7'}}>{e.status}</span>
