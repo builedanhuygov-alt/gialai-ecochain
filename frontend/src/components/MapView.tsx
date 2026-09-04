@@ -78,8 +78,21 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     for(const id of ['boundary-fill','boundary','communes-fill']) try{ if(map.getLayer(id)) return id }catch{}
     return undefined
   }
-  const communePopup = (f:any, lngLat:any, map:any)=>{
-    new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' }).setLngLat(lngLat).setHTML(`<div style="font-family:Inter,sans-serif"><b>${f.ten_xa||''}</b><br/>mã ${f.ma_xa||''} · ${f.dtich_km2||''} km² · dân số ${f.dan_so||''}<br/><span style="font-size:11px;color:#64748B">${f.sap_nhap||''}</span></div>`).addTo(map)
+  const LEVEL_VI: Record<string,string> = { I:'Thấp', II:'Trung bình', III:'Cao', IV:'Nguy hiểm', V:'Cực kỳ nguy hiểm' }
+  const LEVEL_COLOR: Record<string,string> = { I:'#0EA5E9', II:'#10B981', III:'#F59E0B', IV:'#F97316', V:'#DC2626' }
+  // Popup xã + chẩn đoán AI vệ tinh (I-V) — mở ngay, AI điền sau
+  const communePopup = async (f:any, lngLat:any, map:any)=>{
+    const base = `<div style="font-family:Inter,sans-serif"><b>${f.ten_xa||''}</b><br/><span style="font-size:11px;color:#64748B">mã ${f.ma_xa||''} · ${f.dtich_km2||''} km² · dân số ${f.dan_so||''}</span>`
+    const popup = new (maplibregl as any).Popup({ closeButton:true, maxWidth:'320px' }).setLngLat(lngLat).setHTML(base + `<br/>⏳ AI vệ tinh đang chẩn đoán...</div>`).addTo(map)
+    window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: f.ten_xa } }))
+    try{
+      const r = await fetch(TILE_FIX(`${API}/api/fire/risk?administrative_unit_id=${encodeURIComponent(f.ten_xa||('ma-'+f.ma_xa))}&lat=${lngLat[1].toFixed(4)}&lon=${lngLat[0].toFixed(4)}`))
+      const j = await r.json()
+      const lv = j.warning_level || 'I', c = LEVEL_COLOR[lv] || '#64748B'
+      const ev = j.evidence || {}
+      const n = Array.isArray(ev.hotspots) ? ev.hotspots.length : (ev.hotspots ?? 0)
+      popup.setHTML(base + `<br/><div style="margin-top:6px;display:flex;gap:6px;align-items:center"><span style="background:${c};color:#fff;font-weight:800;font-size:12px;padding:2px 10px;border-radius:999">CẤP ${lv} · ${LEVEL_VI[lv]||''}</span><span style="font-size:11px">Risk <b>${j.risk_score ?? '?'}/100</b></span><span style="font-size:10px;background:${j.status==='LIVE'?'#DCFCE7':'#FEF3C7'};padding:2px 6px;border-radius:999">${j.status||''}</span></div><div style="font-size:11px;color:#334155;margin-top:4px">🛰️ NDVI ${ev.satellite?.ndvi ?? '?'} · ${ev.weather?.temperature ?? '?'}°C · FIRMS ${n} điểm · Tin cậy ${j.confidence ?? '?'}%</div><div style="font-size:10px;color:#64748B">${Object.keys(j.factors||{}).join(', ')}</div></div>`)
+    }catch{ popup.setHTML(base + `<br/><span style="font-size:11px;color:#B45309">AI chưa kết nối (UNAVAILABLE) — thử lại sau</span></div>`) }
   }
   const communeBounds = (feat:any)=>{
     let minx=1e9, miny=1e9, maxx=-1e9, maxy=-1e9
