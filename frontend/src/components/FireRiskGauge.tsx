@@ -9,29 +9,55 @@ const LEVELS = [
   { lv:'V', label:'Cực kỳ nguy hiểm', color:'bg-red-600', text:'text-red-600', bg:'bg-red-50', border:'border-red-200' },
 ]
 
+const API = ((import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000').replace(/\/$/, '')
+// Tọa độ đại diện từng khu vực để AI lấy vệ tinh/thời tiết/FIRMS đúng ô
+const AREA_COORDS: [string, number, number][] = [
+  ['Chư Prông', 13.55, 107.65], ['Ia Mơr', 13.55, 107.65], ['Kon Ka Kinh', 14.25, 108.45],
+  ['An Khê', 13.98, 108.65], ['Hội Sơn', 13.92, 108.68], ['Quy Nhơn', 13.78, 109.21],
+]
+const coordsFor = (area:string): [number, number] => {
+  for(const [k, lat, lon] of AREA_COORDS) if(area.includes(k)) return [lat, lon]
+  return [13.9, 108.3]
+}
+
 export default function FireRiskGauge({ compact=false, onSelect }: { compact?:boolean; onSelect?:(lv:string)=>void }){
   const { scope } = useScope()
   const [level, setLevel] = useState('I')
   const [flash, setFlash] = useState(false)
+  const [score, setScore] = useState<number | null>(null)
+  const [conf, setConf] = useState<number | null>(null)
+  const [factors, setFactors] = useState<string[]>([])
+  const [inputs, setInputs] = useState<string>('')
+  const [status, setStatus] = useState<string>('—')
+  const [manual, setManual] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  // Auto interaction: Chư Prông / Kon Ka Kinh -> IV/V
-  useEffect(()=>{
-    const area = scope.commune || scope.village || ''
-    const isTarget = area.includes('Chư Prông') || area.includes('Kon Ka Kinh') || area.includes('Ia Mơr')
-    if(isTarget){
-      const lv = area.includes('Kon Ka Kinh') ? 'V' : 'IV'
-      setLevel(lv)
-    }
-  }, [scope.commune, scope.village])
+  // AI vệ tinh: NDVI (GEE Sentinel-2) + thời tiết + FIRMS + địa hình → score → cấp I-V
+  const analyze = async (area:string)=>{
+    const [lat, lon] = coordsFor(area)
+    const unit = area || 'GiaLai'
+    setLoading(true)
+    try{
+      const r = await fetch(`${API}/api/fire/risk?administrative_unit_id=${encodeURIComponent(unit)}&lat=${lat}&lon=${lon}`)
+      const j = await r.json()
+      if(j.warning_level){ setLevel(j.warning_level); setManual(false) }
+      setScore(j.risk_score ?? null); setConf(j.confidence ?? null)
+      setFactors(Object.keys(j.factors || {}))
+      const ev = j.evidence || {}
+      setInputs(`NDVI ${ev.satellite?.ndvi ?? '?'} · ${ev.weather?.temperature ?? '?'}°C · FIRMS ${Array.isArray(ev.hotspots) ? ev.hotspots.length : (ev.hotspots ?? 0)} điểm`)
+      setStatus(j.status || 'LIVE')
+    }catch{ setStatus('UNAVAILABLE') }
+    setLoading(false)
+  }
 
-  // Listen to map demo event / selection
+  useEffect(()=>{ analyze(scope.commune || scope.village || '') }, [scope.commune, scope.village])
+
+  // Listen to map selection → chạy lại AI cho khu vực đó
   useEffect(()=>{
     const handler = (e:any)=>{
       const d = e.detail || {}
       const area = d.area || d.commune || ''
-      if(String(area).includes('Chư Prông') || String(d.lat) === '13.78'){
-        setLevel('IV')
-      }
+      if(area) analyze(String(area))
     }
     window.addEventListener('ecochain-demo' as any, handler)
     window.addEventListener('ecochain-select-area' as any, handler)
@@ -56,12 +82,28 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
         <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${LEVELS[idx]?.bg} ${LEVELS[idx]?.border} ${LEVELS[idx]?.text}`}>CẤP {level}</span>
       </div>
 
+      {/* AI vệ tinh: đầu vào + trạng thái thật */}
+      <div className="flex items-center gap-2 text-[10px] text-slate-500">
+        <span>🛰️ {loading ? 'AI đang phân tích vệ tinh...' : inputs || 'Chờ AI vệ tinh'}</span>
+        <span className={`px-2 py-0.5 rounded-full font-bold ${status==='LIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>{status}</span>
+        {manual && <span className="px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-500 border border-slate-200">Chọn tay</span>}
+        <button onClick={()=> analyze(scope.commune || scope.village || '')} className="ml-auto underline hover:text-slate-700">Tính lại</button>
+      </div>
+      {(score !== null || conf !== null) && (
+        <div className="flex items-center gap-2 text-[11px] text-slate-600">
+          {score !== null && <span>Risk <b>{score}/100</b></span>}
+          {conf !== null && <span>Tin cậy <b>{conf}%</b></span>}
+          {factors.length > 0 && <span className="truncate">· {factors.join(', ')}</span>}
+        </div>
+      )}
+
       {/* Gauge */}
       <div className="relative h-9 bg-slate-100 rounded-full flex overflow-hidden p-1 gap-1">
         {LEVELS.map(l=>(
           <button
             key={l.lv}
-            onClick={()=> { setLevel(l.lv); onSelect?.(l.lv) }}
+            onClick={()=> { setLevel(l.lv); setManual(true); onSelect?.(l.lv) }}
+            title="Chọn tay để thử kịch bản (AI tính lại khi đổi khu vực)"
             className={`flex-1 rounded-full text-[11px] font-bold transition-all flex items-center justify-center relative z-10 ${level===l.lv ? 'text-white shadow-md' : 'text-slate-600 hover:bg-white/60'}`}
             style={level===l.lv ? {background: l.color.replace('bg-','')} : {}}
           >
