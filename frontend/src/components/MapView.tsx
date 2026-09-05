@@ -10,16 +10,28 @@ import { getMode } from './ModeSwitch'
 
 // Điểm từng cháy 2026 — tọa độ chuẩn do người dùng cung cấp, bấm vào xem thời gian + bài báo
 const HIST_FIRES = [
-  { name: 'Cháy rừng dương TK62 (~30ha)', place: 'Xã Phù Mỹ Đông · 14°12′25″N 109°09′30″E', coords: [109.15833, 14.20694] as [number, number], time: '20-21/7/2026', note: '13h20 20/7 phát hiện, 23h bùng lại (tàn qua băng), 21h 21/7 kiểm soát · ~500 người + băng trắng', press: 'Dân trí (Doãn Công) 21/7 · VOV Tây Nguyên 22/7/2026 · Sở NN&MT Gia Lai' },
+  { name: 'Cháy rừng dương TK62/TK150 (~30ha)', place: 'Xã Phù Mỹ Đông · 14°12′20″N 109°09′25″E', coords: [109.15694, 14.20556] as [number, number], time: '20-21/7/2026', note: '13h20 20/7 phát hiện, 23h bùng lại (tàn qua băng), 21h 21/7 kiểm soát · ~500 người + băng trắng', press: 'Dân trí (Doãn Công) 21/7 · VOV Tây Nguyên 22/7/2026 · Sở NN&MT Gia Lai' },
   { name: 'Cháy TK213 + núi Đầu Voi', place: 'Xã Hội Sơn – Hòa Hội · 14.09715, 108.99686', coords: [108.9968596, 14.0971548] as [number, number], time: 'Tháng 7-8/2026 (Đầu Voi khống chế tối 22/8)', note: 'Thực bì + rừng trồng · đồi cao hiểm trở, gió lớn', press: 'Tiền Phong 24/8/2026 · Cổng TTĐT tỉnh Gia Lai' },
   { name: 'Cháy rừng keo đèo Cây Cốc', place: 'Thôn An Chiểu, xã Hoài Ân · 11°43′43.5″N 109°11′55.7″E', coords: [109.19881, 11.72875] as [number, number], time: '23-24/8/2026 (bùng lại trưa 24/8)', note: '~100 người + quân đội · nguyên nhân ban đầu: đốt thực bì', press: 'UBND xã Hoài Ân (Tiền Phong 24/8/2026)' },
-  { name: 'Cháy núi Vũng Chua TK330b/330c (4,23ha)', place: 'P. Ghềnh Ráng (trước là Quy Nhơn Nam) · 13°44′20″N 109°11′45″E', coords: [109.19583, 13.73889] as [number, number], time: 'Cuối 8/2026 (đo đạc 30/8)', note: 'Thực bì dưới bạch đàn · dốc đứng, xe CC không vào được · 500+ người + flycam quét băng cản lửa', press: '<a href="https://baogialai.com.vn/hon-500-nguoi-tham-gia-dap-tat-chay-rung-tai-phuong-quy-nhon-nam-post596298.html" target="_blank">Báo Gia Lai: 500 người dập cháy Quy Nhơn Nam</a> · <a href="https://gialai.dcs.vn/an-ninh-quoc-phong/-/view-content/609439/hon-500-nguoi-tham-gia-dap-tat-chay-rung-tai-phuong-quy-nhon-nam" target="_blank">Cổng ĐCS Gia Lai</a> · <a href="https://www.vietnam.vn/en/giai-cuu-hai-nguoi-mac-ket-tren-dinh-nui-trong-vu-chay-rung-o-quy-nhon" target="_blank">Vietnam.vn: giải cứu 2 người mắc kẹt</a>' },
+  { name: 'Cháy núi Vũng Chua TK330b/330c (4,23ha)', place: 'KP12, P. Quy Nhơn Nam · 13°44′25″N 109°11′30″E', coords: [109.19167, 13.74028] as [number, number], time: '27/8/2026 (đo đạc 30/8)', note: 'Thực bì dưới bạch đàn · dốc đứng, xe CC không vào được · 500+ người + flycam quét băng cản lửa', press: '<a href="https://baogialai.com.vn/hon-500-nguoi-tham-gia-dap-tat-chay-rung-tai-phuong-quy-nhon-nam-post596298.html" target="_blank">Báo Gia Lai: 500 người dập cháy Quy Nhơn Nam</a> · <a href="https://gialai.dcs.vn/an-ninh-quoc-phong/-/view-content/609439/hon-500-nguoi-tham-gia-dap-tat-chay-rung-tai-phuong-quy-nhon-nam" target="_blank">Cổng ĐCS Gia Lai</a> · <a href="https://www.vietnam.vn/en/giai-cuu-hai-nguoi-mac-ket-tren-dinh-nui-trong-vu-chay-rung-o-quy-nhon" target="_blank">Vietnam.vn: giải cứu 2 người mắc kẹt</a>' },
+]
+// Cháy nhà/cơ sở dân sự 2025-2026 — icon 🏠/🏭 xanh, phân biệt cháy rừng 🔥
+const CIV_FIRES = [
+  { kind: '🏠', name: 'Cháy nhà dân (phóng hỏa, ~300tr)', place: 'Thôn Cảnh An, xã Tuy Phước Tây · 13°52′15″N 109°06′10″E', coords: [109.10278, 13.87083] as [number, number], time: '26/8/2026', note: 'Thiệt hại tài sản ~300 triệu' },
+  { kind: '🏭', name: 'Cháy nhà xưởng Cty Tân Đại Hưng', place: 'Lô B6.0 KCN Nhơn Hội, P. Quy Nhơn Đông · 13°48′45″N 109°14′10″E', coords: [109.23611, 13.8125] as [number, number], time: '26/4/2026', note: 'Cháy lớn nhà xưởng công ty' },
+  { kind: '🏠', name: 'Cháy nhà dân (2 trẻ tử vong)', place: 'Thôn 5 (110 QL25), xã Chư Sê · 13°39′21″N 108°08′44″E', coords: [108.14556, 13.65583] as [number, number], time: '21/3/2026', note: 'Tử vong do ngạt khói' },
+  { kind: '🏠', name: 'Sự cố nghĩa trang Pleiku', place: 'P. Diên Hồng, TP Pleiku · 13°58′35″N 107°59′45″E', coords: [107.99583, 13.97639] as [number, number], time: '24/12/2025', note: 'Phát hiện thi thể bốc cháy' },
+  { kind: '🏠', name: 'Cháy tiệm spa (nghi phóng hỏa)', place: 'Đường Đỗ Trạc, P. An Khê · 13°57′10″N 108°40′20″E', coords: [108.67222, 13.95278] as [number, number], time: '19/10/2025', note: '1 tử vong, 3 bị thương' },
+  { kind: '🏠', name: 'Cháy nhà nội đô', place: '33 đường 31/3, P. Quy Nhơn · 13°46′12″N 109°13′05″E', coords: [109.21806, 13.77] as [number, number], time: '14/12/2025', note: 'Khống chế kịp thời' },
+  { kind: '🏠', name: 'Cháy nhà liền kề', place: 'Xã Yang Nam, H. Kông Chro · 13°32′40″N 108°33′15″E', coords: [108.55417, 13.54444] as [number, number], time: '8/5/2025', note: 'Thiệt hại lớn tài sản' },
 ]
 // Vùng trọng điểm cháy rừng Phù Cát — marker cam, chưa cháy nhưng cảnh báo cao
 const RISK_ZONES = [
   { name: 'Trọng điểm: Núi Lỗ Gáo, Mũi Đá Mỏ', place: 'Thôn Chánh Thắng, xã Cát Thành · 14°02′30″N 109°10′45″E', coords: [109.17917, 14.04167] as [number, number], note: 'Rừng trồng kinh tế, dốc nhiều đá, còn bom mìn sót lại · từng cháy 133ha', press: '<a href="https://baogialai.com.vn/chay-133-ha-rung-trong-o-xa-cat-thanh-post520560.html" target="_blank">Báo Gia Lai: cháy 133ha Cát Thành</a>' },
   { name: 'Trọng điểm: Dốc đèo Cách Thử', place: 'Thôn Trung Lương, xã Cát Hải · 13°57′12″N 109°15′00″E', coords: [109.25, 13.95333] as [number, number], note: 'Ven biển gió rất mạnh, thảm thực vật dễ bén lửa mùa hanh khô', press: '<a href="https://thuonghieucongluan.com.vn/binh-dinh-lai-them-mot-vu-hoa-hoan-a195513.html" target="_blank">Thương hiệu & Công luận</a>' },
   { name: 'Trọng điểm: Núi Bà & Hồ Suối Chay', place: 'Xã Cát Trinh · 13°58′40″N 109°04′55″E', coords: [109.08194, 13.97778] as [number, number], note: 'Rừng PH đầu nguồn, 68+ đỉnh, thảm thực vật dày', press: '<a href="https://mgmcar.com/ho-suoi-chay.html" target="_blank">Hồ Suối Chay</a>' },
+  { name: 'Trọng điểm: rừng trồng Ia Ko – Ia Le', place: 'H. Chư Pưh · 13°20′00″N 107°58′00″E', coords: [107.96667, 13.33333] as [number, number], note: 'Rừng trồng ven biên giới, báo động cấp V các tháng 1-4 hàng năm', press: 'Báo Gia Lai EN (PCCCR đầu mùa khô)' },
+  { name: 'Trọng điểm: rừng Phú Thiện', place: 'Phú Thiện · 13°35′15″N 108°07′30″E', coords: [108.125, 13.5875] as [number, number], note: 'Điểm nhiệt VIIRS lẻ tẻ do đốt dọn nương rẫy sát bìa rừng', press: 'Global Forest Watch' },
 ]
 
 // Kịch bản DEMO: đủ hiện tượng tutorial — 1 điểm ĐANG CHÁY + 3 điểm NGHI NGỜ
@@ -505,6 +517,20 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           new (maplibregl as any).Popup({ closeButton:true, maxWidth:'320px' }).setLngLat(h.coords as any)
             .setHTML(`<div style="font-family:Inter,sans-serif"><b>${h.name}</b><br/>${h.place}<br/><span style="font-size:12px;color:#B91C1C;font-weight:700">🕒 ${hAny.time||''}</span><br/><span style="font-size:11px;color:#92400E">⚠ TỪNG CHÁY — ${h.note}</span><br/><span style="font-size:10px;color:#64748B">📰 Bài báo: ${hAny.press||'—'}</span></div>`).addTo(map)
         })
+      })
+      // Cháy nhà/cơ sở — marker xanh 🏠/🏭, popup thời gian + ghi chú (tọa độ ước tính trung tâm)
+      CIV_FIRES.forEach(h=>{
+        const el=document.createElement('div')
+        el.style.width='24px'; el.style.height='24px'; el.style.borderRadius='999px'; el.style.display='grid'; el.style.placeItems='center'
+        el.style.background='#1E40AF'; el.style.fontSize='13px'; el.style.border='2px solid #fff'; el.style.cursor='pointer'
+        el.textContent=h.kind; el.title=`${h.name} — ${h.place} (cháy nhà/cơ sở)`
+        el.addEventListener('click', ()=>{
+          new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' }).setLngLat(h.coords as any)
+            .setHTML(`<div style="font-family:Inter,sans-serif"><b>${h.kind} ${h.name}</b><br/>${h.place}<br/><span style="font-size:12px;color:#1E40AF;font-weight:700">🕒 ${h.time}</span><br/><span style="font-size:11px;color:#334155">${h.note}</span><br/><span style="font-size:10px;color:#64748B">Tọa độ ước tính trung tâm khu vực (bảo mật GPS thô)</span></div>`).addTo(map)
+        })
+        new (maplibregl as any).Marker({ element: el }).setLngLat(h.coords as any).addTo(map)
+      })
+        new (maplibregl as any).Marker({ element: el }).setLngLat(h.coords as any).addTo(map)
         new (maplibregl as any).Marker({ element: el }).setLngLat(h.coords as any).addTo(map)
       })
       // Giữ toàn cảnh tỉnh — không auto zoom vào xã; chỉ fit lại sau khi tải communes
@@ -651,6 +677,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           <div><i style={{width:10,height:10,borderRadius:999,background:'#DC2626',display:'inline-block',marginRight:6}}/> CẤP V</div>
           <div><i style={{width:10,height:10,borderRadius:999,background:'#1F2937',border:'2px solid #FBBF24',display:'inline-block',marginRight:6}}/> Từng cháy Hè 2026</div>
           <div><i style={{width:10,height:10,borderRadius:999,background:'#F59E0B',display:'inline-block',marginRight:6}}/> Vùng trọng điểm</div>
+          <div><i style={{width:10,height:10,borderRadius:999,background:'#1E40AF',display:'inline-block',marginRight:6}}/> Cháy nhà/cơ sở</div>
           {info?.layer==='smoke' && info?.is_smoke && <div style={{marginTop:6, padding:'6px 8px', background:'#FEE2E2', borderRadius:8, color:'#991B1B', fontWeight:700}}>🚨 {info.alert?.message || 'Phát hiện khói'}<br/><span style={{fontWeight:400, fontSize:10}}>Độ tin cậy {(info.confidence*100).toFixed(0)}% · {info.reason}</span></div>}
           {info?.layer==='smoke' && info?.is_smoke===false && <div style={{marginTop:6, padding:'6px 8px', background:'#DCFCE7', borderRadius:8, color:'#065F46'}}>✓ Không có khói — an toàn</div>}
         </div>
