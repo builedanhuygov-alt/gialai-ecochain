@@ -16,9 +16,9 @@ def seed_historical_fires():
     try:
         by_uid = {w.administrative_unit_id: w for w in db.query(OfficialFireWarning).all()}
         items = [
-            dict(uid="phu-my-dong", level="V", source="Cổng TTĐT tỉnh Gia Lai",
-                 issued=datetime(2026, 7, 21, 20, 30),
-                 scope="20-21/7/2026 cháy rừng phòng hộ ven biển (phi lao, keo, điều) thôn Tân Phụng, xã Phù Mỹ Đông, ~30ha; bùng chiều 20/7, tái phát 21/7 do gió mạnh; 500+ người (kiểm lâm, công an, bộ đội, dân quân), đường băng trắng ngăn lan; nguyên nhân: nắng nóng, gió lớn, thực bì khô."),
+            dict(uid="phu-my-dong", level="V", source="Dân trí, VOV Tây Nguyên 22/7/2026, Sở NN&MT Gia Lai",
+                 issued=datetime(2026, 7, 21, 21, 0),
+                 scope="20-21/7/2026 cháy rừng dương (phi lao) phòng hộ ven biển tiểu khu 62, thôn Tân Phụng, xã Phù Mỹ Đông, ~30ha; phát hiện 13h20 20/7, khống chế rồi 23h bùng lại (tàn bay qua băng); 21/7 tổng lực ~500 người: PCCC 100+ CBCS +10 xe, BCHQS tỉnh 115, Quân khu 5, kiểm lâm, dân quân; khoanh vùng + băng trắng (vật liệu khô có tinh dầu, gió đổi hướng); kiểm soát 21h 21/7; đang điều tra nguyên nhân."),
             dict(uid="hoi-son-hoa-hoi", level="III", source="Cổng TTĐT tỉnh Gia Lai + Tiền Phong 24/8/2026",
                  issued=datetime(2026, 8, 22, 21, 0),
                  scope="7-8/2026 cháy thực bì + rừng trồng tiểu khu 213 (xã Hội Sơn, Hòa Hội); núi Đầu Voi thôn Cát Lâm xã Hội Sơn khống chế tối 22/8 (đồi cao, hiểm trở, gió lớn); đang thống kê diện tích."),
