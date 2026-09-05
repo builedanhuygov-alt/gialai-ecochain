@@ -1,4 +1,9 @@
 .vercel
 gialai-key.json
+.env
 .env*.local
-gialai-key.json
+*.db
+*.sqlite
+*.sqlite3
+__pycache__/
+*.pyc
