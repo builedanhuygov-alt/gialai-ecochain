@@ -517,6 +517,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           new (maplibregl as any).Popup({ closeButton:true, maxWidth:'320px' }).setLngLat(h.coords as any)
             .setHTML(`<div style="font-family:Inter,sans-serif"><b>${h.name}</b><br/>${h.place}<br/><span style="font-size:12px;color:#B91C1C;font-weight:700">🕒 ${hAny.time||''}</span><br/><span style="font-size:11px;color:#92400E">⚠ TỪNG CHÁY — ${h.note}</span><br/><span style="font-size:10px;color:#64748B">📰 Bài báo: ${hAny.press||'—'}</span></div>`).addTo(map)
         })
+        new (maplibregl as any).Marker({ element: el }).setLngLat(h.coords as any).addTo(map)
       })
       // Cháy nhà/cơ sở — marker xanh 🏠/🏭, popup thời gian + ghi chú (tọa độ ước tính trung tâm)
       CIV_FIRES.forEach(h=>{
@@ -528,9 +529,6 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' }).setLngLat(h.coords as any)
             .setHTML(`<div style="font-family:Inter,sans-serif"><b>${h.kind} ${h.name}</b><br/>${h.place}<br/><span style="font-size:12px;color:#1E40AF;font-weight:700">🕒 ${h.time}</span><br/><span style="font-size:11px;color:#334155">${h.note}</span><br/><span style="font-size:10px;color:#64748B">Tọa độ ước tính trung tâm khu vực (bảo mật GPS thô)</span></div>`).addTo(map)
         })
-        new (maplibregl as any).Marker({ element: el }).setLngLat(h.coords as any).addTo(map)
-      })
-        new (maplibregl as any).Marker({ element: el }).setLngLat(h.coords as any).addTo(map)
         new (maplibregl as any).Marker({ element: el }).setLngLat(h.coords as any).addTo(map)
       })
       // Giữ toàn cảnh tỉnh — không auto zoom vào xã; chỉ fit lại sau khi tải communes
