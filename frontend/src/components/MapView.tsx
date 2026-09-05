@@ -10,10 +10,16 @@ import { getMode } from './ModeSwitch'
 
 // Điểm từng cháy 2026 — tọa độ chuẩn do người dùng cung cấp, bấm vào xem thời gian + bài báo
 const HIST_FIRES = [
-  { name: 'Cháy rừng dương TK62 (~30ha)', place: 'Xã Phù Mỹ Đông · 14°13′33.5″N 109°10′53.8″E', coords: [109.18161, 14.22597] as [number, number], time: '20-21/7/2026', note: '13h20 20/7 phát hiện → 23h bùng lại (tàn qua băng) → 21h 21/7 kiểm soát · ~500 người + băng trắng', press: 'Dân trí (Doãn Công) 21/7 · VOV Tây Nguyên 22/7/2026 · Sở NN&MT Gia Lai' },
+  { name: 'Cháy rừng dương TK62 (~30ha)', place: 'Xã Phù Mỹ Đông · 14°12′25″N 109°09′30″E', coords: [109.15833, 14.20694] as [number, number], time: '20-21/7/2026', note: '13h20 20/7 phát hiện, 23h bùng lại (tàn qua băng), 21h 21/7 kiểm soát · ~500 người + băng trắng', press: 'Dân trí (Doãn Công) 21/7 · VOV Tây Nguyên 22/7/2026 · Sở NN&MT Gia Lai' },
   { name: 'Cháy TK213 + núi Đầu Voi', place: 'Xã Hội Sơn – Hòa Hội · 14.09715, 108.99686', coords: [108.9968596, 14.0971548] as [number, number], time: 'Tháng 7-8/2026 (Đầu Voi khống chế tối 22/8)', note: 'Thực bì + rừng trồng · đồi cao hiểm trở, gió lớn', press: 'Tiền Phong 24/8/2026 · Cổng TTĐT tỉnh Gia Lai' },
   { name: 'Cháy rừng keo đèo Cây Cốc', place: 'Thôn An Chiểu, xã Hoài Ân · 11°43′43.5″N 109°11′55.7″E', coords: [109.19881, 11.72875] as [number, number], time: '23-24/8/2026 (bùng lại trưa 24/8)', note: '~100 người + quân đội · nguyên nhân ban đầu: đốt thực bì', press: 'UBND xã Hoài Ân (Tiền Phong 24/8/2026)' },
-  { name: 'Cháy núi Vũng Chua (4,23ha)', place: 'P. Quy Nhơn Nam', coords: [109.235, 13.745] as [number, number], time: '27/8/2026 (đo đạc 30/8)', note: 'Thiệt hại 4,23ha · đang điều tra nguyên nhân', press: 'Hạt Kiểm lâm Tuy Phước - Quy Nhơn (Đức Hồ, 30/8/2026)' },
+  { name: 'Cháy núi Vũng Chua TK330b/330c (4,23ha)', place: 'P. Ghềnh Ráng (trước là Quy Nhơn Nam) · 13°44′20″N 109°11′45″E', coords: [109.19583, 13.73889] as [number, number], time: 'Cuối 8/2026 (đo đạc 30/8)', note: 'Thực bì dưới bạch đàn · dốc đứng, xe CC không vào được · 500+ người + flycam quét băng cản lửa', press: '<a href="https://baogialai.com.vn/hon-500-nguoi-tham-gia-dap-tat-chay-rung-tai-phuong-quy-nhon-nam-post596298.html" target="_blank">Báo Gia Lai: 500 người dập cháy Quy Nhơn Nam</a> · <a href="https://gialai.dcs.vn/an-ninh-quoc-phong/-/view-content/609439/hon-500-nguoi-tham-gia-dap-tat-chay-rung-tai-phuong-quy-nhon-nam" target="_blank">Cổng ĐCS Gia Lai</a> · <a href="https://www.vietnam.vn/en/giai-cuu-hai-nguoi-mac-ket-tren-dinh-nui-trong-vu-chay-rung-o-quy-nhon" target="_blank">Vietnam.vn: giải cứu 2 người mắc kẹt</a>' },
+]
+// Vùng trọng điểm cháy rừng Phù Cát — marker cam, chưa cháy nhưng cảnh báo cao
+const RISK_ZONES = [
+  { name: 'Trọng điểm: Núi Lỗ Gáo, Mũi Đá Mỏ', place: 'Thôn Chánh Thắng, xã Cát Thành · 14°02′30″N 109°10′45″E', coords: [109.17917, 14.04167] as [number, number], note: 'Rừng trồng kinh tế, dốc nhiều đá, còn bom mìn sót lại · từng cháy 133ha', press: '<a href="https://baogialai.com.vn/chay-133-ha-rung-trong-o-xa-cat-thanh-post520560.html" target="_blank">Báo Gia Lai: cháy 133ha Cát Thành</a>' },
+  { name: 'Trọng điểm: Dốc đèo Cách Thử', place: 'Thôn Trung Lương, xã Cát Hải · 13°57′12″N 109°15′00″E', coords: [109.25, 13.95333] as [number, number], note: 'Ven biển gió rất mạnh, thảm thực vật dễ bén lửa mùa hanh khô', press: '<a href="https://thuonghieucongluan.com.vn/binh-dinh-lai-them-mot-vu-hoa-hoan-a195513.html" target="_blank">Thương hiệu & Công luận</a>' },
+  { name: 'Trọng điểm: Núi Bà & Hồ Suối Chay', place: 'Xã Cát Trinh · 13°58′40″N 109°04′55″E', coords: [109.08194, 13.97778] as [number, number], note: 'Rừng PH đầu nguồn, 68+ đỉnh, thảm thực vật dày', press: '<a href="https://mgmcar.com/ho-suoi-chay.html" target="_blank">Hồ Suối Chay</a>' },
 ]
 
 // Kịch bản DEMO: đủ hiện tượng tutorial — 1 điểm ĐANG CHÁY + 3 điểm NGHI NGỜ
@@ -476,6 +482,18 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: st.name, level: st.level }}))
         })
       })
+      // Vùng trọng điểm — marker cam ⚠, phân biệt điểm từng cháy (đen/vàng)
+      RISK_ZONES.forEach(h=>{
+        const el=document.createElement('div')
+        el.style.width='24px'; el.style.height='24px'; el.style.borderRadius='999px'; el.style.display='grid'; el.style.placeItems='center'
+        el.style.background='#F59E0B'; el.style.color='#fff'; el.style.fontSize='13px'; el.style.border='2px solid #fff'; el.style.cursor='pointer'
+        el.textContent='⚠'; el.title=`${h.name} — ${h.place} (trọng điểm)`
+        el.addEventListener('click', ()=>{
+          new (maplibregl as any).Popup({ closeButton:true, maxWidth:'320px' }).setLngLat(h.coords as any)
+            .setHTML(`<div style="font-family:Inter,sans-serif"><b>${h.name}</b><br/>${h.place}<br/><span style="font-size:11px;color:#92400E">🟠 TRỌNG ĐIỂM — ${h.note}</span><br/><span style="font-size:10px;color:#64748B">📰 ${h.press}</span></div>`).addTo(map)
+        })
+        new (maplibregl as any).Marker({ element: el }).setLngLat(h.coords as any).addTo(map)
+      })
       // Điểm từng cháy — marker đen/xám + ghi chú, phân biệt điểm nóng FIRMS live
       HIST_FIRES.forEach(h=>{
         const el=document.createElement('div')
@@ -632,6 +650,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           <div><i style={{width:10,height:10,borderRadius:999,background:'#F59E0B',display:'inline-block',marginRight:6}}/> CẤP III-IV</div>
           <div><i style={{width:10,height:10,borderRadius:999,background:'#DC2626',display:'inline-block',marginRight:6}}/> CẤP V</div>
           <div><i style={{width:10,height:10,borderRadius:999,background:'#1F2937',border:'2px solid #FBBF24',display:'inline-block',marginRight:6}}/> Từng cháy Hè 2026</div>
+          <div><i style={{width:10,height:10,borderRadius:999,background:'#F59E0B',display:'inline-block',marginRight:6}}/> Vùng trọng điểm</div>
           {info?.layer==='smoke' && info?.is_smoke && <div style={{marginTop:6, padding:'6px 8px', background:'#FEE2E2', borderRadius:8, color:'#991B1B', fontWeight:700}}>🚨 {info.alert?.message || 'Phát hiện khói'}<br/><span style={{fontWeight:400, fontSize:10}}>Độ tin cậy {(info.confidence*100).toFixed(0)}% · {info.reason}</span></div>}
           {info?.layer==='smoke' && info?.is_smoke===false && <div style={{marginTop:6, padding:'6px 8px', background:'#DCFCE7', borderRadius:8, color:'#065F46'}}>✓ Không có khói — an toàn</div>}
         </div>

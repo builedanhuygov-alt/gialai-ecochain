@@ -25,9 +25,12 @@ def seed_historical_fires():
             dict(uid="hoai-an", level="III", source="UBND xã Hoài Ân (Tiền Phong 24/8/2026)",
                  issued=datetime(2026, 8, 24, 12, 0),
                  scope="23-24/8/2026 cháy rừng keo đèo Cây Cốc thôn An Chiểu, xã Hoài Ân; đã khống chế rồi bùng lại trưa 24/8; ~100 người + quân đội; nguyên nhân ban đầu: đốt thực bì; túc trực xử lý phát sinh."),
-            dict(uid="vung-chua", level="III", source="Hạt Kiểm lâm Tuy Phước - Quy Nhơn (Đức Hồ, 30/8/2026)",
+            dict(uid="vung-chua", level="IV", source="Báo Gia Lai post596298, Cổng ĐCS Gia Lai, Vietnam.vn",
                  issued=datetime(2026, 8, 27, 12, 0),
-                 scope="27/8/2026 cháy núi Vũng Chua, phường Quy Nhơn Nam; thiệt hại 4,23ha rừng (kiểm tra, đo đạc hiện trường 30/8)."),
+                 scope="Cuối 8/2026 cháy thực bì dưới bạch đàn TK330b/330c núi Vũng Chua (13°44'20\"N 109°11'45\"E), P. Ghềnh Ráng; dốc đứng xe CC không vào được; 500+ người + flycam; 4,23ha (đo đạc 30/8)."),
+            dict(uid="cat-thanh", level="V", source="Báo Gia Lai post520560",
+                 issued=datetime(2026, 6, 1, 12, 0),
+                 scope="Cháy 133ha rừng trồng Núi Lỗ Gáo, Mũi Đá Mỏ, thôn Chánh Thắng, xã Cát Thành (14°02'30\"N 109°10'45\"E); dốc nhiều đá, còn bom mìn sót lại; vùng trọng điểm theo dõi."),
         ]
         for it in items:
             if it["uid"] in by_uid:
