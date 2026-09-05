@@ -126,8 +126,10 @@ def disaster_analyze(body:dict, db:Session=Depends(get_db)):
     inputs=body.get("inputs") or {}
     # data fusion inputs
     unit=db.get(AdministrativeUnit, unit_id)
-    if not unit: raise HTTPException(404, "Unit not found")
-    if not geom: geom=unit.geometry_dict()
+    unit_resolved=bool(unit)
+    if not geom:
+        geom=unit.geometry_dict() if unit else {"type":"Point","coordinates":[108.3,13.9]}
+    if not geom: raise HTTPException(400, "unknown unit, provide geometry")
     risk_type=body.get("risk_type","FIRE")
     if risk_type=="ALL":
         signals=disaster_guard.analyze_all(unit_id, geom, inputs)
@@ -144,7 +146,7 @@ def disaster_analyze(body:dict, db:Session=Depends(get_db)):
     # create alert if high/critical
     if sig["level"] in ("HIGH","CRITICAL"):
         alert_engine.create(db, sig["risk_type"], unit_id, sig["score"], sig["confidence"], sig["explanation"], geom)
-    return {**sig, "origin": tag_data_origin(), "data_quality": "MEDIUM"}
+    return {**sig, "origin": tag_data_origin(), "data_quality": "MEDIUM", "unit_resolved": unit_resolved}
 
 # ── Carbon ───────────────────────────────────────────────────────
 @router.get("/carbon")

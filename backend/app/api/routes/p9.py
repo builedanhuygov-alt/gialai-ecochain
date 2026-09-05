@@ -32,6 +32,12 @@ def what_if_api(body:dict, db:Session=Depends(get_db)):
     sc=what_if.build(db, params, body.get("name","Scenario"), body.get("type","COMPOUND"))
     return {"scenario_id": sc.id, "params": params, "question": q, "requires_confirmation": True}
 
+@router.get("/what-if")
+def what_if_get(question:str=Query(default=""), name:str=Query(default="Scenario"), type:str=Query(default="COMPOUND"), db:Session=Depends(get_db)):
+    params=parse_nl(question) if question else {}
+    sc=what_if.build(db, params, name, type)
+    return {"scenario_id": sc.id, "params": params, "question": question, "requires_confirmation": True}
+
 @router.post("/scenarios")
 def create_scenario(body:dict, db:Session=Depends(get_db)):
     sc=what_if.build(db, body.get("params",{}), body.get("name","Scenario"), body.get("type","CLIMATE"), body.get("baseline_id"))

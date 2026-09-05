@@ -43,6 +43,10 @@ def list_areas(level: Optional[str] = Query(default=None), db: Session = Depends
         } for u in units
     ]
 
+@router.get("/monitor")
+def forest_monitor_get(administrative_unit_id: str = Query(...), start_date: str = Query(...), end_date: str = Query(...), baseline_start: Optional[str] = Query(default=None), baseline_end: Optional[str] = Query(default=None), cloud_percentage: int = Query(default=20, ge=0, le=100), dataset: str = Query(default="SENTINEL2"), db: Session = Depends(get_db)):
+    return forest_monitor(MonitorRequest(administrative_unit_id=administrative_unit_id, start_date=start_date, end_date=end_date, baseline_start=baseline_start, baseline_end=baseline_end, cloud_percentage=cloud_percentage, dataset=dataset), db)
+
 @router.post("/monitor")
 def forest_monitor(req: MonitorRequest, db: Session = Depends(get_db)):
     """Sec 38 POST /api/forest/monitor — creates QUEUED job, not blocking."""
