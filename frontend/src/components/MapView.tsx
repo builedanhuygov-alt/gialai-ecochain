@@ -8,12 +8,12 @@ import { useLocation } from '../hooks/useLocation'
 import DemoTour from './DemoTour'
 import { getMode } from './ModeSwitch'
 
-// Điểm từng cháy Hè 2026 (nguồn: Cổng TTĐT Gia Lai, Tiền Phong, Hạt Kiểm lâm) — ghim lưu ý trên bản đồ
+// Điểm từng cháy 2026 — tọa độ chuẩn do người dùng cung cấp, bấm vào xem thời gian + bài báo
 const HIST_FIRES = [
-  { name: 'Cháy rừng dương TK62 (~30ha)', place: 'Tân Phụng, xã Phù Mỹ Đông', coords: [109.06, 14.13] as [number, number], note: '20-21/7/2026 · 13h20 phát hiện, 23h bùng lại, 21h 21/7 kiểm soát · ~500 người + băng trắng' },
-  { name: 'Cháy rừng keo đèo Cây Cốc', place: 'Thôn An Chiểu, xã Hoài Ân', coords: [108.98, 14.27] as [number, number], note: '23-24/8/2026 · bùng lại trưa 24/8 · ~100 người · nguyên nhân: đốt thực bì' },
-  { name: 'Cháy TK213 + núi Đầu Voi', place: 'Xã Hội Sơn – Hòa Hội', coords: [108.66, 13.90] as [number, number], note: 'Tháng 7-8/2026 · Đầu Voi khống chế tối 22/8 · địa hình hiểm trở' },
-  { name: 'Cháy núi Vũng Chua (4,23ha)', place: 'P. Quy Nhơn Nam', coords: [109.235, 13.745] as [number, number], note: '27/8/2026 · thiệt hại 4,23ha · đang điều tra nguyên nhân' },
+  { name: 'Cháy rừng dương TK62 (~30ha)', place: 'Xã Phù Mỹ Đông · 14°13′33.5″N 109°10′53.8″E', coords: [109.18161, 14.22597] as [number, number], time: '20-21/7/2026', note: '13h20 20/7 phát hiện → 23h bùng lại (tàn qua băng) → 21h 21/7 kiểm soát · ~500 người + băng trắng', press: 'Dân trí (Doãn Công) 21/7 · VOV Tây Nguyên 22/7/2026 · Sở NN&MT Gia Lai' },
+  { name: 'Cháy TK213 + núi Đầu Voi', place: 'Xã Hội Sơn – Hòa Hội · 14.09715, 108.99686', coords: [108.9968596, 14.0971548] as [number, number], time: 'Tháng 7-8/2026 (Đầu Voi khống chế tối 22/8)', note: 'Thực bì + rừng trồng · đồi cao hiểm trở, gió lớn', press: 'Tiền Phong 24/8/2026 · Cổng TTĐT tỉnh Gia Lai' },
+  { name: 'Cháy rừng keo đèo Cây Cốc', place: 'Thôn An Chiểu, xã Hoài Ân · 11°43′43.5″N 109°11′55.7″E', coords: [109.19881, 11.72875] as [number, number], time: '23-24/8/2026 (bùng lại trưa 24/8)', note: '~100 người + quân đội · nguyên nhân ban đầu: đốt thực bì', press: 'UBND xã Hoài Ân (Tiền Phong 24/8/2026)' },
+  { name: 'Cháy núi Vũng Chua (4,23ha)', place: 'P. Quy Nhơn Nam', coords: [109.235, 13.745] as [number, number], time: '27/8/2026 (đo đạc 30/8)', note: 'Thiệt hại 4,23ha · đang điều tra nguyên nhân', press: 'Hạt Kiểm lâm Tuy Phước - Quy Nhơn (Đức Hồ, 30/8/2026)' },
 ]
 
 // Kịch bản DEMO: đủ hiện tượng tutorial — 1 điểm ĐANG CHÁY + 3 điểm NGHI NGỜ
@@ -387,7 +387,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       style: inlineStyle as any,
       center: [108.41, 13.85],
       zoom: 7.8,
-      maxBounds: [[107.0, 12.7],[109.7, 15.1]],
+      maxBounds: [[107.0, 11.5],[109.7, 15.1]],
       attributionControl: false,
     })
     // Fallback nếu style CARTO lỗi CORS → chuyển Google Satellite
@@ -483,8 +483,9 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         el.style.background='#1F2937'; el.style.color='#FBBF24'; el.style.fontSize='13px'; el.style.border='2px solid #FBBF24'; el.style.cursor='pointer'
         el.textContent='🔥'; el.title=`${h.name} — ${h.place} (từng cháy)`
         el.addEventListener('click', ()=>{
-          new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' }).setLngLat(h.coords as any)
-            .setHTML(`<div style="font-family:Inter,sans-serif"><b>${h.name}</b><br/>${h.place}<br/><span style="font-size:11px;color:#92400E">⚠ TỪNG CHÁY — ${h.note}</span><br/><span style="font-size:10px;color:#64748B">Khu vực cần lưu ý khi cấp III-V</span></div>`).addTo(map)
+          const hAny = h as any
+          new (maplibregl as any).Popup({ closeButton:true, maxWidth:'320px' }).setLngLat(h.coords as any)
+            .setHTML(`<div style="font-family:Inter,sans-serif"><b>${h.name}</b><br/>${h.place}<br/><span style="font-size:12px;color:#B91C1C;font-weight:700">🕒 ${hAny.time||''}</span><br/><span style="font-size:11px;color:#92400E">⚠ TỪNG CHÁY — ${h.note}</span><br/><span style="font-size:10px;color:#64748B">📰 Bài báo: ${hAny.press||'—'}</span></div>`).addTo(map)
         })
         new (maplibregl as any).Marker({ element: el }).setLngLat(h.coords as any).addTo(map)
       })
