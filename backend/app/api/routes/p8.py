@@ -251,13 +251,23 @@ def reports_draft():
 @router.get("/search/global")
 def global_search(q: str = Query(...), db: Session = Depends(get_db)):
     from app.models.risk import Incident
-    like = f"%{q.strip()}%"
-    units = db.query(AdministrativeUnit).filter(AdministrativeUnit.name.ilike(like)).limit(8).all()
-    incs = db.query(Incident).filter(Incident.title.ilike(like)).limit(5).all()
+    import unicodedata
+
+    def norm(s: str) -> str:
+        return "".join(c for c in unicodedata.normalize("NFD", str(s or ""))
+                       if unicodedata.category(c) != "Mn").lower()
+
+    # Diacritics-insensitive: "Phu My" must find "Xã Phù Mỹ Đông".
+    # SQLite LIKE can't do this, so match in Python (units table is tiny).
+    q_n = norm(q.strip())
+    units = db.query(AdministrativeUnit).limit(500).all()
+    matched = [u for u in units
+               if q_n and (q_n in norm(u.name) or q.strip().lower() in (u.code or "").lower())][:8]
+    incs = [i for i in db.query(Incident).limit(200).all() if q_n in norm(i.title)][:5]
     return {"query": q, "results": [
         {"type": "Commune" if u.level in ("COMMUNE", "VILLAGE") else "Area",
          "name": u.name, "id": u.id, "level": u.level,
-         "lat": u.centroid_lat, "lng": u.centroid_lng} for u in units
+         "lat": u.centroid_lat, "lng": u.centroid_lng} for u in matched
     ] + [
         {"type": "Incident", "name": i.title, "id": i.id} for i in incs
     ]}

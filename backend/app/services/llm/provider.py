@@ -84,16 +84,26 @@ class GeminiProvider(LLMProvider):
         self.model = clean_model_name(model, default="gemini-2.5-flash")
     async def generate(self, system, user, schema=None):
         # Gemini API: https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
-        payload = {"contents": [{"parts": [{"text": system + "\n\n" + user}]}], "generationConfig": {"temperature": 0.3}}
-        if schema:
-            payload["generationConfig"]["responseMimeType"] = "application/json"
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(url, json=payload)
-            r.raise_for_status()
-            j = r.json()
-            text = j["candidates"][0]["content"]["parts"][0]["text"]
-            return {"content": text, "model": self.model, "provider": "Gemini"}
+        # Model IDs retire over time (gemini-2.5-flash 404s on some keys) —
+        # fall back to gemini-2.0-flash before surfacing an honest error.
+        models = [self.model] + (["gemini-2.0-flash"] if self.model != "gemini-2.0-flash" else [])
+        last_err = None
+        for m in models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={self.api_key}"
+            payload = {"contents": [{"parts": [{"text": system + "\n\n" + user}]}], "generationConfig": {"temperature": 0.3}}
+            if schema:
+                payload["generationConfig"]["responseMimeType"] = "application/json"
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    r = await client.post(url, json=payload)
+                    r.raise_for_status()
+                    j = r.json()
+                    text = j["candidates"][0]["content"]["parts"][0]["text"]
+                    return {"content": text, "model": m, "provider": "Gemini"}
+            except Exception as e:
+                last_err = e
+                continue
+        raise last_err
     async def stream(self, system, user):
         # Gemini streaming via generateContent?stream
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:streamGenerateContent?key={self.api_key}&alt=sse"

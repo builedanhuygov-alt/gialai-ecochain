@@ -75,3 +75,30 @@ def test_ai_chat_never_raw_500():
         assert "reason" in r.json()
     else:
         assert "request_id" in r.json()
+
+
+def test_search_matches_without_diacritics_and_code():
+    """Vietnamese users type without diacritics — 'Phu My' must find Phù Mỹ."""
+    c = setup()
+    r = c.get("/api/search/global?q=Phu My")
+    assert r.status_code == 200
+    names = [h["name"] for h in r.json()["results"]]
+    assert any("Phù Mỹ" in n for n in names), names
+    r2 = c.get("/api/search/global?q=GL-121")
+    assert r2.status_code == 200
+    assert any(h["name"] == "Xã Phù Mỹ Đông" for h in r2.json()["results"])
+
+
+def test_village_alerts_skip_artificial_heat():
+    """The airport-runway false positive must not raise village alerts."""
+    from app.services.village_fire import check_villages_within_20km
+    runway_fire = {"latitude": 13.95926, "longitude": 109.02085,
+                   "acq_date": "2026-09-10", "confidence": "n",
+                   "suspect_artificial": True,
+                   "artificial_source": {"name": "Sân bay Phù Cát", "distance_km": 2.35}}
+    assert check_villages_within_20km([runway_fire]) == []
+    real_fire = {"latitude": 13.90, "longitude": 108.30,
+                 "acq_date": "2026-09-10", "confidence": "h"}
+    alerts = check_villages_within_20km([real_fire])
+    assert len(alerts) > 0
+    assert all("village" in a and "distance_km" in a for a in alerts)

@@ -873,7 +873,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       )}
       {fireAlerts.length===0 && villages.length>0 && (
         <div style={{position:'absolute', bottom:80, left:12, background:'rgba(255,255,255,0.9)', backdropFilter:'blur(12px)', borderRadius:12, padding:'10px 12px', fontSize:11, boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>
-          ✓ {villages.length} thôn/xã Gia Lai đang theo dõi — không có cháy trong 20km
+          ✓ {villages.length} điểm tham chiếu đang theo dõi (mẫu, không đầy đủ thôn/xã) — không có cháy trong 20km
         </div>
       )}
       {(info || pixel) && (
