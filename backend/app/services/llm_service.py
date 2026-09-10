@@ -5,11 +5,11 @@ from typing import Dict, List
 from pydantic import BaseModel, Field
 from app.core.config import get_settings
 
-# Serverless functions die ~10-60s while the sync google-genai SDK has no
-# short timeout of its own — every blocking SDK call below runs in a thread
-# with a hard cap so slow models degrade to the documented mock fallback
-# instead of hanging the request until the platform kills it.
-SDK_TIMEOUT_S = 8
+# Serverless functions die ~60s while the sync google-genai SDK handshake can
+# take 10s+ cold — every blocking SDK call below runs in a thread with a hard
+# cap so slow models degrade to the documented mock fallback instead of
+# hanging the request until the platform kills it.
+SDK_TIMEOUT_S = 25
 
 
 async def _sdk_generate(prompt: str, **kw):

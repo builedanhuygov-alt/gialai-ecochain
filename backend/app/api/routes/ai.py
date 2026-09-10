@@ -168,7 +168,7 @@ async def what_if_advisor(body: dict):
     t0 = time.time()
     try:
         from app.services.llm_service import what_if_advisor as wia
-        district = body.get("district", "Xã Ia Mơr")
+        district = body.get("district", "Gia Lai")
         temp_delta = body.get("temp_delta", 3)
         ndvi = body.get("ndvi", 0.25)
         return await wia(district=district, temp_delta=temp_delta, ndvi=ndvi)
