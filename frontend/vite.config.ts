@@ -9,8 +9,12 @@ export default defineConfig({
     // never under vitest (their global test() collides).
     exclude: ['e2e/**', 'node_modules/**'],
   },
-  build: {
-    // Keep the initial bundle small: heavy vendors load as separate chunks
+  preview: {
+    // Allow serving the production build through demo SSH tunnels
+    // (serveo / localhost.run / localtunnel) without Host-blocking.
+    allowedHosts: ['.serveousercontent.com', '.loca.lt', '.lhr.life'],
+  },
+  build: {    // Keep the initial bundle small: heavy vendors load as separate chunks
     // alongside the per-route lazy() splits in App.tsx.
     chunkSizeWarningLimit: 600,
     rollupOptions: {
