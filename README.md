@@ -4,7 +4,7 @@
 
 GIALAI EcoChain là **Hệ thống cảnh báo sớm cháy rừng cấp tỉnh** cho Gia Lai, tập trung duy nhất vào **rừng + thiên tai lửa rừng**. Luồng lõi: `Vệ tinh NDVI (Sentinel Hub) + Điểm nhiệt FIRMS → AI phát hiện → Cộng đồng xác minh (2 confirms + ảnh + geo/time) → Chính thức duyệt → Hành động`. Các domain phụ (carbon/EUDR/logistics) đã tách khỏi pitch để tránh pha loãng — nằm trong `docs/` nếu cần mở rộng sau.
 
-**Status:** `v1.0.0` — Final Release — Backend Health `All-LIVE` (GEE/Sentinel/FIRMS/LLM) — Frontend Live Dashboard công khai — Vào là dùng được ngay (không cần cấu hình DEMO/REAL).
+**Status:** `v1.0.0` — Backend Health (verified live 2026-09-10 on `GET /api/health/geospatial`): `GEE LIVE` · `FIRMS LIVE` · `LLM LIVE (Gemini)` · `Weather/NASA-POWER LIVE` · `Sentinel Hub UNAVAILABLE` (`summary.all_live=false` — Sentinel/Copernicus creds don't return imagery yet) — Frontend Live Dashboard công khai.
 
 ---
 
