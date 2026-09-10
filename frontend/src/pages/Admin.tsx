@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import ModelSwitcher from '../components/ModelSwitcher'
+import { api } from '../services/api'
 
 const API = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'
 
@@ -60,8 +61,82 @@ function FeedbackTriage(){
   )
 }
 
-function Stat({ label, value }: { label: string; value: any }){
+function AgentBoard(){
+  const [agents, setAgents] = useState<any[]>([])
+  const load = async ()=>{
+    try{ const d: any = await api.agentsStatus(); setAgents(Array.isArray(d) ? d : []) }catch{}
+  }
+  useEffect(()=>{ load() },[])
+  const toggle = async (name: string, enabled: boolean)=>{
+    try{ await api.toggleAgent(name, !enabled); load() }catch{}
+  }
+  if(agents.length === 0) return null
   return (
+    <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:16, marginTop:12}}>
+      <h3 style={{margin:'0 0 8px'}}>Từng agent — bật/tắt không cần restart</h3>
+      {agents.map((a: any)=> (
+        <div key={a.agent} style={{display:'flex', gap:8, alignItems:'center', fontSize:13, border:'1px solid #F1F5F9', borderRadius:8, padding:'6px 10px', marginTop:6}}>
+          <span style={{width:10, height:10, borderRadius:999, background: a.enabled ? '#10B981' : '#DC2626'}} />
+          <b style={{flex:1}}>{a.agent}</b>
+          <span style={{fontSize:11, color:'#64748B'}}>{a.status}{a.last_run ? ` · chạy ${a.last_run}` : ''}</span>
+          <button onClick={()=> toggle(a.agent, !!a.enabled)} style={{fontSize:12, border:'1px solid #E2E8E5', background: a.enabled ? '#fff' : '#0B1412', color: a.enabled ? '#000' : '#fff', borderRadius:999, padding:'4px 12px'}}>{a.enabled ? 'Tạm dừng' : 'Bật lại'}</button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function DemoRunner(){
+  const [out, setOut] = useState<any>(null)
+  const [busy, setBusy] = useState(false)
+  const run = async (fn: ()=> Promise<any>)=>{
+    setBusy(true)
+    try{ setOut(await fn()) }catch(e:any){ setOut({ error: String(e.message || e).slice(0, 200) }) }
+    finally{ setBusy(false) }
+  }
+  return (
+    <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:16, marginTop:12}}>
+      <h3 style={{margin:'0 0 8px'}}>Demo 3 phút</h3>
+      <div style={{display:'flex', gap:8}}>
+        <button onClick={()=> run(api.runDemo)} disabled={busy} style={{fontSize:13, background:'#0F766E', color:'#fff', border:0, borderRadius:999, padding:'8px 16px'}}>{busy ? 'Đang chạy...' : '▶ Chạy demo'}</button>
+        <button onClick={()=> run(api.resetDemo)} disabled={busy} style={{fontSize:13, background:'#fff', border:'1px solid #E2E8E5', borderRadius:999, padding:'8px 16px'}}>Reset demo</button>
+      </div>
+      {out && (
+        <div style={{marginTop:8, fontSize:12, background:'#F8FAF9', borderRadius:8, padding:8}}>
+          {out.error ? out.error : (out.steps || []).map((s: string, i: number)=> <div key={i}>✓ {s}</div>) || out.status}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AccountPanel(){
+  const [u, setU] = useState('')
+  const [p, setP] = useState('')
+  const [msg, setMsg] = useState('')
+  const register = async ()=>{
+    setMsg('')
+    if(u.trim().length < 3 || p.length < 8){ setMsg('Tên ≥3 ký tự, mật khẩu ≥8 ký tự'); return }
+    try{
+      const r: any = await api.registerUser(u.trim(), p)
+      setMsg(`Đã tạo ${r.username} — vai trò ${r.role}. Đăng nhập ở ModelSwitcher.`)
+      setU(''); setP('')
+    }catch(e:any){ setMsg(String(e.message || e).slice(0, 200)) }
+  }
+  return (
+    <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:16, marginTop:12}}>
+      <h3 style={{margin:'0 0 8px'}}>Tài khoản (người đầu tiên = admin)</h3>
+      <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>
+        <input value={u} onChange={e=> setU(e.target.value)} placeholder="Tên đăng nhập" aria-label="Tên đăng nhập mới" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:13}} />
+        <input value={p} onChange={e=> setP(e.target.value)} type="password" placeholder="Mật khẩu ≥8 ký tự" aria-label="Mật khẩu mới" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:13}} onKeyDown={e=> { if(e.key === 'Enter') register() }} />
+        <button onClick={register} style={{fontSize:13, background:'#0B1412', color:'#fff', border:0, borderRadius:999, padding:'6px 14px'}}>Tạo tài khoản</button>
+      </div>
+      {msg && <div style={{marginTop:8, fontSize:12}}>{msg}</div>}
+    </div>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: any }){  return (
     <div style={{border:'1px solid #E2E8E5', borderRadius:10, padding:'8px 10px'}}>
       <div style={{fontSize:20, fontWeight:800}}>{value ?? '—'}</div>
       <div style={{fontSize:11, color:'#64748B'}}>{label}</div>
@@ -162,6 +237,9 @@ export default function Admin(){
 
       <ModelSwitcher />
       <FeedbackTriage />
+      <AgentBoard />
+      <DemoRunner />
+      <AccountPanel />
       <div className="audit">Nhật ký: 14:32 Quản trị Tỉnh đã xác minh sự cố Thôn A — THÀNH CÔNG</div>
       <style>{`.health,.agents{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:12px} .health div,.agents div{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:12px; font-size:13px} .audit{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:12px; margin-top:12px; font-size:13px; font-family:monospace} @media (max-width: 640px){ .health,.agents{ grid-template-columns:1fr; } }`}</style>
     </div>

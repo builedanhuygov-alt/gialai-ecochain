@@ -89,7 +89,7 @@ async def sat_s1(lat: float = Query(default=13.9), lon: float = Query(default=10
     return {"source":"Sentinel-1 SAR","dataset":"COPERNICUS/S1_GRD","processing":"GEE","status":"CONFIGURATION_REQUIRED", "reason":"GEE not configured"}
 
 @router.get("/satellite/landsat")
-async def sat_landsat(mission: str = Query(default="8", regex="^(8|9)$"), lat: float = Query(default=13.9), lon: float = Query(default=108.3)):
+    async def sat_landsat(mission: str = Query(default="8", pattern="^(8|9)$"), lat: float = Query(default=13.9), lon: float = Query(default=108.3)):
     from app.core.config import get_settings
     from app.services.earth_engine.auth import gee_auth
     from app.core.enums import GEEStatus
@@ -104,7 +104,7 @@ async def sat_landsat(mission: str = Query(default="8", regex="^(8|9)$"), lat: f
     return {"source": f"Landsat {mission}", "dataset": ds, "processing":"GEE", "status":"CONFIGURATION_REQUIRED", "reason":"GEE not configured"}
 
 @router.get("/satellite/dem")
-async def sat_dem(lat: float = Query(default=13.9), lon: float = Query(default=108.3), source: str = Query(default="SRTM", regex="^(SRTM|NASADEM)$")):
+    async def sat_dem(lat: float = Query(default=13.9), lon: float = Query(default=108.3), source: str = Query(default="SRTM", pattern="^(SRTM|NASADEM)$")):
     from app.core.config import get_settings
     from app.services.earth_engine.auth import gee_auth
     from app.core.enums import GEEStatus
@@ -120,7 +120,7 @@ async def sat_dem(lat: float = Query(default=13.9), lon: float = Query(default=1
     return {"source": source, "dataset": "USGS/SRTMGL1_003" if source=="SRTM" else "NASA/NASADEM_HGT/001", "status":"CONFIGURATION_REQUIRED", "reason":"GEE not configured"}
 
 @router.get("/satellite/landcover")
-async def sat_landcover(source: str = Query(default="DynamicWorld", regex="^(DynamicWorld|WorldCover)$"), lat: float = Query(default=13.9), lon: float = Query(default=108.3)):
+    async def sat_landcover(source: str = Query(default="DynamicWorld", pattern="^(DynamicWorld|WorldCover)$"), lat: float = Query(default=13.9), lon: float = Query(default=108.3)):
     from app.core.config import get_settings
     from app.services.earth_engine.auth import gee_auth
     from app.core.enums import GEEStatus
@@ -241,7 +241,7 @@ async def fire_firms(lat: float = Query(..., ge=-90, le=90), lon: float = Query(
     return data
 
 @router.get("/hotspots/live")
-async def hotspots_live(day_range: int = Query(default=1, ge=1, le=7), source: str = Query(default="VIIRS_SNPP_NRT", regex="^(VIIRS_SNPP_NRT|MODIS_NRT|VIIRS_NOAA20_NRT|VIIRS_NOAA21_NRT)$")):
+    async def hotspots_live(day_range: int = Query(default=1, ge=1, le=7), source: str = Query(default="VIIRS_SNPP_NRT", pattern="^(VIIRS_SNPP_NRT|MODIS_NRT|VIIRS_NOAA20_NRT|VIIRS_NOAA21_NRT)$")):
     """NASA FIRMS Area query — Gia Lai BBox 107.0,12.9,109.6,15.0 — requires NASA_FIRMS_MAP_KEY env"""
     from app.services.firms_service import fetch_firms_gialai, GIALAI_BBOX
     data=await fetch_firms_gialai(day_range=day_range, source=source)

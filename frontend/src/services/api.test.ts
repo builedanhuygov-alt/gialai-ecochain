@@ -118,6 +118,21 @@ describe('api client', () => {
     mockFetch(false, {}, 500)
     await expect(api.learning()).resolves.toEqual([])
   })
+
+  it('ops APIs: audit, agents, demo, register', async () => {
+    mockFetch(true, [{ action: 'X', resource_type: 'y' }])
+    await expect(api.auditLog()).resolves.toEqual([{ action: 'X', resource_type: 'y' }])
+    mockFetch(true, [{ agent: 'ForestGuard', enabled: true }])
+    await expect(api.agentsStatus()).resolves.toEqual([{ agent: 'ForestGuard', enabled: true }])
+    mockFetch(true, { agent: 'ForestGuard', status: 'PAUSED' })
+    await expect(api.toggleAgent('ForestGuard', false)).resolves.toEqual({ agent: 'ForestGuard', status: 'PAUSED' })
+    mockFetch(true, { demo: '3-5 min', steps: [] })
+    await expect(api.runDemo()).resolves.toEqual({ demo: '3-5 min', steps: [] })
+    mockFetch(true, { status: 'Demo reset — production untouched' })
+    await expect(api.resetDemo()).resolves.toEqual({ status: 'Demo reset — production untouched' })
+    mockFetch(true, { id: 1, username: 'newbie', role: 'viewer', is_active: true })
+    await expect(api.registerUser('newbie', 'secret123')).resolves.toEqual({ id: 1, username: 'newbie', role: 'viewer', is_active: true })
+  })
   it('uploadProposalPhoto sends multipart and returns hash info', async () => {
     const { uploadProposalPhoto } = await import('./api')
     mockFetch(true, { photo_id: 1, is_duplicate: false, hash: 'abc' })

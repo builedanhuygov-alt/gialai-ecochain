@@ -24,6 +24,7 @@ const Governance = lazy(()=> import('./pages/Governance'))
 const Leaderboard = lazy(()=> import('./pages/Leaderboard'))
 const Reports = lazy(()=> import('./pages/Reports'))
 const Admin = lazy(()=> import('./pages/Admin'))
+const Audit = lazy(()=> import('./pages/Audit'))
 
 function AIAssistant(){
   const [open, setOpen] = useState(false)
@@ -205,7 +206,7 @@ function AnimatedRoutes(){
           <Route path="/reports" element={<PageTransition><Reports/></PageTransition>} />
           <Route path="/admin" element={<PageTransition><Admin/></PageTransition>} />
           <Route path="/notifications" element={<PageTransition><Notifications/></PageTransition>} />
-          <Route path="/audit" element={<PageTransition><div className="card">Nhật ký — Thời gian · Người dùng · Hành động · Phạm vi · Trạng thái</div></PageTransition>} />
+          <Route path="/audit" element={<PageTransition><Audit/></PageTransition>} />
         </Routes>
       </AnimatePresence>
     </Suspense>

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from app.core.enums import ProposalStatus
 
 class MonitorRequest(BaseModel):
@@ -18,8 +18,7 @@ class ProposalOut(BaseModel):
     status: str
     title: str
     administrative_unit_id: str
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ApprovalRequest(BaseModel):
     verified_by: str = "admin"

@@ -23,3 +23,9 @@ Thumbs.db
 .vscode/
 *.log
 gialai-key.json
+# local GIS/data artifacts (large binaries, not for Vercel builds)
+*.npy
+*.tif
+*.tiff
+*.xlsx
+*.xls

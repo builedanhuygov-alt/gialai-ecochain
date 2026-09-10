@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 class AdministrativeUnitCreate(BaseModel):
     name: str
@@ -21,5 +21,4 @@ class AdministrativeUnitOut(BaseModel):
     centroid_lng: Optional[float] = None
     area_ha: Optional[float] = None
     is_demo: bool
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
