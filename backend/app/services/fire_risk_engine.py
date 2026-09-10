@@ -24,7 +24,11 @@ class FireRiskEngine:
         satellite=satellite or {}
         weather=weather or {}
         terrain=terrain or {}
-        hotspots=hotspots or []
+        # Artificial-heat suspects (airport runways, industrial zones — flagged
+        # by firms_service) must NEVER count as fire evidence.
+        raw_hotspots=hotspots or []
+        hotspots=[h for h in raw_hotspots if not h.get("suspect_artificial")]
+        filtered_artificial=len(raw_hotspots)-len(hotspots)
         # Provenance: only keys actually present count as real data.
         # Defaults below are neutral computation stand-ins — they must NOT
         # inflate confidence (previous bug: confidence ~86% with zero inputs).
@@ -76,6 +80,7 @@ class FireRiskEngine:
             "risk_score": base, "warning_level": level.value, "label": label,
             "eco_level": f"EcoGL AI Fire Risk Level {level.value}", # Sec10 internal, not official
             "confidence": confidence, "factors": factors, "missing": missing,
+            "filtered_artificial": filtered_artificial,
             "elevation": elevation, "slope": slope,
             "vegetation_dryness": int(max(0,min(100, 50 + dry))), "fuel_condition": "HIGH" if dry>15 else "MODERATE",
             "model_version":"v1.0", "data_sources": ["Sentinel-2","Sentinel-1","FIRMS","Weather","Terrain"],

@@ -10,6 +10,54 @@ TTL=600
 # Gia Lai Bounding Box
 GIALAI_BBOX = "107.0,12.9,109.6,15.0"
 
+# Known artificial heat infrastructure in Gia Lai. FIRMS thermal sensors
+# routinely flag sun-baked runways/concrete as "hotspots" (classic false
+# positive: a suspect point sitting on an airport runway). Hotspots inside
+# these radii are FLAGGED, never silently trusted — alert pipelines skip
+# them, the map renders them distinctly, and the flag ships in the payload.
+ARTIFICIAL_HEAT_SOURCES = [
+    {"name": "Sân bay Phù Cát", "lon": 109.0422, "lat": 13.9550, "radius_km": 3.5},
+    {"name": "Sân bay Pleiku", "lon": 108.0178, "lat": 14.0044, "radius_km": 3.5},
+    {"name": "KCN Nhơn Hội", "lon": 109.2361, "lat": 13.8125, "radius_km": 2.0},
+]
+
+
+def _haversine_km(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
+    import math
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def flag_artificial_heat(fires: List[Dict]) -> List[Dict]:
+    """Mark hotspots matching known artificial heat sources.
+
+    Flagged points keep ALL original fields plus:
+      suspect_artificial=True, artificial_source={name, distance_km}.
+    Callers that raise alerts MUST skip flagged points; the map may still
+    render them in a distinct (non-alarm) style for transparency.
+    """
+    out = []
+    for f in fires:
+        f = dict(f)
+        f["suspect_artificial"] = False
+        try:
+            flat = float(f.get("latitude") or 0)
+            flon = float(f.get("longitude") or 0)
+            for s in ARTIFICIAL_HEAT_SOURCES:
+                d = _haversine_km(flon, flat, s["lon"], s["lat"])
+                if d <= s["radius_km"]:
+                    f["suspect_artificial"] = True
+                    f["artificial_source"] = {"name": s["name"], "distance_km": round(d, 2)}
+                    break
+        except Exception:
+            pass
+        out.append(f)
+    return out
+
 def _mock_fires(lat:float, lon:float, days:int=2)->List[Dict]:
     rng=random.Random(int(hashlib.sha256(f"{lat:.1f},{lon:.1f}".encode()).hexdigest()[:8],16))
     # Gia Lai region more fires? random 0-3
@@ -26,7 +74,7 @@ def _mock_fires(lat:float, lon:float, days:int=2)->List[Dict]:
             "satellite": rng.choice(["VIIRS","MODIS"]),
             "instrument": "VIIRS" if rng.random()>0.5 else "MODIS",
         })
-    return fires
+    return flag_artificial_heat(fires)
 
 def _get_key()->str:
     import os
@@ -55,7 +103,7 @@ def _parse_firms_csv(text:str)->List[Dict]:
                 })
             except: continue
     except: pass
-    return fires
+    return flag_artificial_heat(fires)
 
 async def fetch_firms(lat:float, lon:float, area: str="world", day_range:int=2)->Dict:
     s=get_settings()
@@ -105,7 +153,7 @@ async def fetch_firms(lat:float, lon:float, area: str="world", day_range:int=2)-
                 import datetime
                 date_str = datetime.datetime.now().strftime("%Y-%m-%d")
                 now_ts=now
-                data={"source":"NASA FIRMS","provider":"NASA FIRMS","status":"LIVE","cache_status":"LIVE","satellite":"VIIRS_SNPP_NRT","instrument":"VIIRS","fires": uniq, "count": len(uniq), "api_url": url, "bbox": f"{lon-1},{lat-1},{lon+1},{lat+1}", "timestamp": now_ts, "acquired_at": now_ts, "date": date_str, "acquired": date_str, "raw_count": len(fires)}
+                data={"source":"NASA FIRMS","provider":"NASA FIRMS","status":"LIVE","cache_status":"LIVE","satellite":"VIIRS_SNPP_NRT","instrument":"VIIRS","fires": uniq, "count": len(uniq), "artificial_suspects": sum(1 for f in uniq if f.get("suspect_artificial")), "api_url": url, "bbox": f"{lon-1},{lat-1},{lon+1},{lat+1}", "timestamp": now_ts, "acquired_at": now_ts, "date": date_str, "acquired": date_str, "raw_count": len(fires)}
                 CACHE[cache_key]={"ts": now, "data": data}
                 return data
             if s.is_demo:
@@ -170,7 +218,7 @@ async def fetch_firms_gialai(day_range:int=1, source:str="VIIRS_SNPP_NRT")->Dict
                     import datetime
                     date_str = datetime.datetime.now().strftime("%Y-%m-%d")
                     # stale detection: if fires empty, still LIVE with 0 count
-                    data={"source":"NASA FIRMS","provider":"NASA FIRMS","status":"LIVE","cache_status":"LIVE","satellite":source.split("_")[0] if "_" in source else source,"instrument": source, "bbox":GIALAI_BBOX,"fires": uniq, "count": len(uniq), "api_url": url, "timestamp": now, "acquired_at": now, "date": date_str, "acquired": date_str, "day_range": day_range}
+                    data={"source":"NASA FIRMS","provider":"NASA FIRMS","status":"LIVE","cache_status":"LIVE","satellite":source.split("_")[0] if "_" in source else source,"instrument": source, "bbox":GIALAI_BBOX,"fires": uniq, "count": len(uniq), "artificial_suspects": sum(1 for f in uniq if f.get("suspect_artificial")), "api_url": url, "timestamp": now, "acquired_at": now, "date": date_str, "acquired": date_str, "day_range": day_range}
                     CACHE[cache_key]={"ts": now, "data": data}
                     return data
                 if s.is_demo:

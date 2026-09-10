@@ -64,8 +64,21 @@ function AIAssistant(){
     setLoading(true); setPhase('THINKING'); setStream(''); setResult(null)
     try{
       setPhase('RETRIEVING DATA')
-      const r = await fetch(`${API}/api/ai/chat`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ query: qq, lat:13.9, lon:108.3 }) })
-      if(!r.ok) throw new Error(await r.text())
+      // Serverless functions time out — fail fast with a clear message instead
+      // of hanging until the gateway kills the request.
+      const ctrl = new AbortController()
+      const timer = setTimeout(()=> ctrl.abort(), 28000)
+      let r: Response
+      try{
+        r = await fetch(`${API}/api/ai/chat`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ query: qq, lat:13.9, lon:108.3 }), signal: ctrl.signal })
+      }catch(ab:any){
+        throw new Error(ab?.name === 'AbortError' ? 'AI phản hồi quá lâu (quá 28s) — Vercel serverless giới hạn thời gian chạy. Hãy thử câu hỏi ngắn hơn hoặc thử lại.' : String(ab?.message || ab))
+      }finally{ clearTimeout(timer) }
+      if(!r.ok){
+        let msg = await r.text()
+        try{ const j = JSON.parse(msg); msg = j.reason || msg }catch{}
+        throw new Error(msg)
+      }
       const j = await r.json()
       setPhase('ANALYZING')
       // Simulate streaming for non-stream endpoint

@@ -6,6 +6,8 @@ GIALAI EcoChain là **Hệ thống cảnh báo sớm cháy rừng cấp tỉnh**
 
 **Status:** `v1.0.0` — Backend Health (verified live 2026-09-10 on `GET /api/health/geospatial`): `GEE LIVE` · `FIRMS LIVE` · `LLM LIVE (Gemini)` · `Weather/NASA-POWER LIVE` · `Sentinel Hub UNAVAILABLE` (`summary.all_live=false` — Sentinel/Copernicus creds don't return imagery yet) — Frontend Live Dashboard công khai.
 
+**Live-reliability rules (không số giả im lặng):** thất bại API luôn hiển thị rõ — bản đồ báo banner khi thiếu cấp cháy từng xã (điểm xám = chưa có dữ liệu), hotspot FIRMS gần sân bay/KCN bị gắn cờ `suspect_artificial` và loại khỏi cảnh báo, chatbot hết quota/timeout trả `503` kèm lý do thay vì treo/crash.
+
 ---
 
 ## Architecture

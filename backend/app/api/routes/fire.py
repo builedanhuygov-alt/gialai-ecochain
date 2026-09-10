@@ -163,6 +163,7 @@ async def commune_levels(body: dict):
     except Exception:
         pass
     out = []
+    failed = 0
     for u in units:
         try:
             name = str(u.get("name") or u.get("id") or "?")
@@ -170,8 +171,11 @@ async def commune_levels(body: dict):
             lon = float(u.get("lon", 108.3))
             rng = random.Random(int(hashlib.sha256(f"{lat:.2f}{lon:.2f}".encode()).hexdigest()[:8], 16))
             terrain = {"elevation": round(rng.uniform(100, 800), 1), "slope": round(rng.uniform(5, 30), 1)}
+            # skip artificial-heat suspects (runways, industrial zones) — they
+            # are flagged by firms_service, never trusted as fire evidence
             near = [h for h in hotspots
-                    if abs((h.get("latitude") or 0) - lat) < 0.15 and abs((h.get("longitude") or 0) - lon) < 0.15][:3]
+                    if abs((h.get("latitude") or 0) - lat) < 0.15 and abs((h.get("longitude") or 0) - lon) < 0.15
+                    and not h.get("suspect_artificial")][:3]
             result = fire_risk_engine.analyze(name, satellite={"ndvi": 0.5},
                                               weather=weather, terrain=terrain,
                                               hotspots=near, community=0)
@@ -179,8 +183,9 @@ async def commune_levels(body: dict):
                         "level": result["warning_level"], "score": result["risk_score"],
                         "confidence": result["confidence"]})
         except Exception:
+            failed += 1
             continue
-    return {"levels": out, "count": len(out), "status": "LIVE", "origin": tag_data_origin()}
+    return {"levels": out, "count": len(out), "failed": failed, "status": "LIVE", "origin": tag_data_origin()}
 
 @router.post("/fire/simulation")
 def fire_simulation(body:dict):

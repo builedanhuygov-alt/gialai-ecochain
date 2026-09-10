@@ -97,7 +97,11 @@ async def orchestrate(query: str, lat: float=13.9, lon: float=108.3, conversatio
     
     provider = get_llm_provider()
     try:
-        llm_res = await provider.generate(system, user_msg, schema={"type":"object"})
+        # Serverless functions die ~10s (Vercel Hobby) while the provider's own
+        # HTTP timeout is 30s — cap the LLM call so we ALWAYS answer gracefully
+        # instead of being gateway-killed mid-stream.
+        import asyncio
+        llm_res = await asyncio.wait_for(provider.generate(system, user_msg, schema={"type":"object"}), timeout=8)
         content = llm_res.get("content","")
         # Try parse JSON
         try:

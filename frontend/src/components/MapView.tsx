@@ -68,8 +68,12 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   const [tickerIdx, setTickerIdx] = useState(0)
   const [showLayers, setShowLayers] = useState(false)
   const communesRef = useRef<any>(null)
+  const communeFireClickRef = useRef<any>(null)
   const [communesCount, setCommunesCount] = useState<number>(0)
   const [communesError, setCommunesError] = useState<string>('')
+  // Cấp cháy từng xã: 'live' = API trả đủ, 'degraded' = API fail/thiếu —
+  // KHÔNG bao giờ hiển thị số mặc định như dữ liệu thật.
+  const [levelsState, setLevelsState] = useState<'loading'|'live'|'degraded'>('loading')
   const [search, setSearch] = useState('')
   const [suggests, setSuggests] = useState<any[]>([])
   const { state: locState, request: requestLoc } = useLocation()
@@ -579,29 +583,40 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
               return { ma:String(ft.properties?.ma_xa ?? ''), name:ft.properties?.ten_xa || '', lon:(minx+maxx)/2, lat:(miny+maxy)/2 }
             }).filter(Boolean)
             const rl = await fetch(TILE_FIX(`${API}/api/fire/commune-levels`), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ units: pts.slice(0,200).map((p:any)=>({ id:p.ma, name:p.name, lat:p.lat, lon:p.lon })) }) })
+            if(!rl.ok) throw new Error(`commune-levels HTTP ${rl.status}`)
             const rj = await rl.json()
             const byKey: Record<string,any> = {}
             ;(rj.levels || []).forEach((l:any)=>{ byKey[l.key]=l })
+            // API thiếu/trả rỗng một phần => degraded: hiển thị "chưa có dữ liệu",
+            // KHÔNG điền số mặc định giống nhau cho mọi xã.
+            const liveCount = Object.keys(byKey).length
+            const degraded = liveCount === 0 || (rj.failed || 0) > 0
+            setLevelsState(degraded ? 'degraded' : 'live')
             const fcPts = { type:'FeatureCollection', features: pts.map((p:any)=>{
-              const lv = byKey[p.ma] || byKey[p.name] || {}
-              return { type:'Feature', geometry:{ type:'Point', coordinates:[p.lon, p.lat] }, properties:{ ma_xa:p.ma, ten_xa:p.name, level:lv.level || 'II', score:lv.score ?? 50, confidence:lv.confidence ?? 60 } }
+              const lv = byKey[p.ma] || byKey[p.name] || null
+              return { type:'Feature', geometry:{ type:'Point', coordinates:[p.lon, p.lat] }, properties:{ ma_xa:p.ma, ten_xa:p.name, live: !!lv, level: lv?.level || '—', score: lv?.score ?? null, confidence: lv?.confidence ?? null } }
             }) }
             if(map.getSource('commune-fire-points')){ try{ map.removeLayer('commune-fire-label'); map.removeLayer('commune-fire'); map.removeSource('commune-fire-points') }catch{} }
             map.addSource('commune-fire-points', { type:'geojson', data: fcPts } as any)
-            const lvColor = ['match',['get','level'],'I','#0EA5E9','II','#10B981','III','#F59E0B','IV','#F97316','V','#DC2626','#64748B'] as any
+            const lvColor = ['match',['get','level'],'I','#0EA5E9','II','#10B981','III','#F59E0B','IV','#F97316','V','#DC2626','#9CA3AF'] as any
             map.addLayer({ id:'commune-fire', type:'circle', source:'commune-fire-points', paint:{ 'circle-radius':11, 'circle-color':lvColor, 'circle-stroke-color':'#fff', 'circle-stroke-width':2 } } as any)
-            map.addLayer({ id:'commune-fire-label', type:'symbol', source:'commune-fire-points', layout:{ 'text-field':['get','level'], 'text-size':10, 'text-font':['Open Sans Bold','Arial Unicode MS Bold'] } as any, paint:{ 'text-color':'#fff' } })
-            map.on('click','commune-fire',(e:any)=>{
+            map.addLayer({ id:'commune-fire-label', type:'symbol', source:'commune-fire-points', layout:{ 'text-field':['get','level'], 'text-size':10, 'text-font':['Open Sans Bold','Arial Unicode MS Bold'] } as any, paint:{ 'text-color':'#fff' } } as any)
+            try{ if(communeFireClickRef.current) map.off('click','commune-fire',communeFireClickRef.current) }catch{}
+            communeFireClickRef.current = (e:any)=>{
               const f=e.features?.[0]?.properties
               if(!f) return
+              const body = f.live
+                ? `Cấp cháy <b>CẤP ${f.level}</b> · Risk <b>${f.score}/100</b><br/><span style="font-size:11px;color:#64748B">Tin cậy ${f.confidence}% · AI tính theo từng xã · Nguồn: vệ tinh + thời tiết + FIRMS</span>`
+                : `<span style="font-size:12px;color:#B45309;font-weight:700">Chưa có dữ liệu cấp cháy</span><br/><span style="font-size:11px;color:#64748B">API không phản hồi — bấm vào xã để chẩn đoán trực tiếp</span>`
               void new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' })
                 .setLngLat(e.lngLat)
-                .setHTML(`<div style="font-family:Inter,sans-serif; min-width:200px"><b>${f.ten_xa}</b><br/>Cấp cháy <b>CẤP ${f.level}</b> · Risk <b>${f.score}/100</b><br/><span style="font-size:11px;color:#64748B">Tin cậy ${f.confidence}% · AI tính theo từng xã · Nguồn: vệ tinh + thời tiết + FIRMS</span></div>`)
+                .setHTML(`<div style="font-family:Inter,sans-serif; min-width:200px"><b>${f.ten_xa}</b><br/>${body}</div>`)
                 .addTo(map)
               window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: f.ten_xa } }))
               onSelectRef.current?.('commune-point', f.ten_xa)
-            })
-          }catch(e){ console.warn('Không tải được CẤP cháy từng xã', e) }
+            }
+            map.on('click','commune-fire',communeFireClickRef.current)
+          }catch(e){ console.warn('Không tải được CẤP cháy từng xã', e); setLevelsState('degraded') }
         }
       }).catch(e=>{ console.warn('Không tải được ranh xã', e); setCommunesError('Không tải được ranh xã — kiểm tra file public/') })
       // (Điểm trạm HTML đã bỏ — thay bằng lớp điểm CẤP từng xã bên dưới)
@@ -714,9 +729,13 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         </div>
         <div title={`${mode==='demo'?'DEMO tutorial':liveStatus} · ${now.toLocaleTimeString('vi-VN')}`} style={{background:'rgba(15,23,42,0.75)', backdropFilter:'blur(12px)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:999, padding:'6px 10px', fontSize:11, display:'flex', gap:6, alignItems:'center', color:'#fff', pointerEvents:'auto', whiteSpace:'nowrap'}}>
           <span style={{width:8, height:8, borderRadius:999, background: mode==='demo'?'#F59E0B':liveStatus==='LIVE'?'#10B981':'#EF4444', display:'inline-block'}}/>
-          <span style={{fontWeight:800}}>{mode==='demo'?'DEMO':liveStatus}</span>
+          <span style={{fontWeight:800}}>{mode==='demo'?'DEMO':'Dữ liệu: '+liveStatus}</span>
         </div>
       </div>
+      {/* Cấp cháy từng xã chưa tải được: nói rõ, điểm xám = chưa có dữ liệu */}
+      {levelsState==='degraded' && (
+        <div style={{position:'absolute', top:56, left:'50%', transform:'translateX(-50%)', zIndex:15, background:'rgba(69,26,3,0.92)', color:'#FDE68A', borderRadius:999, padding:'6px 14px', fontSize:11, fontWeight:700, boxShadow:'0 4px 12px rgba(0,0,0,0.2)', maxWidth:'92vw', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>⚠️ Cấp cháy từng xã chưa tải đủ — điểm xám là CHƯA CÓ DỮ LIỆU, không phải mức an toàn</div>
+      )}
 
       {/* Banner treo: ĐANG CHÁY (đỏ) / NGHI NGỜ warning (vàng) — từ quét FIRMS 20km mỗi 60s */}
       {burnKey && bannerOff!==burnKey ? (

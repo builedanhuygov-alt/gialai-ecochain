@@ -28,18 +28,53 @@ class FireRiskRequest(BaseModel):
 @router.post("/ai/chat")
 async def ai_chat(req: ChatRequest, request: Request):
     # Bounded context: limit conversation to last 10 messages
-    conv = (req.conversation or [])[-10:]
-    result = await orchestrate(req.query, lat=req.lat, lon=req.lon, conversation=conv)
-    return result
+    t0 = time.time()
+    try:
+        conv = (req.conversation or [])[-10:]
+        result = await orchestrate(req.query, lat=req.lat, lon=req.lon, conversation=conv)
+        return result
+    except Exception as e:
+        # Never a raw 500: the chatbot must fail with a clear, honest message
+        # (LLM quota exhausted, serverless timeout, provider down).
+        from fastapi.responses import JSONResponse
+        from app.core.secrets_guard import scrub_secrets
+        return JSONResponse(status_code=503, content={
+            "status": "ERROR",
+            "reason": "Trợ lý AI tạm thời không phản hồi: " + scrub_secrets(str(e))[:200],
+            "latency_ms": int((time.time() - t0) * 1000),
+            "retry": "Vui lòng thử lại sau ít phút. Dữ liệu cảnh báo cháy vẫn xem được ở bản đồ.",
+        })
 
 @router.post("/ai/analyze")
 async def ai_analyze(req: ChatRequest):
-    return await orchestrate(req.query, lat=req.lat, lon=req.lon)
+    t0 = time.time()
+    try:
+        return await orchestrate(req.query, lat=req.lat, lon=req.lon)
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        from app.core.secrets_guard import scrub_secrets
+        return JSONResponse(status_code=503, content={
+            "status": "ERROR",
+            "reason": "Trợ lý AI tạm thời không phản hồi: " + scrub_secrets(str(e))[:200],
+            "latency_ms": int((time.time() - t0) * 1000),
+            "retry": "Vui lòng thử lại sau ít phút.",
+        })
 
 @router.post("/ai/fire-risk")
 async def ai_fire_risk(req: FireRiskRequest):
-    q = f"Gia Lai hiện tại có khu vực nào nguy cơ cháy rừng cao? lat {req.lat} lon {req.lon}"
-    return await orchestrate(q, lat=req.lat, lon=req.lon)
+    t0 = time.time()
+    try:
+        q = f"Gia Lai hiện tại có khu vực nào nguy cơ cháy rừng cao? lat {req.lat} lon {req.lon}"
+        return await orchestrate(q, lat=req.lat, lon=req.lon)
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        from app.core.secrets_guard import scrub_secrets
+        return JSONResponse(status_code=503, content={
+            "status": "ERROR",
+            "reason": "Trợ lý AI tạm thời không phản hồi: " + scrub_secrets(str(e))[:200],
+            "latency_ms": int((time.time() - t0) * 1000),
+            "retry": "Vui lòng thử lại sau ít phút.",
+        })
 
 @router.post("/ai/what-if")
 async def ai_what_if(body: dict):
