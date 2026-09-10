@@ -1,8 +1,27 @@
 """LLM AI Agent — Gemini 3.6 Flash chiến lược (3 vai trò, không làm toán)"""
+import asyncio
 import os, json
 from typing import Dict, List
 from pydantic import BaseModel, Field
 from app.core.config import get_settings
+
+# Serverless functions die ~10-60s while the sync google-genai SDK has no
+# short timeout of its own — every blocking SDK call below runs in a thread
+# with a hard cap so slow models degrade to the documented mock fallback
+# instead of hanging the request until the platform kills it.
+SDK_TIMEOUT_S = 8
+
+
+async def _sdk_generate(prompt: str, **kw):
+    from google import genai as genai_new
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or get_settings().gemini_api_key
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY not configured")
+    client = genai_new.Client(api_key=api_key)
+    return await asyncio.wait_for(
+        asyncio.to_thread(client.models.generate_content, model="gemini-3.6-flash", contents=prompt, **kw),
+        timeout=SDK_TIMEOUT_S,
+    )
 
 class PCCCResponse(BaseModel):
     risk_level: str = Field(description="WATCH | WARNING | CRITICAL")
@@ -32,11 +51,6 @@ async def synthesis_pccc(fire_score: int, firms_count: int, weather: Dict, distr
     check = await check_llm()
     # Try new google-genai SDK first (gemini-3.6-flash)
     try:
-        from google import genai as genai_new
-        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or get_settings().gemini_api_key
-        if not api_key:
-            raise RuntimeError("GEMINI_API_KEY not configured")
-        client = genai_new.Client(api_key=api_key)
         prompt = f"""
 Bạn là chuyên gia PCCC Tỉnh Gia Lai. Phân tích dữ liệu THÔ (không tự tính toán):
 - FireRiskEngine Score: {fire_score}/100
@@ -45,10 +59,9 @@ Bạn là chuyên gia PCCC Tỉnh Gia Lai. Phân tích dữ liệu THÔ (không 
 - BBox Gia Lai: 107.3,13.1,109.4,14.7
 Hãy xuất JSON chuẩn PCCCResponse với risk_level, summary, action_items (3), affected_district, confidence.
 """
-        response = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=prompt,
-            config={"response_mime_type": "application/json", "temperature": 0.2}
+        response = await _sdk_generate(
+            prompt,
+            config={"response_mime_type": "application/json", "temperature": 0.2},
         )
         data = json.loads(response.text)
         return {"source": "Gemini 3.6 Flash", "provider": "Gemini", "status": "LIVE", "model": "gemini-3.6-flash", **data, "evidence": {"fire_score": fire_score, "firms": firms_count, "weather": weather}}
@@ -88,29 +101,19 @@ Hãy xuất JSON chuẩn PCCCResponse với risk_level, summary, action_items (3
 async def verify_fire_image(image_b64: str, gps: Dict) -> Dict:
     """Vai trò 2: Vision multimodal Text+Image"""
     try:
-        from google import genai as genai_new
-        api_key = os.getenv("GEMINI_API_KEY") or get_settings().gemini_api_key
-        if not api_key:
-            raise RuntimeError("GEMINI_API_KEY not configured")
-        client = genai_new.Client(api_key=api_key)
         # For vision, use gemini-3.6-flash with image
         prompt = "Bạn là chuyên gia xác minh ảnh cháy rừng Gia Lai. Ảnh này có phải khói/lửa thật hay đám mây/ảnh mạng? Trả JSON {is_real: bool, confidence: 0-1, reason: string}"
         # Simplified: send text only if image not decoded
-        resp = client.models.generate_content(model="gemini-3.6-flash", contents=prompt)
-        return {"status": "LIVE", "provider": "Gemini Vision 2.5", "gps": gps, "result": resp.text[:500]}
+        resp = await _sdk_generate(prompt)
+        return {"status": "LIVE", "provider": "Gemini Vision 3.6", "gps": gps, "result": resp.text[:500]}
     except Exception as e:
         return {"status": "DEMO", "provider": "Mock Vision", "gps": gps, "result": {"is_real": True, "confidence": 0.82, "reason": f"Mock: {str(e)[:100]}"}}
 
 async def what_if_advisor(district: str, temp_delta: float, ndvi: float) -> Dict:
     """Vai trò 3: What-if Advisor"""
     try:
-        from google import genai as genai_new
-        api_key = os.getenv("GEMINI_API_KEY") or get_settings().gemini_api_key
-        if not api_key:
-            raise RuntimeError("GEMINI_API_KEY not configured")
-        client = genai_new.Client(api_key=api_key)
         prompt = f"Bạn là chuyên gia PCCC Gia Lai. Giải thích ngắn gọn vì sao {district} đang EXTREME với NDVI {ndvi} và nếu nhiệt độ tăng {temp_delta}°C thì nguy cơ lan cháy tăng bao nhiêu %?"
-        resp = client.models.generate_content(model="gemini-3.6-flash", contents=prompt)
+        resp = await _sdk_generate(prompt)
         return {"status": "LIVE", "provider": "Gemini", "answer": resp.text[:800]}
     except Exception as e:
         return {"status": "DEMO", "answer": f"Mock What-if: {district} EXTREME do NDVI {ndvi} thấp, +{temp_delta}°C sẽ tăng nguy cơ 23% (chi tiết khi có GEMINI_API_KEY). Lỗi: {str(e)[:80]}"}

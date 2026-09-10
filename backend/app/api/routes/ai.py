@@ -25,6 +25,18 @@ class FireRiskRequest(BaseModel):
 # Rate limiting simple per IP (reuse main middleware handles 60/min)
 # Tool & RAG are real, not mock-as-LIVE
 
+def _ai_error(reason: str, t0: float):
+    """Every AI route fails the same honest way: structured 503, never a
+    raw 500 or a hang (SDK calls underneath are time-capped)."""
+    from fastapi.responses import JSONResponse
+    from app.core.secrets_guard import scrub_secrets
+    return JSONResponse(status_code=503, content={
+        "status": "ERROR",
+        "reason": "Trợ lý AI tạm thời không phản hồi: " + scrub_secrets(str(reason))[:200],
+        "latency_ms": int((time.time() - t0) * 1000),
+        "retry": "Vui lòng thử lại sau ít phút. Dữ liệu cảnh báo cháy vẫn xem được ở bản đồ.",
+    })
+
 @router.post("/ai/chat")
 async def ai_chat(req: ChatRequest, request: Request):
     # Bounded context: limit conversation to last 10 messages
@@ -78,20 +90,24 @@ async def ai_fire_risk(req: FireRiskRequest):
 
 @router.post("/ai/what-if")
 async def ai_what_if(body: dict):
-    temp = body.get("temperature", 3)
-    rain = body.get("rainfall", -30)
-    wind = body.get("wind", 20)
-    lat = body.get("lat", 13.9)
-    lon = body.get("lon", 108.3)
-    # Deterministic simulation via FireRiskEngine + AI explanation
-    from app.services.ai.tools import run_fire_simulation
-    sim = await run_fire_simulation(temp_delta=temp, rain_delta=rain, wind_delta=wind)
-    # Add RAG + LLM explanation
-    q = f"Chạy kịch bản nhiệt độ +{temp}°C mưa {rain}% gió +{wind}% cho Gia Lai"
-    orch = await orchestrate(q, lat=lat, lon=lon)
-    orch["simulation"] = sim["data"]
-    orch["simulation_note"] = "SIMULATION NOT ACTUAL FIRE"
-    return orch
+    t0 = time.time()
+    try:
+        temp = body.get("temperature", 3)
+        rain = body.get("rainfall", -30)
+        wind = body.get("wind", 20)
+        lat = body.get("lat", 13.9)
+        lon = body.get("lon", 108.3)
+        # Deterministic simulation via FireRiskEngine + AI explanation
+        from app.services.ai.tools import run_fire_simulation
+        sim = await run_fire_simulation(temp_delta=temp, rain_delta=rain, wind_delta=wind)
+        # Add RAG + LLM explanation
+        q = f"Chạy kịch bản nhiệt độ +{temp}°C mưa {rain}% gió +{wind}% cho Gia Lai"
+        orch = await orchestrate(q, lat=lat, lon=lon)
+        orch["simulation"] = sim["data"]
+        orch["simulation_note"] = "SIMULATION NOT ACTUAL FIRE"
+        return orch
+    except Exception as e:
+        return _ai_error(e, t0)
 
 @router.post("/ai/chat/stream")
 async def ai_chat_stream(req: ChatRequest):
@@ -123,47 +139,63 @@ async def ai_chat_stream(req: ChatRequest):
 @router.post("/ai/pccc/synthesis")
 async def pccc_synthesis(body: dict):
     """Vai trò 1: Gemini tổng hợp FireRiskEngine + FIRMS + thời tiết → kịch bản PCCC JSON chuẩn"""
-    from app.services.llm_service import synthesis_pccc
-    score = body.get("fire_score", 77)
-    firms = body.get("firms_count", 2)
-    weather = body.get("weather", {"temperature": 34, "wind_speed": 20, "humidity": 30})
-    district = body.get("district", "Huyện Chư Prông")
-    return await synthesis_pccc(fire_score=score, firms_count=firms, weather=weather, district=district)
+    t0 = time.time()
+    try:
+        from app.services.llm_service import synthesis_pccc
+        score = body.get("fire_score", 77)
+        firms = body.get("firms_count", 2)
+        weather = body.get("weather", {"temperature": 34, "wind_speed": 20, "humidity": 30})
+        district = body.get("district", "Huyện Chư Prông")
+        return await synthesis_pccc(fire_score=score, firms_count=firms, weather=weather, district=district)
+    except Exception as e:
+        return _ai_error(e, t0)
 
 @router.post("/ai/vision/verify")
 async def vision_verify(body: dict):
     """Vai trò 2: Gemini multimodal Text+Image xác minh ảnh cháy cộng đồng"""
-    from app.services.llm_service import verify_fire_image
-    image_b64 = body.get("image_b64", "")
-    gps = body.get("gps", {"lat": 13.9, "lon": 108.3})
-    return await verify_fire_image(image_b64=image_b64, gps=gps)
+    t0 = time.time()
+    try:
+        from app.services.llm_service import verify_fire_image
+        image_b64 = body.get("image_b64", "")
+        gps = body.get("gps", {"lat": 13.9, "lon": 108.3})
+        return await verify_fire_image(image_b64=image_b64, gps=gps)
+    except Exception as e:
+        return _ai_error(e, t0)
 
 @router.post("/ai/what-if/advisor")
 async def what_if_advisor(body: dict):
     """Vai trò 3: What-if Advisor giải thích EXTREME / +3°C"""
-    from app.services.llm_service import what_if_advisor as wia
-    district = body.get("district", "Xã Ia Mơr")
-    temp_delta = body.get("temp_delta", 3)
-    ndvi = body.get("ndvi", 0.25)
-    return await wia(district=district, temp_delta=temp_delta, ndvi=ndvi)
+    t0 = time.time()
+    try:
+        from app.services.llm_service import what_if_advisor as wia
+        district = body.get("district", "Xã Ia Mơr")
+        temp_delta = body.get("temp_delta", 3)
+        ndvi = body.get("ndvi", 0.25)
+        return await wia(district=district, temp_delta=temp_delta, ndvi=ndvi)
+    except Exception as e:
+        return _ai_error(e, t0)
 
 @router.post("/ai/smoke/detect")
 async def smoke_detect(body: dict):
     """AI hiểu vệt khói trên bản đồ vệ tinh (screenshot) và cảnh báo"""
-    from app.services.ai.smoke_detector import detect_smoke_from_tile
-    tile_url = body.get("tile_url") or body.get("url")
-    lat = body.get("lat", 13.9)
-    lon = body.get("lon", 108.3)
-    bbox = body.get("bbox", "107.3,13.1,109.4,14.7")
-    # Nếu có image_b64 từ screenshot
-    image_b64 = body.get("image_b64")
-    if image_b64:
-        from app.services.llm_service import verify_fire_image
-        r = await verify_fire_image(image_b64=image_b64, gps={"lat": lat, "lon": lon})
-        # Map to smoke format
-        is_smoke = r.get("result", {}).get("is_real", False) if isinstance(r.get("result"), dict) else False
-        return {"status": r.get("status"), "provider": r.get("provider"), "result": {"is_smoke": is_smoke, "confidence": 0.87, "bbox": [0.42,0.38,0.18,0.22], "reason": "Vệt khói trắng/xám — khớp ảnh vệ tinh bạn gửi", "alert": {"level": "CRITICAL", "message": "Cảnh báo cháy: khói tại Gia Lai"} if is_smoke else None}, "tile_url": tile_url}
-    return await detect_smoke_from_tile(tile_url=tile_url, lat=lat, lon=lon, bbox=bbox)
+    t0 = time.time()
+    try:
+        from app.services.ai.smoke_detector import detect_smoke_from_tile
+        tile_url = body.get("tile_url") or body.get("url")
+        lat = body.get("lat", 13.9)
+        lon = body.get("lon", 108.3)
+        bbox = body.get("bbox", "107.3,13.1,109.4,14.7")
+        # Nếu có image_b64 từ screenshot
+        image_b64 = body.get("image_b64")
+        if image_b64:
+            from app.services.llm_service import verify_fire_image
+            r = await verify_fire_image(image_b64=image_b64, gps={"lat": lat, "lon": lon})
+            # Map to smoke format
+            is_smoke = r.get("result", {}).get("is_real", False) if isinstance(r.get("result"), dict) else False
+            return {"status": r.get("status"), "provider": r.get("provider"), "result": {"is_smoke": is_smoke, "confidence": 0.87, "bbox": [0.42,0.38,0.18,0.22], "reason": "Vệt khói trắng/xám — khớp ảnh vệ tinh bạn gửi", "alert": {"level": "CRITICAL", "message": "Cảnh báo cháy: khói tại Gia Lai"} if is_smoke else None}, "tile_url": tile_url}
+        return await detect_smoke_from_tile(tile_url=tile_url, lat=lat, lon=lon, bbox=bbox)
+    except Exception as e:
+        return _ai_error(e, t0)
 
 @router.get("/ai/health")
 async def ai_health():

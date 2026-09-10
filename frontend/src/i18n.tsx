@@ -1,15 +1,12 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 
-export type Lang = 'vi' | 'jr' | 'ede'
+export type Lang = 'vi'
 export const LANGS: { id: Lang; label: string }[] = [
   { id: 'vi', label: 'Tiếng Việt' },
-  { id: 'jr', label: 'Jrai' },
-  { id: 'ede', label: 'Êđê' },
 ]
 
-// Core UI strings. Jarai/Êđê cover common community words; anything missing
-// falls back to Vietnamese (t() below) — dictionaries are marked beta and
-// open to community corrections.
+// Vietnamese-only UI. Jarai/Êđê dictionaries were removed (too sparse to be
+// honest — a 4-word dictionary is decoration, not localization).
 const dict: Record<Lang, Record<string, string>> = {
   vi: {
     'nav.main': 'CHÍNH',
@@ -43,18 +40,6 @@ const dict: Record<Lang, Record<string, string>> = {
     'com.fire': 'cháy',
     'com.village': 'thôn',
   },
-  jr: {
-    'nav.community': 'Plei',
-    'com.title': 'Plei',
-    'com.fire': 'apui',
-    'com.village': 'plei',
-  },
-  ede: {
-    'nav.community': 'Buôn',
-    'com.title': 'Buôn',
-    'com.fire': 'pui',
-    'com.village': 'buôn',
-  },
 }
 
 export function tFor(lang: Lang, key: string): string {
@@ -68,9 +53,7 @@ const LangCtx = createContext<{ lang: Lang; setLang: (l: Lang) => void; t: (k: s
 })
 
 export function LangProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(()=>{
-    try{ const v = localStorage.getItem('ecogl_lang'); return v === 'jr' || v === 'ede' ? v : 'vi' }catch{ return 'vi' }
-  })
+  const [lang, setLangState] = useState<Lang>(()=> 'vi' as Lang)
   useEffect(()=>{ try{ localStorage.setItem('ecogl_lang', lang) }catch{} },[lang])
   return (
     <LangCtx.Provider value={{ lang, setLang: setLangState, t: (k: string) => tFor(lang, k) }}>

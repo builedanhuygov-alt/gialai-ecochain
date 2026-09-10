@@ -87,6 +87,15 @@ def seed_real_communes(db: Session | None = None) -> dict:
             db.add(u)
             existing[code] = u
             added += 1
+        # Phường Thống Nhất (ma_xa 137) is missing from the source geojson —
+        # seed it geometry-less so search/joins resolve it honestly instead of
+        # 404ing. Map shows "134/135 boundaries" until its polygon is sourced.
+        if "GL-137" not in existing:
+            tn = AU(name="Phường Thống Nhất", level=AdministrativeLevel.COMMUNE.value,
+                    parent_id=prov.id, code="GL-137", is_demo=False)
+            db.add(tn)
+            existing["GL-137"] = tn
+            added += 1
         db.flush()
         print(f"[seed] real communes: +{added} new, {len(existing)} total with GL- codes")
         return {code: u.id for code, u in existing.items()}

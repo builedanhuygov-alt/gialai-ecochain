@@ -137,7 +137,16 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     const map = mapRef.current
     if(!map || !communesRef.current) return
     const feat = communesRef.current.features?.find((f:any)=> String(f.properties?.ma_xa)===String(props.ma_xa))
-    if(!feat) return
+    // Unit without boundary (e.g. Phường Thống Nhất — polygon pending):
+    // don't crash, explain honestly instead of flying nowhere.
+    if(!feat || !feat.geometry){
+      void new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' })
+        .setLngLat(map.getCenter() as any)
+        .setHTML(`<div style="font-family:Inter,sans-serif"><b>${props.ten_xa || props.name || ''}</b><br/><span style="font-size:11px;color:#B45309">Chưa có ranh giới trên bản đồ — đang bổ sung polygon.</span></div>`)
+        .addTo(map)
+      setSuggests([]); setSearch(props.ten_xa||'')
+      return
+    }
     try{
       map.fitBounds(communeBounds(feat) as any, { padding:40, duration:800 })
       const cx=(communeBounds(feat)[0][0]+communeBounds(feat)[1][0])/2, cy=(communeBounds(feat)[0][1]+communeBounds(feat)[1][1])/2

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ModeSwitch from './ModeSwitch'
 import { api, API_BASE } from '../services/api'
-import { LANGS, useLang } from '../i18n'
+import { useLang } from '../i18n'
 
 export default function Header({ onMenu }: { onMenu: ()=>void }) {
   const [now, setNow] = useState(new Date())
@@ -31,7 +31,7 @@ export default function Header({ onMenu }: { onMenu: ()=>void }) {
     setOpen(false); setQ(h.name || '')
     window.dispatchEvent(new CustomEvent('ecochain-search', { detail: h }))
   }
-  const { lang, setLang, t } = useLang()
+  const { t } = useLang()
   useEffect(()=>{
     const id=setInterval(()=> setNow(new Date()), 1000)
     const ping = ()=>{
@@ -78,10 +78,8 @@ export default function Header({ onMenu }: { onMenu: ()=>void }) {
           {backendUp === false ? 'Mất kết nối' : t('hdr.live')}
         </span>
         <span className="meta">Cập nhật: {timeStr}</span>
-        <span title={t('hdr.langNote')} style={{display:'flex', gap:4, alignItems:'center'}}>
-          {LANGS.map(l=> (
-            <button key={l.id} onClick={()=> setLang(l.id)} aria-label={l.label} style={{border: lang===l.id ? '1px solid #0F766E' : '1px solid #E2E8E5', background: lang===l.id ? '#0F766E' : '#fff', color: lang===l.id ? '#fff' : '#000', borderRadius:999, padding:'4px 8px', fontSize:11, fontWeight:700}}>{l.id === 'vi' ? 'VI' : l.id === 'jr' ? 'JR' : 'EĐ'}</button>
-          ))}
+        <span title="Giao diện tiếng Việt" style={{display:'flex', gap:4, alignItems:'center'}}>
+          <span style={{border:'1px solid #0F766E', background:'#0F766E', color:'#fff', borderRadius:999, padding:'4px 8px', fontSize:11, fontWeight:700}}>VI</span>
         </span>
         <button className="icon-btn" aria-label={t('hdr.notif')} onClick={()=> nav('/notifications')}><Bell size={18}/>{activeCount > 0 && <span className="badge">{activeCount}</span>}</button>
         <button className="assistant" aria-label={t('hdr.assistant')} onClick={()=> window.dispatchEvent(new CustomEvent('ecochain-open-ai', { detail:{} }))}><Bot size={16}/> {t('hdr.assistant')}</button>
