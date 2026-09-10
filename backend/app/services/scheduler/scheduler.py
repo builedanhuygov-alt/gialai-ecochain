@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
+from app.core.time import utcnow
 from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,7 @@ class SchedulerService:
         s = get_settings()
 
         def _forest_job():
-            logger.info("[ForestGuard] Scheduled forest monitoring triggered at %s", datetime.utcnow().isoformat())
+            logger.info("[ForestGuard] Scheduled forest monitoring triggered at %s", utcnow().isoformat())
             try:
                 self.run_forest_cycle()
             except Exception as exc:
@@ -136,7 +137,7 @@ class SchedulerService:
                     break
                 job = ForestJob(administrative_unit_id=ma.administrative_unit_id, status="QUEUED", params='{"auto": true}')
                 db.add(job)
-                ma.last_monitored_at = datetime.utcnow()
+                ma.last_monitored_at = utcnow()
                 created += 1
             db.commit()
             logger.info("Forest cycle enqueued %s jobs", created)
@@ -160,7 +161,7 @@ class SchedulerService:
             return
         job = self._scheduler.get_job(job_id)
         if job:
-            job.modify(next_run_time=datetime.utcnow())
+            job.modify(next_run_time=utcnow())
 
 
 scheduler_service = SchedulerService()

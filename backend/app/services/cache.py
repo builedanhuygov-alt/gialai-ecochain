@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timedelta
+from app.core.time import utcnow
 from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
@@ -22,7 +23,7 @@ class QueryCacheService:
         entry: QueryCacheEntry | None = db.query(QueryCacheEntry).filter_by(query_hash=query_hash).first()
         if not entry:
             return None
-        if entry.expires_at and entry.expires_at < datetime.utcnow():
+        if entry.expires_at and entry.expires_at < utcnow():
             db.delete(entry)
             db.commit()
             return None
@@ -34,7 +35,7 @@ class QueryCacheService:
     def set(self, query_hash: str, result: Dict[str, Any], db: Session) -> None:
         entry = db.query(QueryCacheEntry).filter_by(query_hash=query_hash).first()
         payload = json.dumps(result)
-        expires = datetime.utcnow() + timedelta(hours=self.ttl_hours)
+        expires = utcnow() + timedelta(hours=self.ttl_hours)
         if entry:
             entry.result = payload
             entry.expires_at = expires

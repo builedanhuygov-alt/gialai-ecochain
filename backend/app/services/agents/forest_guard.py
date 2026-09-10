@@ -8,6 +8,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timedelta
+from app.core.time import utcnow
 from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
@@ -263,7 +264,7 @@ class MockForestGuardAgent(ForestGuardAgent):
         if db is None:
             return {"proposal_id": str(uuid.uuid4()), "status": ProposalStatus.PENDING.value, "persisted": False, **analysis}
         # expiry 30 days (Sec 15)
-        expires = datetime.utcnow() + timedelta(days=30)
+        expires = utcnow() + timedelta(days=30)
         raw = RawData(
             administrative_unit_id=analysis["administrative_unit_id"],
             source="EARTH_ENGINE",

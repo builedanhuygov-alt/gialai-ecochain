@@ -8,6 +8,7 @@ versions fall back to v1.0 with a warning.
 """
 import logging
 from datetime import datetime
+from app.core.time import utcnow
 from typing import Dict, List
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ def switch(agent: str, version: str) -> str:
     if version not in AVAILABLE[agent]:
         raise ValueError(f"Version {version} does not exist for {agent}. Available: {AVAILABLE[agent]}")
     _active[agent] = version
-    _history.append({"agent": agent, "version": version, "at": datetime.utcnow().isoformat()})
+    _history.append({"agent": agent, "version": version, "at": utcnow().isoformat()})
     del _history[:-20]
     return version
 

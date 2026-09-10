@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from app.core.time import utcnow
 from typing import Any, Dict, List
 
 from sqlalchemy.orm import Session
@@ -76,7 +77,7 @@ def maybe_auto_verify(db: Session, proposal_id: str) -> Dict[str, Any]:
         geo_check = check_geo_consistency(p.location_lat, p.location_lng, payload.get("geometry") or {"type": "Polygon", "coordinates": [[[108,13],[109,13],[109,14],[108,14],[108,13]]]})
         if not geo_check["ok"] and geo_check.get("flag") == "LOCATION_MISMATCH":
             location_ok = False
-        time_check = check_time_consistency(p.exif_time, p.upload_time or datetime.utcnow())
+        time_check = check_time_consistency(p.exif_time, p.upload_time or utcnow())
         if not time_check["ok"]:
             time_ok = False
 
@@ -94,7 +95,7 @@ def maybe_auto_verify(db: Session, proposal_id: str) -> Dict[str, Any]:
     )
     if mvp_gates or scoring["passes"]:
         proposal.status = ProposalStatus.COMMUNITY_VERIFIED.value
-        proposal.updated_at = datetime.utcnow()
+        proposal.updated_at = utcnow()
         db.flush()
         # audit
         try:

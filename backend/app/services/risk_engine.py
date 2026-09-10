@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json, hashlib, random
 from datetime import datetime
+from app.core.time import utcnow
 from typing import Any, Dict, List
 from sqlalchemy.orm import Session
 from app.models.risk import RiskSignal, RiskScore, RiskHistory
@@ -41,7 +42,7 @@ class RiskEngine:
         rs=RiskScore(administrative_unit_id=administrative_unit_id, overall_score=overall, overall_level=_level(overall).value, breakdown=json.dumps(breakdown), confidence=avg_conf, model_version=MODEL_VERSION)
         db.add(rs)
         # history + signals persistence
-        period=datetime.utcnow().strftime("%Y-%m")
+        period=utcnow().strftime("%Y-%m")
         for k,score in breakdown.items():
             db.add(RiskHistory(administrative_unit_id=administrative_unit_id, risk_type=k.upper(), score=score, period=period))
             db.add(RiskSignal(agent="RiskEngine", risk_type=k.upper(), administrative_unit_id=administrative_unit_id, score=score, confidence=avg_conf, level=_level(score).value, model_version=MODEL_VERSION, data_sources=json.dumps(list(signals.keys())), explanation=str(signals.get(k,{}).get("explanation","")), data_quality="MEDIUM"))

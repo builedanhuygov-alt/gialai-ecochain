@@ -1,6 +1,7 @@
 """Sec 58 APIs — risk / alerts / disaster / carbon / rankings / achievements + profiles."""
 import json
 from datetime import datetime
+from app.core.time import utcnow
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -195,7 +196,7 @@ def carbon_analyze(body:dict, db:Session=Depends(get_db)):
     area=body.get("forest_area_ha")
     ndvi=body.get("ndvi")
     result=carbon_guard.analyze(unit_id, forest_area_ha=area, ndvi=ndvi, ndvi_change=body.get("ndvi_change"))
-    rec=CarbonRecord(administrative_unit_id=unit_id, period=body.get("period") or datetime.utcnow().strftime("%Y-%m"), forest_area_ha=result["forest_area_ha"], carbon_stock_t=result["estimated_carbon_stock_t"], carbon_change_pct=result["potential_carbon_change_pct"], confidence=result["confidence"], model_version=result["model_version"])
+    rec=CarbonRecord(administrative_unit_id=unit_id, period=body.get("period") or utcnow().strftime("%Y-%m"), forest_area_ha=result["forest_area_ha"], carbon_stock_t=result["estimated_carbon_stock_t"], carbon_change_pct=result["potential_carbon_change_pct"], confidence=result["confidence"], model_version=result["model_version"])
     db.add(rec); db.commit()
     return {**result, "origin": tag_data_origin(), "disclaimer": "Estimated carbon — not credit certification (Sec 23)"}
 

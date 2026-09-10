@@ -1,6 +1,7 @@
 """Phase5 unified routes — orchestrator, media, alerts, field mobile, public, assistant, reports."""
 import json, hashlib, time
 from datetime import datetime, timedelta
+from app.core.time import utcnow
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Header, UploadFile, File
 from sqlalchemy.orm import Session
@@ -68,7 +69,7 @@ def unified_alerts(db:Session=Depends(get_db)):
     def score(a):
         s=sev.get(a.level,2)*40 + (40 if a.status=="ACTIVE" else 0)
         # recency boost
-        age=(datetime.utcnow() - (a.created_at or datetime.utcnow())).total_seconds()/3600
+        age=(utcnow() - (a.created_at or utcnow())).total_seconds()/3600
         s+= max(0, 10 - age*0.1)
         return s
     alerts.sort(key=score, reverse=True)
@@ -116,7 +117,7 @@ def media_analyze(file: UploadFile = File(...), db:Session=Depends(get_db)):
 def public_map(db:Session=Depends(get_db)):
     # verified alerts only, no private farmer info, no unverified sensitive
     alerts=db.query(Alert).filter(Alert.status.in_(["ACTIVE","ACKNOWLEDGED"])).limit(20).all()
-    return {"verified_alerts": [{"id": a.id, "level": a.level, "title": a.title, "administrative_unit_id": a.administrative_unit_id} for a in alerts], "forest_monitoring":"AI monitoring signal", "achievements": [], "transparency": {"data_source": "satellite+community", "last_updated": datetime.utcnow().isoformat()}}
+    return {"verified_alerts": [{"id": a.id, "level": a.level, "title": a.title, "administrative_unit_id": a.administrative_unit_id} for a in alerts], "forest_monitoring":"AI monitoring signal", "achievements": [], "transparency": {"data_source": "satellite+community", "last_updated": utcnow().isoformat()}}
 
 @router.get("/public/incidents/{incident_id}")
 def public_incident(incident_id:str, db:Session=Depends(get_db)):
@@ -128,7 +129,7 @@ def public_incident(incident_id:str, db:Session=Depends(get_db)):
 @router.get("/public/data-freshness")
 def data_freshness(db:Session=Depends(get_db)):
     last=db.query(Alert).order_by(Alert.created_at.desc()).first()
-    return {"forest_data": {"updated": str(last.created_at) if last else datetime.utcnow().isoformat(), "source":"Satellite","status":"AI monitoring signal"}}
+    return {"forest_data": {"updated": str(last.created_at) if last else utcnow().isoformat(), "source":"Satellite","status":"AI monitoring signal"}}
 
 # ── NL Assistant Sec37-39 ─────────────────────────────────────────
 @router.post("/ai/assistant/query")
@@ -143,7 +144,7 @@ def ai_query(body:dict, db:Session=Depends(get_db)):
         scores=db.query(RiskScore).order_by(RiskScore.overall_score.desc()).limit(3).all()
         if not scores: return {"answer": "Insufficient verified data.", "sources": []}
         ans="Top current fire-risk communes:\n" + "\n".join(f"{i+1}. {s.administrative_unit_id} — {s.overall_score}" for i,s in enumerate(scores))
-        return {"answer": ans, "sources": ["RiskScore verified"], "data_updated": datetime.utcnow().isoformat()}
+        return {"answer": ans, "sources": ["RiskScore verified"], "data_updated": utcnow().isoformat()}
     return {"answer": "Insufficient verified data. Try 'Xã nào đang có nguy cơ cháy cao nhất?'", "sources": []}
 
 # ── Reports Sec40-42 ──────────────────────────────────────────────
@@ -152,7 +153,7 @@ def generate_report(type: str = Query(default="province"), db:Session=Depends(ge
     # types: province/commune/forest/disaster/carbon/eudr/logistics
     from app.models.risk import RiskScore as RS
     scores=db.query(RS).limit(5).all()
-    summary={"top_5_risk": [{"unit": s.administrative_unit_id, "score": s.overall_score} for s in scores], "incidents": db.query(Incident).count(), "generated_at": datetime.utcnow().isoformat()}
+    summary={"top_5_risk": [{"unit": s.administrative_unit_id, "score": s.overall_score} for s in scores], "incidents": db.query(Incident).count(), "generated_at": utcnow().isoformat()}
     return {"report_type": type, "summary": summary, "disclaimer": "All numbers from database"}
 
 # ── Observability Sec54-56 + health ───────────────────────────────

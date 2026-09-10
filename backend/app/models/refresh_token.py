@@ -5,6 +5,7 @@ used token (`replaced_by` points at its successor). Reusing an already
 revoked token rejects the request AND revokes the whole chain for that user.
 """
 from datetime import datetime
+from app.core.time import utcnow
 
 from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -21,4 +22,4 @@ class RefreshToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     replaced_by: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

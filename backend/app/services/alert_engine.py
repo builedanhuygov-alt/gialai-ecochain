@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 from datetime import datetime, timedelta
+from app.core.time import utcnow
 from typing import Any, Dict
 from sqlalchemy.orm import Session
 from app.models.risk import Alert, Incident, IncidentEvidence
@@ -19,7 +20,7 @@ class AlertEngine:
             title=f"{lvl} — Potential {risk_type.lower()} risk in {administrative_unit_id}",
             message=f"Potential {risk_type.lower()} risk detected. Risk {score}/100 Confidence {confidence}%",
             explanation=explanation, geometry=json.dumps(geometry) if geometry else None,
-            expires_at=datetime.utcnow()+timedelta(days=ttl_days)
+            expires_at=utcnow()+timedelta(days=ttl_days)
         )
         db.add(alert)
         # incident
@@ -39,14 +40,14 @@ class AlertEngine:
     def resolve(self, db:Session, alert_id:str, actor_id:str|None=None)->Alert:
         a=db.get(Alert, alert_id)
         if not a: raise ValueError("Alert not found")
-        a.status="RESOLVED"; a.resolved_at=datetime.utcnow()
+        a.status="RESOLVED"; a.resolved_at=utcnow()
         audit_log(db, action="ALERT_RESOLVED", resource_type="alert", resource_id=alert_id, actor_id=actor_id)
         # also resolve incident
         inc=db.query(Incident).filter_by(alert_id=alert_id).first()
         if inc: inc.status="RESOLVED"
         db.commit(); return a
     def expire_stale(self, db:Session):
-        now=datetime.utcnow()
+        now=utcnow()
         for a in db.query(Alert).filter(Alert.status=="ACTIVE", Alert.expires_at < now).all():
             a.status="EXPIRED"
         db.commit()

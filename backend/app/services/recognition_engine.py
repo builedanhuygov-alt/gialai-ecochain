@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 from datetime import datetime
+from app.core.time import utcnow
 from sqlalchemy.orm import Session
 from app.models.risk import Achievement
 from app.services.audit import audit_log
@@ -26,7 +27,7 @@ class RecognitionEngine:
     def award(self, db:Session, name:str, administrative_unit_id:str, period:str|None=None, score:float|None=None, evidence:dict|None=None, verified_by:str|None=None)->Achievement:
         if name not in ACHIEVEMENTS: raise ValueError(f"Unknown achievement {name}")
         if not evidence: raise ValueError("Evidence required — no award without evidence (Sec 39)")
-        period=period or datetime.utcnow().strftime("%Y-%m")
+        period=period or utcnow().strftime("%Y-%m")
         ach=Achievement(name=name, description=ACHIEVEMENTS[name]["criteria"], criteria=ACHIEVEMENTS[name]["criteria"], administrative_unit_id=administrative_unit_id, period=period, score=score, evidence=json.dumps(evidence), verified_by=verified_by)
         db.add(ach)
         audit_log(db, action="ACHIEVEMENT_AWARDED", resource_type="achievement", resource_id=ach.id, detail=name)

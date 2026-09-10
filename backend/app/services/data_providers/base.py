@@ -4,6 +4,7 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass, field
 from datetime import datetime
+from app.core.time import utcnow
 from typing import Any, Dict, Optional
 
 from app.core.enums import DataSourceType
@@ -24,7 +25,7 @@ class ProviderResult:
     dataset: str | None = None
     data: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
-    fetched_at: datetime = field(default_factory=datetime.utcnow)
+    fetched_at: datetime = field(default_factory=utcnow)
     is_demo: bool = False
 
 

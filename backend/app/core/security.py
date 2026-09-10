@@ -8,6 +8,7 @@ chain (reuse detection).
 """
 import uuid
 from datetime import datetime, timedelta
+from app.core.time import utcnow
 from typing import Optional
 
 import bcrypt
@@ -35,7 +36,7 @@ def verify_password(password: str, hashed: str) -> bool:
 
 def create_access_token(subject: str, expires_minutes: Optional[int] = None) -> str:
     s = get_settings()
-    expire = datetime.utcnow() + timedelta(
+    expire = utcnow() + timedelta(
         minutes=expires_minutes if expires_minutes is not None else s.access_token_expire_minutes
     )
     return jwt.encode(
@@ -51,7 +52,7 @@ def create_refresh_token(username: str, db: Session) -> str:
 
     s = get_settings()
     jti = uuid.uuid4().hex
-    expires_at = datetime.utcnow() + timedelta(days=s.refresh_token_expire_days)
+    expires_at = utcnow() + timedelta(days=s.refresh_token_expire_days)
     db.add(RefreshToken(username=username, jti=jti, expires_at=expires_at))
     db.commit()
     return jwt.encode(

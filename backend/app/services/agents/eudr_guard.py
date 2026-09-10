@@ -2,6 +2,7 @@
 from __future__ import annotations
 import hashlib, json, random
 from datetime import datetime
+from app.core.time import utcnow
 from typing import Any, Dict, List
 from sqlalchemy.orm import Session
 from app.models.farm import Farm, Plot, ProductionLot
@@ -98,7 +99,7 @@ class EUDRGuardAgent:
             "production": lot.harvest_date if lot else None, "forest_evidence": a["forest_context"],
             "risk_assessment": a["readiness"], "supporting_evidence": a["due_diligence"]["checks"],
             "verification_history": a["traceability"], "data_quality": lot.data_quality if lot else None,
-            "generated_at": datetime.utcnow().isoformat(), "disclaimer": "EUDR Readiness Report — not legal certification"
+            "generated_at": utcnow().isoformat(), "disclaimer": "EUDR Readiness Report — not legal certification"
         }
 
 eudr_guard=EUDRGuardAgent()

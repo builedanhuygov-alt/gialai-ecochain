@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json, hashlib, random
 from datetime import datetime
+from app.core.time import utcnow
 from typing import Any, List
 from sqlalchemy.orm import Session
 from app.models.risk import RankingSnapshot
@@ -12,7 +13,7 @@ TYPES=["SAFETY","RESPONSE","FOREST","COMMUNITY","PREPAREDNESS"]
 
 class RankingEngine:
     def compute(self, db:Session, ranking_type:str, period:str|None=None)->List[RankingSnapshot]:
-        period=period or datetime.utcnow().strftime("%Y-%m")
+        period=period or utcnow().strftime("%Y-%m")
         t=ranking_type.upper()
         # fairness: base on response performance not incident count
         units=db.query(RiskScore).all()

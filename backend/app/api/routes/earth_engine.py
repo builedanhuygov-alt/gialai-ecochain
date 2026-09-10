@@ -1,6 +1,7 @@
 """Earth Engine status — Sec 4 health check."""
 from fastapi import APIRouter
 from datetime import datetime
+from app.core.time import utcnow
 
 from app.services.earth_engine.auth import gee_auth
 from app.core.config import get_settings
@@ -15,5 +16,5 @@ def status():
     if not s.gee_configured:
         return {"connected": False, "reason": "NOT_CONFIGURED", "project": s.gee_project_id, "last_test": None, "detail": cfg}
     if connected:
-        return {"connected": True, "project": s.gee_project_id, "last_test": datetime.utcnow().isoformat(), "detail": cfg}
-    return {"connected": False, "reason": cfg["status"], "project": s.gee_project_id, "last_test": datetime.utcnow().isoformat(), "detail": cfg}
+        return {"connected": True, "project": s.gee_project_id, "last_test": utcnow().isoformat(), "detail": cfg}
+    return {"connected": False, "reason": cfg["status"], "project": s.gee_project_id, "last_test": utcnow().isoformat(), "detail": cfg}

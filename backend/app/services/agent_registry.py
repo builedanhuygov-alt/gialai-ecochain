@@ -18,5 +18,6 @@ def select_agents(goal_type:str)->List[str]:
     mapping={"FOREST_PROTECTION":["ForestGuard"],"DISASTER_PREPAREDNESS":["DisasterGuard"],"CARBON_REDUCTION":["CarbonGuard"],"EUDR_COMPLIANCE":["EUDRGuard"],"GREEN_LOGISTICS":["GreenRouteAgent"],"SUPPLY_CHAIN_RESILIENCE":["GreenRouteAgent","EUDRGuard"],"AGRICULTURAL_RESILIENCE":["DisasterGuard","PredictiveEcoAgent"]}
     return mapping.get(goal_type, ["ForestGuard","DisasterGuard"])
 def make_message(sender:str, receiver:str, task_id:str, payload:dict, confidence:int=80)->dict:
-    import uuid, datetime
-    return {"message_id": str(uuid.uuid4()), "sender": sender, "receiver": receiver, "task_id": task_id, "timestamp": datetime.datetime.utcnow().isoformat(), "payload": payload, "confidence": confidence, "model_version":"v1.0", "data_sources":["mock"]}
+    import uuid
+    from app.core.time import utcnow
+    return {"message_id": str(uuid.uuid4()), "sender": sender, "receiver": receiver, "task_id": task_id, "timestamp": utcnow().isoformat(), "payload": payload, "confidence": confidence, "model_version":"v1.0", "data_sources":["mock"]}

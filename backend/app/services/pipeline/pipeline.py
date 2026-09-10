@@ -5,6 +5,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
+from app.core.time import utcnow
 from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
@@ -175,7 +176,7 @@ def approve_proposal(db: Session, proposal_id: str, verified_by: str) -> Dict[st
 
     proposal.status = ProposalStatus.VERIFIED.value
     proposal.reviewed_by = verified_by
-    proposal.reviewed_at = datetime.utcnow()
+    proposal.reviewed_at = utcnow()
 
     verified = VerifiedData(
         administrative_unit_id=proposal.administrative_unit_id,
@@ -200,7 +201,7 @@ def reject_proposal(db: Session, proposal_id: str, reviewed_by: str, reason: str
         raise PipelineError("Proposal not found")
     proposal.status = ProposalStatus.REJECTED.value
     proposal.reviewed_by = reviewed_by
-    proposal.reviewed_at = datetime.utcnow()
+    proposal.reviewed_at = utcnow()
     proposal.rejection_reason = reason
     db.commit()
     return {"proposal_id": proposal.id, "status": "REJECTED"}
