@@ -55,6 +55,20 @@ class AdministrativeUnit(Base):
         except Exception:
             return None
 
+    @staticmethod
+    def resolve_unit(db, key: str | None):
+        """Join helper: match a unit by id OR stable code (GL-<ma_xa>).
+
+        OfficialFireWarning rows store the commune's unit id; callers may
+        pass either the UUID id or the human-stable code.
+        """
+        if not key:
+            return None
+        u = db.query(AdministrativeUnit).filter_by(id=key).first()
+        if u is not None:
+            return u
+        return db.query(AdministrativeUnit).filter_by(code=key).first()
+
     def set_geometry(self, geojson: dict) -> None:
         import json
         import os
@@ -83,11 +97,15 @@ class AdministrativeUnit(Base):
                     raise
                 pass
 
-        # Pure-python fallback: bbox centre
+        # Pure-python fallback: bbox centre (handles Polygon + MultiPolygon)
         try:
-            coords = geojson["coordinates"][0] if geojson["type"] == "Polygon" else geojson["coordinates"][0][0]
-            xs = [c[0] for c in coords]
-            ys = [c[1] for c in coords]
+            rings: list = []
+            if geojson["type"] == "Polygon":
+                rings = [geojson["coordinates"][0]]
+            elif geojson["type"] == "MultiPolygon":
+                rings = [poly[0] for poly in geojson["coordinates"] if poly]
+            xs = [c[0] for r in rings for c in r]
+            ys = [c[1] for r in rings for c in r]
             self.centroid_lng = sum(xs) / len(xs)
             self.centroid_lat = sum(ys) / len(ys)
             self.area_ha = abs((max(xs) - min(xs)) * (max(ys) - min(ys)) * 1236400000 * 0.01)

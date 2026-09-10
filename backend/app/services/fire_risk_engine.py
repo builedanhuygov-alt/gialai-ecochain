@@ -105,7 +105,10 @@ class FireRiskEngine:
         except:
             return level_str
     def official_vs_ai(self, db:Session, administrative_unit_id:str, ai_level:str)->Dict:
-        off=db.query(OfficialFireWarning).filter_by(administrative_unit_id=administrative_unit_id).order_by(OfficialFireWarning.issued_at.desc()).first()
+        from app.models.administrative import AdministrativeUnit
+        unit=AdministrativeUnit.resolve_unit(db, administrative_unit_id)
+        keys=[administrative_unit_id] + ([unit.id, unit.code] if unit else [])
+        off=db.query(OfficialFireWarning).filter(OfficialFireWarning.administrative_unit_id.in_(keys)).order_by(OfficialFireWarning.issued_at.desc()).first()
         if not off:
             return {"official": {"status":"OFFICIAL WARNING Không có dữ liệu"}, "ai": {"level": ai_level, "label": self._label(ai_level)}, "discrepancy": False}
         disc= off.level != ai_level

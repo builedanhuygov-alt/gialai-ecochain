@@ -68,6 +68,8 @@ class ForestChangeResult:
     change_percentage: float
     affected_area_ha: Optional[float] = None
     confidence: float = 0.0  # 0-1
+    risk_score: Optional[int] = None  # 0-100 heuristic (risk_from_change)
+    classification: Optional[str] = None  # LOW..CRITICAL
     source: str = "EARTH_ENGINE"
     source_dataset: str = "COPERNICUS/S2_SR_HARMONIZED"
     processing_time_ms: Optional[int] = None
@@ -311,7 +313,7 @@ class GEE_EarthEngineService(EarthEngineService):
         # convert timestamp to date
         try:
             import datetime
-            acq=datetime.datetime.utcfromtimestamp(acquired/1000).strftime("%Y-%m-%d") if isinstance(acquired,int) else params.start_date
+            acq=datetime.datetime.fromtimestamp(acquired/1000, tz=datetime.timezone.utc).strftime("%Y-%m-%d") if isinstance(acquired,int) else params.start_date
         except: acq=params.start_date
         return EEImageryResult(
             query_id=str(uuid.uuid4()),
@@ -423,8 +425,9 @@ class GEE_EarthEngineService(EarthEngineService):
         return {"tile_url": tile_url, "acquired": acq, "cloud": params.cloud_percentage, "source": cfg.collection_id if layer not in ("s1","landsat8","landsat9","dw","worldcover","dem") else layer, "provider":"Google Earth Engine", "status":"LIVE", "resolution": f"{cfg.scale_m} m", "layer": layer}
 
     def detect_forest_change(self, *a, **kw) -> ForestChangeResult:
-        # reuse mock logic but with real NDVI if possible
-        # for now delegate to mock calculation with real NDVI when available
+        # real NDVI for before/after + heuristic scoring shared with the mock
+        # path (risk_from_change / confidence_from_inputs). Confidence reflects
+        # real image availability — never a hardcoded constant.
         try:
             # try real NDVI for before/after
             before_params=EEQueryParams(administrative_unit_id=kw.get("administrative_unit_id") or a[0], geometry=kw.get("geometry") or a[1], start_date=kw.get("period_before",a[2])[0] if len(a)>2 else kw["period_before"][0], end_date=kw.get("period_before",a[2])[1] if len(a)>2 else kw["period_before"][1], dataset=kw.get("dataset",SatelliteSource.SENTINEL2), cloud_percentage=kw.get("cloud_percentage",20))
@@ -433,9 +436,16 @@ class GEE_EarthEngineService(EarthEngineService):
             after=self.calculate_ndvi(after_params)
             change=round(after.mean - before.mean,4)
             pct=round((change/before.mean*100) if before.mean else 0,2)
-            import random
-            affected=round(abs(change)*120+5,2)
-            return ForestChangeResult(administrative_unit_id=before_params.administrative_unit_id, period_start=after_params.start_date, period_end=after_params.end_date, ndvi_before=before.mean, ndvi_after=after.mean, ndvi_change=change, change_percentage=pct, affected_area_ha=affected, confidence=0.85, source="EARTH_ENGINE", source_dataset=get_dataset_config(before_params.dataset).collection_id, processing_time_ms=0, status="PROPOSED")
+            from app.services.earth_engine.change_detection import risk_from_change, confidence_from_inputs, affected_area_heuristic
+            try:
+                before_count=int(self.get_imagery(before_params).image_count)
+                after_count=int(self.get_imagery(after_params).image_count)
+            except Exception:
+                before_count=after_count=1  # unknown => conservative confidence
+            risk_score, classification=risk_from_change(change, pct)
+            confidence=confidence_from_inputs(change, after_count, before_count, after_params.cloud_percentage, after.std_dev)
+            affected=affected_area_heuristic(change, None, after_count)
+            return ForestChangeResult(administrative_unit_id=before_params.administrative_unit_id, period_start=after_params.start_date, period_end=after_params.end_date, ndvi_before=before.mean, ndvi_after=after.mean, ndvi_change=change, change_percentage=pct, affected_area_ha=affected, confidence=confidence/100, risk_score=risk_score, classification=classification.value, source="EARTH_ENGINE", source_dataset=get_dataset_config(before_params.dataset).collection_id, processing_time_ms=0, status="PROPOSED")
         except Exception as e:
             # fallback to mock if real fails
             from app.services.earth_engine.change_detection import detect_change_mock

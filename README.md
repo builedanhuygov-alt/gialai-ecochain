@@ -68,7 +68,7 @@ GIALAI EcoChain là **Hệ thống cảnh báo sớm cháy rừng cấp tỉnh**
 
 | Agent | Capabilities | Model | Input | Output |
 |---|---|---|---|---|
-| **ForestGuard** | `forest_change_detection, vegetation_analysis` | `v1.0` | geometry, dates, cloud% | risk 0–100 + confidence + `forest_risk` |
+| **ForestGuard** | `forest_change_detection, vegetation_analysis` — heuristic `risk_from_change` + `confidence_from_inputs` (documented formula, NOT trained ML); `REAL_NDVI` path via `GEEForestGuardAgent` when GEE connected (`agent_impl`/`method` fields say which path ran), mock fallback otherwise | `v1.0` | geometry, dates, cloud% | risk 0–100 + confidence + `forest_risk` |
 | **DisasterGuard** | `fire/flood/landslide/drought/heat` | `v1.0` | temp, rainfall, slope, elevation | score + `Potential Flood Risk` wording |
 | **CarbonGuard** | `carbon_stock, carbon_change` | `v1.0` | forest area, NDVI | `Estimated Carbon` |
 | **EUDRGuard** | `eudr_readiness, traceability` | `v1.0` | lot_id | readiness + flags |
@@ -178,7 +178,7 @@ CREATE EXTENSION postgis;
 
 ## Database
 
-Migration: `app.database.Base.metadata.create_all(bind=engine)` (Alembic scaffold present). Seed creates Gia Lai Province → Xã A/B → Thôn 1/2 polygons + 4 monitored areas + vehicle `81A-12345`. Partition by `tenant/province/time` ready for multi-province.
+Migration: `app.database.Base.metadata.create_all(bind=engine)` (Alembic scaffold present). Seed creates Gia Lai Province (real boundary from `backend/app/data/gialai_province.geojson`) → **134 real communes/wards** (`backend/app/data/gialai_communes.geojson`, codes `GL-<ma_xa>`, `is_demo=False`) + demo Xã A/B + Thôn 1/2 (kept for flows, clearly labeled) + 4 monitored areas + vehicle `81A-12345`. The 5 documented Hè-2026 fires (`seed_historical_fires`) store their commune's unit id with a real FK (`official_fire_warnings.administrative_unit_id → administrative_units.id`) — verified joined + point-in-polygon in `test_calibration.py`. Partition by `tenant/province/time` ready for multi-province.
 
 ---
 
@@ -243,8 +243,8 @@ Current: `v1.0.0` points to `Phase9` + UI merge (9 tags: `phase1-ai-ready` → `
 
 ## Known Limitations
 
-- GEE real mode requires credentials; without them system runs deterministic mock (clearly labeled).
-- `earthengine-api` is an optional dep (lazy-imported; app boots without it) — `geemap` is NOT used anywhere in code. Real NDVI requires `ee.Initialize` with valid service-account credentials.
+- GEE real mode requires credentials; without them system runs deterministic mock (clearly labeled via `agent_impl`/`method`/`origin` on every response).
+- Risk/confidence scoring is **heuristic, not machine learning** (`risk_from_change`, `confidence_from_inputs`): thresholds sanity-checked against the 5 documented burns in `test_calibration.py`, but never trained/fitted on historical data. `earthengine-api` is an optional dep (lazy-imported; app boots without it) — `geemap` is NOT used anywhere in code. Real NDVI requires `ee.Initialize` with valid service-account credentials.
 - Map clustering not yet paginating >10k features — viewport loading recommended for >5k markers.
 - Bundle is code-split: routes via `lazy()` + vendor chunks (`vendor-map` maplibre ~969kB loads only on map routes; initial `index` ~41kB). maplibre stays heavy — consider vector-tile simplification for low-end devices.
 - RBAC model is minimal but enforced server-side: official approve/verify = `admin` only, actor identity always from JWT (client-supplied `approved_by`/`actor_id` ignored); alert ack/verify/resolve require login. Roles today: `admin` (first registered user) + `viewer` — no province/commune identity verification yet.

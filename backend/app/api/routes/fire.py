@@ -14,8 +14,14 @@ router=APIRouter(tags=["Fire"])
 
 @router.get("/fire/warnings")
 def list_warnings(administrative_unit_id: Optional[str]=Query(default=None), db:Session=Depends(get_db)):
+    from app.models.administrative import AdministrativeUnit
     q=db.query(OfficialFireWarning)
-    if administrative_unit_id: q=q.filter(OfficialFireWarning.administrative_unit_id==administrative_unit_id)
+    if administrative_unit_id:
+        # accept unit id, stable code (GL-<ma_xa>), or legacy key — resolve to
+        # the real unit first so historical fires join their communes
+        unit=AdministrativeUnit.resolve_unit(db, administrative_unit_id)
+        keys=[administrative_unit_id] + ([unit.id, unit.code] if unit else [])
+        q=q.filter(OfficialFireWarning.administrative_unit_id.in_(keys))
     warns=q.order_by(OfficialFireWarning.issued_at.desc()).limit(20).all()
     return [{"id": w.id, "level": w.level, "label": FIRE_WARNING_LABELS.get(FireWarningLevel(w.level), w.level) if w.level in [e.value for e in FireWarningLevel] else w.level, "source": w.source, "issued_at": str(w.issued_at), "scope": w.scope} for w in warns]
 

@@ -149,6 +149,7 @@ class MockForestGuardAgent(ForestGuardAgent):
             # Phase 2 output with risk/confidence separate (Sec 11-12,14)
             proposal_payload = {
                 "agent": "ForestGuard",
+                "agent_impl": type(self).__name__,
                 "administrative_unit_id": administrative_unit_id,
                 "administrative_unit": administrative_unit_id,
                 "risk_score": change["risk_score"],
@@ -313,15 +314,59 @@ class MockForestGuardAgent(ForestGuardAgent):
 
 
 class GEEForestGuardAgent(MockForestGuardAgent):
-    pass
+    """Live path: real GEE NDVI through the same heuristic scoring.
+
+    Falls back to the mock path per-call when GEE is not connected, so this
+    agent is always safe to use — check `method` (REAL_NDVI vs MOCK_NDVI)
+    and `agent_impl` in the output to see which path actually ran.
+    """
+
+    def detect_change(self, administrative_unit_id: str, geometry: Dict[str, Any],
+                      period_before: tuple[str, str], period_after: tuple[str, str],
+                      dataset: SatelliteSource = SatelliteSource.SENTINEL2, cloud_percentage: int = 20) -> Dict[str, Any]:
+        from app.services.earth_engine.service import get_earth_engine_service, GEE_EarthEngineService
+        svc = get_earth_engine_service()
+        if isinstance(svc, GEE_EarthEngineService):
+            try:
+                total_area = None
+                try:
+                    coords = geometry.get("coordinates", [[[0, 0]]])[0] if geometry.get("type") == "Polygon" else []
+                    if coords:
+                        xs = [c[0] for c in coords]; ys = [c[1] for c in coords]
+                        total_area = abs((max(xs) - min(xs)) * (max(ys) - min(ys)) * 1236400)
+                except Exception:
+                    pass
+                from app.services.earth_engine.change_detection import detect_change_real
+                return detect_change_real(administrative_unit_id, geometry, period_before, period_after,
+                                          svc, dataset, cloud_percentage, total_area)
+            except Exception:
+                logger.warning("GEE real NDVI failed, falling back to mock path", exc_info=True)
+        return super().detect_change(administrative_unit_id, geometry, period_before, period_after, dataset, cloud_percentage)
 
 
 def get_forest_guard_agent(use_mock: bool | None = None) -> ForestGuardAgent:
-    from app.core.config import get_settings
-    from app.services.model_switcher import resolve_version
+    """Factory with honest wiring (no dead branches).
 
-    s = get_settings()
-    ver = resolve_version("ForestGuard")  # plumbing is live; only v1.0 exists today
-    if s.is_demo or ver == "v1.0":
+    - use_mock=True  -> MockForestGuardAgent (deterministic demo data)
+    - use_mock=False -> GEEForestGuardAgent (real NDVI when connected,
+      per-call mock fallback otherwise)
+    - auto (None)    -> GEE agent only when the app is NOT in demo mode AND
+      GEE is configured AND currently connected; otherwise Mock.
+    """
+    from app.core.config import get_settings
+
+    if use_mock is True:
         return MockForestGuardAgent()
+    if use_mock is False:
+        return GEEForestGuardAgent()
+    s = get_settings()
+    if s.is_demo or not s.gee_configured:
+        return MockForestGuardAgent()
+    try:
+        from app.services.earth_engine.auth import gee_auth
+        from app.core.enums import GEEStatus
+        if gee_auth.status == GEEStatus.CONNECTED:
+            return GEEForestGuardAgent()
+    except Exception:
+        pass
     return MockForestGuardAgent()
