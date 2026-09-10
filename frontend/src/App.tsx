@@ -26,6 +26,28 @@ const Leaderboard = lazy(()=> import('./pages/Leaderboard'))
 const Reports = lazy(()=> import('./pages/Reports'))
 const Admin = lazy(()=> import('./pages/Admin'))
 const Audit = lazy(()=> import('./pages/Audit'))
+const Login = lazy(()=> import('./pages/Login'))
+
+const TITLES: Record<string,string> = {
+  '/': 'Bản đồ cháy rừng Gia Lai',
+  '/events': 'Sự kiện', '/what-if': 'What-if Lab', '/missions': 'Nhiệm vụ',
+  '/map': 'Bản đồ', '/forest': 'Rừng', '/disaster': 'Thiên tai',
+  '/agriculture': 'Nông nghiệp', '/carbon': 'Carbon', '/eudr': 'EUDR',
+  '/logistics': 'Logistics', '/twin': 'Bản sao số', '/community': 'Cộng đồng',
+  '/actions': 'Điều hành', '/leaderboard': 'Xếp hạng', '/reports': 'Báo cáo',
+  '/admin': 'Quản trị', '/notifications': 'Thông báo', '/audit': 'Nhật ký', '/login': 'Đăng nhập',
+}
+
+function NotFound(){
+  return (
+    <div style={{maxWidth:480, margin:'64px auto', textAlign:'center', background:'#fff', border:'1px solid #E2E8E5', borderRadius:16, padding:32}}>
+      <div style={{fontSize:40}}>🧭</div>
+      <h1 style={{fontSize:20, fontWeight:800}}>Không tìm thấy trang</h1>
+      <p style={{fontSize:13, color:'#64748B'}}>Địa chỉ không tồn tại. Về bản đồ cháy rừng Gia Lai:</p>
+      <a href="/" style={{display:'inline-block', background:'#0F766E', color:'#fff', padding:'8px 20px', borderRadius:999, fontSize:13, fontWeight:700, textDecoration:'none'}}>Về Eco Map</a>
+    </div>
+  )
+}
 
 function AIAssistant(){
   const [open, setOpen] = useState(false)
@@ -242,6 +264,11 @@ function AIAssistant(){
 
 function AnimatedRoutes(){
   const location = useLocation()
+  useEffect(()=>{
+    const base = Object.keys(TITLES).sort((a,b)=> b.length - a.length)
+      .find(p=> p === '/' ? location.pathname === '/' : location.pathname.startsWith(p))
+    document.title = `${base ? TITLES[base] + ' — ' : ''}GIALAI EcoChain`
+  },[location.pathname])
   return (
     <Suspense fallback={<div style={{padding:24}}><div className="skeleton" style={{height:320}} /></div>}>
       <AnimatePresence mode="wait">
@@ -267,6 +294,8 @@ function AnimatedRoutes(){
           <Route path="/admin" element={<PageTransition><Admin/></PageTransition>} />
           <Route path="/notifications" element={<PageTransition><Notifications/></PageTransition>} />
           <Route path="/audit" element={<PageTransition><Audit/></PageTransition>} />
+          <Route path="/login" element={<PageTransition><Login/></PageTransition>} />
+          <Route path="*" element={<PageTransition><NotFound/></PageTransition>} />
         </Routes>
       </AnimatePresence>
     </Suspense>

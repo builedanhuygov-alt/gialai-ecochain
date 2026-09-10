@@ -10,6 +10,18 @@ export default function Header({ onMenu }: { onMenu: ()=>void }) {
   const [activeCount, setActiveCount] = useState(0)
   // Chấm trạng thái phản ánh backend THẬT (không xanh tĩnh khi mất kết nối).
   const [backendUp, setBackendUp] = useState<boolean | null>(null)
+  const [user, setUser] = useState<{ username: string; role: string } | null>(null)
+  useEffect(()=>{
+    const load = ()=>{
+      try{
+        const raw = sessionStorage.getItem('ecogl_user')
+        setUser(raw ? JSON.parse(raw) : null)
+      }catch{ setUser(null) }
+    }
+    load()
+    window.addEventListener('ecochain-auth', load)
+    return ()=> window.removeEventListener('ecochain-auth', load)
+  },[])
   const nav = useNavigate()
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<any[]>([])
@@ -83,7 +95,16 @@ export default function Header({ onMenu }: { onMenu: ()=>void }) {
         </span>
         <button className="icon-btn" aria-label={t('hdr.notif')} onClick={()=> nav('/notifications')}><Bell size={18}/>{activeCount > 0 && <span className="badge">{activeCount}</span>}</button>
         <button className="assistant" aria-label={t('hdr.assistant')} onClick={()=> window.dispatchEvent(new CustomEvent('ecochain-open-ai', { detail:{} }))}><Bot size={16}/> {t('hdr.assistant')}</button>
-        <div className="user">QT</div>
+        {user ? (
+          <button className="user" title={`${user.username} (${user.role}) — bấm để đăng xuất`}
+            onClick={()=>{ try{ sessionStorage.removeItem('ecogl_admin_token'); sessionStorage.removeItem('ecogl_user') }catch{}; window.dispatchEvent(new CustomEvent('ecochain-auth')); nav('/login') }}
+            style={{border:0, cursor:'pointer', textTransform:'uppercase'}}>
+            {user.username.slice(0, 2)}
+          </button>
+        ) : (
+          <button className="user" title="Đăng nhập" onClick={()=> nav('/login')}
+            style={{border:0, cursor:'pointer', background:'#fff', color:'#0F766E', borderWidth:1, borderStyle:'solid', borderColor:'#0F766E'}}>→</button>
+        )}
       </div>
 
       <style>{`
