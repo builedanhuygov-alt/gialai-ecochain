@@ -67,6 +67,14 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   const [now, setNow] = useState(new Date())
   const [tickerIdx, setTickerIdx] = useState(0)
   const [showLayers, setShowLayers] = useState(false)
+  const [showBounds, setShowBounds] = useState(true)
+  useEffect(()=>{
+    const map = mapRef.current
+    if(!map) return
+    for(const id of ['boundary-fill','boundary','province-label','communes-fill','communes-casing','communes-line','communes-label']){
+      try{ if(map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showBounds ? 'visible' : 'none') }catch{}
+    }
+  },[showBounds])
   const communesRef = useRef<any>(null)
   const communeFireClickRef = useRef<any>(null)
   const [communesCount, setCommunesCount] = useState<number>(0)
@@ -97,10 +105,19 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     }
     throw last || new Error('fetch failed: ' + files.join(','))
   }
-  // Lớp nền raster luôn nằm dưới cùng (trước layer vector thấp nhất hiện có)
-  const bottomLayerId = (map:any)=>{
-    for(const id of ['boundary-fill','boundary','communes-fill']) try{ if(map.getLayer(id)) return id }catch{}
-    return undefined
+  // Đưa nền raster xuống đáy tuyệt đối — ranh giới/bản đồ vector không bao giờ bị che.
+  const lowerBase = (map:any)=>{
+    try{
+      if(!map.getLayer('base-xyz')) return
+      const layers = (map.getStyle()?.layers || []).map((l:any)=> l.id)
+      const firstOverlay = layers.find((id:string)=> id !== 'base-xyz' && id !== 'osm')
+      if(firstOverlay) map.moveLayer('base-xyz', firstOverlay)
+    }catch{}
+  }
+  // Chờ style load xong mới addSource/addLayer — tránh race "Style is not done loading".
+  const whenLoaded = async (map:any)=>{
+    if(map.isStyleLoaded()) return
+    await new Promise<void>(res=>{ try{ map.once('load', ()=> res()) }catch{ res() } })
   }
   const LEVEL_VI: Record<string,string> = { I:'Thấp', II:'Trung bình', III:'Cao', IV:'Nguy hiểm', V:'Cực kỳ nguy hiểm' }
   const hazardVi = (t:string)=> ({ FIRE:'Cháy', FLOOD:'Lũ', LANDSLIDE:'Sạt lở', DROUGHT:'Hạn', HEAT:'Nắng nóng', STORM:'Bão' } as any)[t] || t
@@ -342,18 +359,17 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     const tile = XYZ_TILES[baseXyz]
     if(!tile) return
     // Fallback Esri → OSM → static — nền luôn nằm DƯỚI vector (boundary/communes)
-    const before = bottomLayerId(map)
     try{
       map.addSource(sourceId, { type:'raster', tiles:[TILE_FIX(tile.url)], tileSize:256, attribution: tile.attribution } as any)
-      if(before) map.addLayer({ id: layerId, type:'raster', source: sourceId } as any, before)
-      else map.addLayer({ id: layerId, type:'raster', source: sourceId } as any)
+      map.addLayer({ id: layerId, type:'raster', source: sourceId } as any)
+      lowerBase(map)
     }catch(e){
       console.warn('Base tile add failed, fallback OSM', e)
       const osm = XYZ_TILES.osm
       try{
         map.addSource(sourceId, { type:'raster', tiles:[osm.url], tileSize:256, attribution: osm.attribution } as any)
-        if(before && map.getLayer(before)) map.addLayer({ id: layerId, type:'raster', source: sourceId } as any, before)
-        else map.addLayer({ id: layerId, type:'raster', source: sourceId } as any)
+        map.addLayer({ id: layerId, type:'raster', source: sourceId } as any)
+        lowerBase(map)
       }catch{}
     }
   }, [baseXyz])
@@ -577,12 +593,14 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         }
       }
       // Ranh tỉnh Gia Lai thực (viền ngoài, không lỗ) — file nhẹ 26KB
-      fetchJson(['gialai_province.geojson']).then((prov:any)=>{
+      fetchJson(['gialai_province.geojson']).then(async (prov:any)=>{
+        await whenLoaded(map)
         if(!map.getSource('gialai-boundary')){
           map.addSource('gialai-boundary', { type:'geojson', data: prov })
           map.addLayer({ id:'boundary-fill', type:'fill', source:'gialai-boundary', paint:{ 'fill-color':'#0F766E', 'fill-opacity':0.04 } })
           map.addLayer({ id:'boundary', type:'line', source:'gialai-boundary', paint:{ 'line-color':'#B91C1C', 'line-width':3, 'line-opacity':1 } })
           map.addLayer({ id:'province-label', type:'symbol', source:'gialai-boundary', layout:{ 'text-field':'TỈNH GIA LAI', 'text-size':16, 'text-font':['Open Sans ExtraBold','Arial Unicode MS Bold'] } as any, paint:{ 'text-color':'#B91C1C', 'text-halo-color':'#fff', 'text-halo-width':2 } })
+          lowerBase(map)
         }
       }).catch(()=>{ // fallback bbox nếu thiếu file
         if(!map.getSource('gialai-boundary')){
@@ -592,6 +610,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       })
       // 135 xã: bản nhẹ 836KB trước, rớt mới tải bản full 3.8MB
       fetchJson(['gialai_135_light.geojson','gialai_135.geojson']).then(async (fc:any)=>{
+        await whenLoaded(map)
         const feats = fc.features || []
         communesRef.current = fc
         setCommunesCount(feats.length)
@@ -602,8 +621,12 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           // Màu pastel phân biệt từng xã như ảnh mẫu baogialai — categorical theo ma_xa % 12
           const pastel = ['#fbb4ae','#b3cde3','#ccebc5','#decbe4','#fed9a6','#ffffcc','#e5d8bd','#fddaec','#f2f2f2','#b3e2cd','#cbd5e8','#e6f5c9'] as any
           const fillExpr = ['match', ['%', ['to-number', ['get','ma_xa']], 12], 0, pastel[0], 1, pastel[1], 2, pastel[2], 3, pastel[3], 4, pastel[4], 5, pastel[5], 6, pastel[6], 7, pastel[7], 8, pastel[8], 9, pastel[9], 10, pastel[10], pastel[11]] as any
-          map.addLayer({ id:'communes-fill', type:'fill', source:'gialai-communes', paint:{ 'fill-color': fillExpr, 'fill-opacity': 0.85 } })
-          map.addLayer({ id:'communes-line', type:'line', source:'gialai-communes', paint:{ 'line-color':'#ffffff', 'line-width':1.2, 'line-opacity':1 } })
+          map.addLayer({ id:'communes-fill', type:'fill', source:'gialai-communes', paint:{ 'fill-color': fillExpr, 'fill-opacity': 0.45 } })
+          // Viền 2 lớp (casing tối + viền trắng) để nổi trên cả nền vệ tinh
+          map.addLayer({ id:'communes-casing', type:'line', source:'gialai-communes', paint:{ 'line-color':'#0B1412', 'line-width':3.5, 'line-opacity':0.55 } })
+          map.addLayer({ id:'communes-line', type:'line', source:'gialai-communes', paint:{ 'line-color':'#ffffff', 'line-width':1.6, 'line-opacity':1 } })
+          map.addLayer({ id:'communes-label', type:'symbol', source:'gialai-communes', minzoom:7.5, layout:{ 'text-field':['get','ten_xa'], 'text-size':11, 'text-allow-overlap':false, 'text-ignore-placement':false, 'text-font':['Open Sans Bold','Arial Unicode MS Bold'] } as any, paint:{ 'text-color':'#111', 'text-halo-color':'#fff', 'text-halo-width':1.5 } })
+          lowerBase(map)
           map.addLayer({ id:'communes-label', type:'symbol', source:'gialai-communes', minzoom:7.5, layout:{ 'text-field':['get','ten_xa'], 'text-size':11, 'text-allow-overlap':false, 'text-ignore-placement':false, 'text-font':['Open Sans Bold','Arial Unicode MS Bold'] } as any, paint:{ 'text-color':'#111', 'text-halo-color':'#fff', 'text-halo-width':1.5 } })
           map.on('click','communes-fill',(e:any)=>{
             const f=e.features?.[0]?.properties
@@ -806,6 +829,10 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           ))}
         </div>
         <div style={{height:1, background:'rgba(255,255,255,0.15)'}}/>
+        <div style={{fontSize:11, fontWeight:700, opacity:.9}}>Ranh giới hành chính</div>
+        <label style={{display:'flex', gap:6, alignItems:'center', background: showBounds?'rgba(16,185,129,0.25)':'rgba(255,255,255,0.08)', padding:'6px 8px', borderRadius:8, fontSize:12, border:'1px solid rgba(255,255,255,0.15)', cursor:'pointer', color:'#fff'}}>
+          <input type="checkbox" checked={showBounds} onChange={()=> setShowBounds(v=> !v)} /> 🗺️ Ranh 134 xã + tỉnh
+        </label>
         <div style={{fontSize:11, fontWeight:700, opacity:.9}}>Lớp AI/GEE</div>
         {[
           ['hotspot','🔥 Điểm nhiệt FIRMS', 'hotspot', 'VIIRS_SNPP_NRT'],
