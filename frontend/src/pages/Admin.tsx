@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import ModelSwitcher from '../components/ModelSwitcher'
-import { api } from '../services/api'
+import { api, API_BASE } from '../services/api'
 
-const API = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'
+const API = API_BASE
 
 const SERVICES = [
   { key: 'gee', name: 'Google Earth Engine', env: 'GEE_PROJECT_ID / GEE_SERVICE_ACCOUNT / GEE_PRIVATE_KEY' },

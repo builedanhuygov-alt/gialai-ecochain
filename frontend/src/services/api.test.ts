@@ -140,8 +140,7 @@ describe('api client', () => {
     await expect(uploadProposalPhoto('p1', f, 'u1')).resolves.toEqual({ photo_id: 1, is_duplicate: false, hash: 'abc' })
   })
 
-  it('missions + plans command board APIs', async () => {
-    mockFetch(true, [{ id: 'm1', goal: 'Bảo vệ rừng', scope: 'Province', status: 'ACTIVE' }])
+  it('missions + plans command board APIs', async () => {    mockFetch(true, [{ id: 'm1', goal: 'Bảo vệ rừng', scope: 'Province', status: 'ACTIVE' }])
     await expect(api.missions()).resolves.toEqual([{ id: 'm1', goal: 'Bảo vệ rừng', scope: 'Province', status: 'ACTIVE' }])
     mockFetch(false, {}, 500)
     await expect(api.missions()).resolves.toEqual([])
@@ -149,5 +148,23 @@ describe('api client', () => {
     await expect(api.createMission({ goal: 'Mới' })).resolves.toEqual({ mission_id: 'm2', goal: 'Mới' })
     mockFetch(true, { id: 'p1', goal: 'G', tasks: [] })
     await expect(api.planDetail('p1')).resolves.toEqual({ id: 'p1', goal: 'G', tasks: [] })
+  })
+
+  it('dashboard KPIs come from real endpoints, null when down', async () => {
+    const stats = { areas_monitored: 5, pending_signals: 2, origin: 'REAL / VERIFIED' }
+    mockFetch(true, stats)
+    await expect(api.forestStats()).resolves.toEqual(stats)
+    mockFetch(true, { total_scores: 3, critical_alerts: 1, origin: 'REAL / VERIFIED' })
+    await expect(api.riskOverview()).resolves.toEqual({ total_scores: 3, critical_alerts: 1, origin: 'REAL / VERIFIED' })
+    mockFetch(false, {}, 500)
+    await expect(api.forestStats()).resolves.toBeNull()
+    await expect(api.riskOverview()).resolves.toBeNull()
+    await expect(api.riskHistory('Gia Lai')).resolves.toBeNull()
+  })
+
+  it('API_BASE never falls back to localhost', async () => {
+    const { API_BASE } = await import('./api')
+    expect(API_BASE).not.toContain('localhost')
+    expect(API_BASE.startsWith('https://')).toBe(true)
   })
 })

@@ -5,6 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // Fallback nếu dùng Leaflet (không dùng nhưng giữ để tránh thiếu CSS)
 // import 'leaflet/dist/leaflet.css'; 
 import { useLocation } from '../hooks/useLocation'
+import { API_BASE } from '../services/api'
 import DemoTour from './DemoTour'
 import { getMode } from './ModeSwitch'
 
@@ -42,7 +43,7 @@ const DEMO_ALERTS = [
   { village: 'Xã Đak Trôi', commune: 'Huyện Mang Yang', village_coords: [108.20, 14.02], fire_coords: [108.25, 14.05], distance_km: 15.3, acq_date: new Date().toISOString().slice(0, 10), confidence: 'n', level: 'THEO DÕI' },
 ]
 
-const API = ((import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000').replace(/[\r\n]/g, "").trim().replace(/\/$/, "")
+const API = API_BASE.replace(/[\r\n]/g, "").trim().replace(/\/$/, "")
 const TILE_FIX = (url: string) => url.replace(/[\r\n]/g, "").trim()
 
 // (Trạm cố định đã thay bằng điểm CẤP cháy từng xã — vector, không lệch khi zoom)

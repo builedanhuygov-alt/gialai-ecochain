@@ -1,4 +1,9 @@
-const BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+// Single source of truth for the backend URL. VITE_API_BASE is baked in at
+// build time (Vercel project env). The fallback MUST be a reachable production
+// backend — never http://localhost:8000, which breaks the deployed site with
+// mixed-content errors (the viewer's own machine has no backend running).
+export const API_BASE = (import.meta.env.VITE_API_BASE || 'https://gialai-ecochainbb-bui11.vercel.app').replace(/\/$/, '')
+const BASE = API_BASE
 
 async function req(path: string, init?: RequestInit) {
   const r = await fetch(`${BASE}${path}`, { headers: { 'Content-Type': 'application/json', ...(init?.headers||{}) }, ...init })
@@ -8,6 +13,9 @@ async function req(path: string, init?: RequestInit) {
 
 export const api = {
   dashboard: ()=> req('/api/dashboard/green-economy').catch(()=> null),
+  forestStats: ()=> req('/api/forest/statistics').catch(()=> null),
+  riskOverview: ()=> req('/api/risk/overview').catch(()=> null),
+  riskHistory: (unit:string)=> req(`/api/risk/history/${encodeURIComponent(unit)}`).catch(()=> null),
   riskProfile: (id:string)=> req(`/api/risk/${id}`).catch(()=> ({ overall_score: 62, overall_level:'HIGH', breakdown:{}})),
   alerts: ()=> req('/api/alerts-unified').catch(()=> []),
   alertList: (status?:string)=> req(`/api/alerts${status && status !== 'ALL' ? `?status=${status}` : ''}`).catch(()=> []),
@@ -45,7 +53,6 @@ export const api = {
   runDemo: ()=> req('/api/demo/run', { method:'POST', body: JSON.stringify({}) }),
   resetDemo: ()=> req('/api/demo/reset', { method:'POST', body: JSON.stringify({}) }),
   registerUser: (username:string, password:string)=> req('/api/auth/register', { method:'POST', body: JSON.stringify({ username, password }) }),
-  forestHealth: ()=> Promise.resolve({ healthy:78.4, trend:2.8 }),
   geeStatus: ()=> req('/api/earth-engine/status').catch(()=> ({ connected:false, reason:'NOT_CONNECTED' })),
   incidents: ()=> req('/api/incidents').catch(()=>[]),
   mapSearch: (q:string)=> req(`/api/search/global?q=${q}`).catch(()=>null),

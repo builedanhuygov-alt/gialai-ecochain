@@ -59,8 +59,8 @@ GIALAI EcoChain là **Hệ thống cảnh báo sớm cháy rừng cấp tỉnh**
 | **Điểm nhiệt FIRMS** | `GET /api/v1/hotspots/live` → NASA FIRMS `MAP_KEY` (env) Area `107.3,13.1,109.4,14.7` — `backend/app/services/firms_service.py:1` |
 | **GEE Gia Lai** | `GET /api/health/geospatial` → `gee LIVE` qua Service Account `gialai-507506` — `backend/app/core/config.py:32` |
 | **LLM PCCC** | `GET /api/health/llm` → Gemini/Groq scenario generation — `backend/app/services/llm_service.py:1` + `Bộ Prompt tiêu biểu` trong `docs/prompts.md` |
-| **Cộng đồng** | `REPORT→PENDING→COMMUNITY VERIFIED (2 confirms)→OFFICIAL VERIFIED` — `photo SHA-256` |
-| **Dashboard** | 1 link công khai duy nhất `https://frontend-jz2k6tnx7-dan1775.vercel.app` — vào là dùng, không cần `Quản trị → DEMO/REAL` |
+| **Cộng đồng** | `REPORT→PENDING→COMMUNITY VERIFIED (2 confirms)→OFFICIAL VERIFIED (admin, identity từ JWT)` — `photo SHA-256` |
+| **Dashboard** | 1 link công khai duy nhất `https://frontend-jz2k6tnx7-dan1775.vercel.app` — KPI từ API thật (`/api/forest/statistics`, `/api/risk/overview`, `/api/dashboard/green-economy`, `/api/alerts`) + badge `DỮ LIỆU TRỰC TIẾP / DEMO / NGOẠI TUYẾN` (`frontend/src/pages/Dashboard.tsx:1`; mockProvider chỉ là fallback ngoại tuyến có nhãn). API base tập trung duy nhất tại `API_BASE` (`frontend/src/services/api.ts:1`, fallback = backend production, không `localhost`) |
 
 ---
 
@@ -185,10 +185,10 @@ Migration: `app.database.Base.metadata.create_all(bind=engine)` (Alembic scaffol
 ## Development
 
 ```bash
-# backend — 46 tests (auth, feedback, search, rate-limit, GEE fallback, phases 2-9...)
+# backend — 57 tests / 21 files (auth, RBAC/approve identity, feedback, search, rate-limit, GEE fallback, phases 2-9...)
 $env:PYTHONPATH="backend"; $env:APP_ENV="test"; python -m pytest backend/tests -q
 
-# frontend — 27 vitest (api client, scope store, i18n) + build
+# frontend — 31 vitest (api client incl. dashboard endpoints + API_BASE guard, scope store, i18n) + build
 cd frontend && npm test && npm run build
 ```
 CI (`.github/workflows/ci.yml`) runs both on push/PR.
@@ -209,9 +209,9 @@ Forest anomaly → AI risk HIGH (Map) → Community 📷 fire image → 2 confir
 
 ## Testing
 
-- **Unit:** 8 Phase1 (GEE interface, dataset B8/B4, providers) + 8 Phase2-9 (fire→disaster, EUDR, logistics, predictive, twin, master)
-- **Integration:** `/api/forest/monitor` → `PENDING` → `COMMUNITY VERIFIED` (2 confirms) → `OFFICIAL VERIFIED`
-- **Security:** cross-commune 403, duplicate confirmation 400, rate limit 60/min 429
+- **Unit:** backend 57 tests / 21 files — Phase1 (GEE interface, dataset B8/B4, providers) + Phase2-9 (fire→disaster, EUDR, logistics, predictive, twin, master) + RBAC (official approve/verify require `admin`, actor identity from JWT; alert ack/verify/resolve require login). Frontend 31 vitest — api client incl. `forestStats`/`riskOverview` passthrough + `API_BASE` never-localhost guard, scope store, i18n.
+- **Integration:** `/api/forest/monitor` → `PENDING` → `COMMUNITY VERIFIED` (2 confirms) → `OFFICIAL VERIFIED` (admin only)
+- **Security:** cross-commune 403, duplicate confirmation 400, rate limit 60/min 429, unauthenticated approve/ack 401, non-admin official approve 403
 - **Performance target:** dashboard <2-3s cached, map progressive, AI jobs background (never on request thread) — verified via `pytest -q` and `npm run build`.
 
 ---
@@ -246,9 +246,10 @@ Current: `v1.0.0` points to `Phase9` + UI merge (9 tags: `phase1-ai-ready` → `
 - GEE real mode requires credentials; without them system runs deterministic mock (clearly labeled).
 - `earthengine-api` is an optional dep (lazy-imported; app boots without it) — `geemap` is NOT used anywhere in code. Real NDVI requires `ee.Initialize` with valid service-account credentials.
 - Map clustering not yet paginating >10k features — viewport loading recommended for >5k markers.
-- `dist` 1.5MB — code-split via `import()` recommended for production.
+- Bundle is code-split: routes via `lazy()` + vendor chunks (`vendor-map` maplibre ~969kB loads only on map routes; initial `index` ~41kB). maplibre stays heavy — consider vector-tile simplification for low-end devices.
+- RBAC model is minimal but enforced server-side: official approve/verify = `admin` only, actor identity always from JWT (client-supplied `approved_by`/`actor_id` ignored); alert ack/verify/resolve require login. Roles today: `admin` (first registered user) + `viewer` — no province/commune identity verification yet.
 - PostGIS not enforced on SQLite dev DB — production must use `geoalchemy2` + `GIST`.
-- AI recommendations are **draft, not official** — require `POST /api/approvals/{id}/approve` + audit.
+- AI recommendations are **draft, not official** — require `POST /api/approvals/{id}/approve` (admin) + audit.
 
 ---
 

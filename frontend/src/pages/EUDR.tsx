@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { API_BASE } from '../services/api'
 
-const API = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'
+const API = API_BASE
 
 export default function EUDR(){
   const [check, setCheck] = useState<any>(null)

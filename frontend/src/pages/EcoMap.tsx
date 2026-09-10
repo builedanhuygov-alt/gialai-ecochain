@@ -1,7 +1,8 @@
 import MapView from '../components/MapView'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-const API = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'
+import { API_BASE } from '../services/api'
+const API = API_BASE
 export default function EcoMap(){
   const [fire, setFire]= useState<any>(null)
   const [selected, setSelected]= useState<any>(null)

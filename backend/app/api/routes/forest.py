@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.enums import ProposalStatus, SatelliteSource
 from app.core.demo_mode import tag_data_origin
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_role
 from app.database import get_db
 from app.models.administrative import AdministrativeUnit
 from app.models.community import CommunityConfirmation, PhotoEvidence, FieldVerificationTask
@@ -154,8 +154,8 @@ def get_proposal(proposal_id: str, db: Session = Depends(get_db)):
     }
 
 @router.post("/proposals/{proposal_id}/verify")
-def verify_proposal(proposal_id: str, body: ApprovalRequest, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    """Sec 20 OFFICIAL_VERIFIED — admin override."""
+def verify_proposal(proposal_id: str, body: ApprovalRequest, db: Session = Depends(get_db), user=Depends(require_role("admin"))):
+    """Sec 20 OFFICIAL_VERIFIED — admin override. Identity comes from JWT, not body."""
     p = db.get(DataProposal, proposal_id)
     if not p:
         raise HTTPException(status_code=404, detail="Not found")
@@ -164,24 +164,24 @@ def verify_proposal(proposal_id: str, body: ApprovalRequest, db: Session = Depen
     # allow from COMMUNITY_VERIFIED or PENDING
     from app.services.pipeline.pipeline import approve_proposal
     try:
-        result = approve_proposal(db, proposal_id, verified_by=body.verified_by)
+        result = approve_proposal(db, proposal_id, verified_by=user.username)
         # map to OFFICIAL_VERIFIED
         p2 = db.get(DataProposal, proposal_id)
         if p2:
             p2.status = ProposalStatus.OFFICIAL_VERIFIED.value
             db.commit()
-        audit_log(db, action="OFFICIAL_VERIFIED", resource_type="proposal", resource_id=proposal_id, actor_id=body.verified_by)
+        audit_log(db, action="OFFICIAL_VERIFIED", resource_type="proposal", resource_id=proposal_id, actor_id=user.username)
         db.commit()
         return {"proposal_id": proposal_id, "status": ProposalStatus.OFFICIAL_VERIFIED.value, "verified": result}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 @router.post("/proposals/{proposal_id}/reject")
-def reject_proposal_route(proposal_id: str, body: ApprovalRequest, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def reject_proposal_route(proposal_id: str, body: ApprovalRequest, db: Session = Depends(get_db), user=Depends(require_role("admin"))):
     from app.services.pipeline.pipeline import reject_proposal
     try:
-        result = reject_proposal(db, proposal_id, reviewed_by=body.verified_by, reason=body.reason or "Rejected")
-        audit_log(db, action="REJECTED", resource_type="proposal", resource_id=proposal_id, actor_id=body.verified_by, detail=body.reason)
+        result = reject_proposal(db, proposal_id, reviewed_by=user.username, reason=body.reason or "Rejected")
+        audit_log(db, action="REJECTED", resource_type="proposal", resource_id=proposal_id, actor_id=user.username, detail=body.reason)
         db.commit()
         return result
     except Exception as exc:

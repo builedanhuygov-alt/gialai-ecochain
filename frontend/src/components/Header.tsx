@@ -2,7 +2,7 @@ import { Bell, Bot, Menu } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ModeSwitch from './ModeSwitch'
-import { api } from '../services/api'
+import { api, API_BASE } from '../services/api'
 import { LANGS, useLang } from '../i18n'
 
 export default function Header({ onMenu }: { onMenu: ()=>void }) {
@@ -16,7 +16,7 @@ export default function Header({ onMenu }: { onMenu: ()=>void }) {
     if(q.trim().length < 2){ setHits([]); return }
     const id = setTimeout(async ()=>{
       try{
-        const API = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'
+        const API = API_BASE
         const r = await fetch(`${API}/api/search/global?q=${encodeURIComponent(q.trim())}`)
         const j = await r.json()
         setHits(Array.isArray(j.results) ? j.results.slice(0, 8) : [])

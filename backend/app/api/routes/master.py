@@ -102,21 +102,24 @@ def list_approvals(db:Session=Depends(get_db)):
     return [{"id": a.id, "plan_id": a.plan_id, "action": a.action, "status": a.status} for a in db.query(Approval).limit(20).all()]
 
 @router.post("/approvals/{approval_id}/approve")
-def approve(approval_id:str, body:dict, db:Session=Depends(get_db), user=Depends(get_current_user)):
+def approve(approval_id:str, body:dict, db:Session=Depends(get_db), user=Depends(require_role("admin"))):
     a=db.get(Approval, approval_id)
     if not a: raise HTTPException(404, "Approval not found")
-    a.status="APPROVED"; a.approved_by=body.get("approved_by","admin"); a.reason=body.get("reason","approved")
+    # identity MUST come from the authenticated JWT, never from client body
+    a.status="APPROVED"; a.approved_by=user.username; a.reason=body.get("reason","approved")
     # execution Sec33
     plan=db.get(Plan, a.plan_id)
     if plan: plan.execution_status="RUNNING"
-    audit_log(db, action="APPROVAL_GRANTED", resource_type="approval", resource_id=approval_id); db.commit()
-    return {"id": a.id, "status": a.status}
+    audit_log(db, action="APPROVAL_GRANTED", resource_type="approval", resource_id=approval_id, actor_id=user.username, detail=body.get("reason","approved")); db.commit()
+    return {"id": a.id, "status": a.status, "approved_by": a.approved_by}
 
 @router.post("/approvals/{approval_id}/reject")
-def reject(approval_id:str, body:dict, db:Session=Depends(get_db), user=Depends(get_current_user)):
+def reject(approval_id:str, body:dict, db:Session=Depends(get_db), user=Depends(require_role("admin"))):
     a=db.get(Approval, approval_id)
     if not a: raise HTTPException(404, "Not found")
-    a.status="REJECTED"; db.commit(); return {"id": a.id, "status": a.status}
+    a.status="REJECTED"; a.approved_by=user.username; a.reason=body.get("reason","rejected")
+    audit_log(db, action="APPROVAL_REJECTED", resource_type="approval", resource_id=approval_id, actor_id=user.username, detail=body.get("reason","rejected")); db.commit()
+    return {"id": a.id, "status": a.status}
 
 # Outcomes & learning Sec35-36
 @router.get("/outcomes")

@@ -5,6 +5,7 @@ import AppShell from './components/AppShell'
 import ErrorBoundary from './components/ErrorBoundary'
 import { PageTransition } from './motion/primitives'
 import { LangProvider } from './i18n'
+import { API_BASE } from './services/api'
 const EcoMap = lazy(()=> import('./pages/EcoMap'))
 const MapPage = lazy(()=> import('./pages/MapPage'))
 const EventIntelligence = lazy(()=> import('./pages/EventIntelligence'))
@@ -34,7 +35,7 @@ function AIAssistant(){
   const [stream, setStream] = useState<string>('')
   const [result, setResult] = useState<any>(null)
   const [showInspector, setShowInspector] = useState(false)
-  const API = (import.meta as any).env?.VITE_API_BASE || 'https://backend-delta-flame-42.vercel.app'
+  const API = API_BASE
 
   // allow other pages (e.g. Dashboard) to open the assistant with a preset query
   useEffect(()=>{

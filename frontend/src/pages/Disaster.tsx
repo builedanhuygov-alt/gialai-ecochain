@@ -2,7 +2,8 @@ import MapView from '../components/MapView'
 import { Tabs } from '../components/Tabs'
 import { FireWarningCard, FireIntelligencePanel } from '../components/FireComponents'
 import { useEffect, useState } from 'react'
-const API = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'
+import { API_BASE } from '../services/api'
+const API = API_BASE
 
 const TAB2TYPE: Record<string, string> = { 'Cháy':'FIRE', 'Ngập':'FLOOD', 'Hạn':'DROUGHT', 'Bão':'STORM', 'Sạt lở':'LANDSLIDE' }
 const TYPE_VI: Record<string, string> = { FIRE:'Cháy', FLOOD:'Ngập', DROUGHT:'Hạn', STORM:'Bão', LANDSLIDE:'Sạt lở', HEAT:'Nắng nóng' }

@@ -73,12 +73,16 @@ def test_phase3():
     r=c.get(f"/api/alerts/{aid}")
     assert r.status_code==200
     assert "incident" in r.json()
-    # human override
-    r=c.post(f"/api/alerts/{aid}/acknowledge", json={"actor_id":"admin"})
+    # human override — requires login; actor identity comes from JWT, not body
+    from tests.helpers import auth_headers
+    h = auth_headers(c)
+    r=c.post(f"/api/alerts/{aid}/acknowledge", json={})
+    assert r.status_code==401
+    r=c.post(f"/api/alerts/{aid}/acknowledge", json={}, headers=h)
     assert r.status_code==200 and r.json()["status"]=="ACKNOWLEDGED"
-    r=c.post(f"/api/alerts/{aid}/verify", json={"actor_id":"admin","action":"ESCALATE","reason":"test"})
+    r=c.post(f"/api/alerts/{aid}/verify", json={"action":"ESCALATE","reason":"test"}, headers=h)
     assert r.status_code==200
-    r=c.post(f"/api/alerts/{aid}/resolve", json={"actor_id":"admin"})
+    r=c.post(f"/api/alerts/{aid}/resolve", json={}, headers=h)
     assert r.json()["status"]=="RESOLVED"
 
     # Risk overview / areas / profile

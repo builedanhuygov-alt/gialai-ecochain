@@ -6,21 +6,78 @@ import { mockKPIs, mockAlerts } from '../services/mockProvider'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LineChart, Line, ResponsiveContainer } from 'recharts'
-import { api } from '../services/api'
+import { api, API_BASE } from '../services/api'
+
+const RISK_ICON: Record<string,string> = { FIRE:'🔥', FLOOD:'🌊', LANDSLIDE:'⛰️', DROUGHT:'☀️', HEAT:'🌡️' }
+
+function isDemoOrigin(o: unknown){
+  return /DEMO|SIMULATED|MOCK/i.test(String(o || ''))
+}
 
 export default function Dashboard() {
   const [selected, setSelected] = useState<string|null>(null)
+  const [selectedInfo, setSelectedInfo] = useState<any|null>(null)
   const [pending, setPending] = useState<string[]>([])
+  const [kpis, setKpis] = useState<any[]|null>(null)
+  const [liveAlerts, setLiveAlerts] = useState<any[]|null>(null)
+  const [trend, setTrend] = useState<any[]|null>(null)
+  const [badge, setBadge] = useState('ĐANG TẢI…')
   const nav = useNavigate()
+
   useEffect(()=>{
     // real commune/station name clicked on the map (MapView dispatches this)
     const h = (e: any)=> setSelected(e.detail?.area || null)
     window.addEventListener('ecochain-select-area', h)
     return ()=> window.removeEventListener('ecochain-select-area', h)
   },[])
+
+  useEffect(()=>{
+    // KPIs + alerts come from real backend endpoints. mockProvider is ONLY a
+    // labeled offline fallback — never presented as live data.
+    Promise.all([
+      api.forestStats().catch(()=> null),
+      api.riskOverview().catch(()=> null),
+      api.dashboard().catch(()=> null),
+      api.alertList('ACTIVE').catch(()=> []),
+    ]).then(([stats, overview, green, alerts]: any[])=>{
+      const origins = [stats?.origin, overview?.origin, green?.origin].filter(Boolean)
+      if(!stats && !overview && !green){
+        setBadge('NGOẠI TUYẾN — SỐ MINH HỌA')
+        setKpis(null); setLiveAlerts(null)
+        return
+      }
+      setBadge(origins.some(isDemoOrigin) ? 'DỮ LIỆU DEMO' : 'DỮ LIỆU TRỰC TIẾP')
+      const num = (v: unknown)=> typeof v === 'number' ? v : 0
+      setKpis([
+        { label:'Vùng giám sát', value:String(num(stats?.areas_monitored)), unit:'vùng', trend:'trực tiếp', dir:'flat', status:'good' },
+        { label:'Tín hiệu chờ xử lý', value:String(num(stats?.pending_signals)), unit:'', trend:'trực tiếp', dir:'flat', status:'warn' },
+        { label:'Cộng đồng đã xác minh', value:String(num(stats?.community_verified)), unit:'', trend:'trực tiếp', dir:'flat', status:'good' },
+        { label:'Cảnh báo nghiêm trọng', value:String(num(overview?.critical_alerts)), unit:'', trend:'trực tiếp', dir:'flat', status:'danger' },
+        { label:'Rủi ro cao', value:String(num(stats?.high_risk)), unit:'vùng', trend:'trực tiếp', dir:'flat', status:'warn' },
+        { label:'Trang trại truy xuất', value:String(num(green?.traceable_farms)), unit:'', trend:'trực tiếp', dir:'flat', status:'neutral' },
+        { label:'Lô EUDR sẵn sàng', value:String(num(green?.eudr_ready_lots)), unit:'', trend:'trực tiếp', dir:'flat', status:'neutral' },
+        { label:'Tuyến xanh', value:String(num(green?.green_routes)), unit:'', trend:'trực tiếp', dir:'flat', status:'neutral' },
+      ])
+      const rows = Array.isArray(alerts) ? alerts.slice(0,3) : []
+      setLiveAlerts(rows.map((a:any)=> ({
+        id: a.id,
+        icon: RISK_ICON[String(a.risk_type||'').toUpperCase()] || '⚠️',
+        title: a.title || `${a.risk_type || 'Cảnh báo'} — ${a.level || ''}`,
+        loc: a.administrative_unit_id || '',
+        time: String(a.created_at || '').slice(0,16).replace('T',' '),
+        status: a.status || '',
+      })))
+    }).catch(()=> { setBadge('NGOẠI TUYẾN — SỐ MINH HỌA'); setKpis(null); setLiveAlerts(null) })
+    // trend from real risk history; empty state when no records yet
+    api.riskHistory('Gia Lai').then((h:any)=>{
+      const recs = Array.isArray(h?.records) ? h.records : []
+      setTrend(recs.length ? recs.slice(-12).map((r:any)=> ({ v: r.score })) : [])
+    }).catch(()=> setTrend([]))
+  },[])
+
   useEffect(()=>{
     // real pending work: PENDING approvals + ACTIVE alerts
-    const API = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'
+    const API = API_BASE
     Promise.all([
       fetch(`${API}/api/approvals`).then(r=> r.ok ? r.json() : []).catch(()=> []),
       api.alertList().catch(()=> []),
@@ -33,9 +90,17 @@ export default function Dashboard() {
       setPending(items)
     }).catch(()=> {})
   },[])
+
+  useEffect(()=>{
+    if(!selected){ setSelectedInfo(null); return }
+    api.riskProfile(selected).then(setSelectedInfo).catch(()=> setSelectedInfo(null))
+  },[selected])
+
   const askAI = (area: string)=>{
     window.dispatchEvent(new CustomEvent('ecochain-open-ai', { detail:{ query: `Phân tích nguy cơ cháy rừng tại ${area}, Gia Lai` } }))
   }
+  const shownKpis = kpis || mockKPIs
+  const shownAlerts = liveAlerts || mockAlerts
   return (
     <div className="dash">
       <div className="welcome">
@@ -46,15 +111,15 @@ export default function Dashboard() {
             <p>Hiện trạng · Rủi ro ở đâu? · Vì sao? · Cần làm gì?</p>
           </div>
         </div>
-        <span className="demo-badge">DỮ LIỆU DEMO</span>
+        <span className="demo-badge">{badge}</span>
       </div>
 
       <StaggerContainer>
         <div className="kpi-grid">
-          {mockKPIs.slice(0,4).map(k=> <StaggerItem key={k.label}><MetricCard {...k} icon={<span>●</span>} /></StaggerItem>)}
+          {shownKpis.slice(0,4).map(k=> <StaggerItem key={k.label}><MetricCard {...k} icon={<span>●</span>} /></StaggerItem>)}
         </div>
         <div className="kpi-grid">
-          {mockKPIs.slice(4,8).map(k=> <StaggerItem key={k.label}><MetricCard {...k} icon={<span>■</span>} /></StaggerItem>)}
+          {shownKpis.slice(4,8).map(k=> <StaggerItem key={k.label}><MetricCard {...k} icon={<span>■</span>} /></StaggerItem>)}
         </div>
       </StaggerContainer>
 
@@ -63,9 +128,12 @@ export default function Dashboard() {
 
       {selected && (
         <div className="panel">
-          <h3>{selected} — Điểm EcoGL 72/100</h3>
+          <h3>{selected}{selectedInfo ? ` — Điểm rủi ro ${selectedInfo.overall_score ?? '?'}/100 (${selectedInfo.overall_level ?? ''})` : ' — chưa có dữ liệu'}</h3>
           <div className="panel-grid">
-            <div>Rủi ro CAO</div><div>Rừng 81%</div><div>Sự cố 4</div><div>AI tin cậy 89%</div>
+            <div>Mức: {selectedInfo?.overall_level || '—'}</div>
+            <div>Độ tin cậy: {selectedInfo?.confidence ?? '—'}%</div>
+            <div>Yếu tố: {selectedInfo?.breakdown ? Object.keys(selectedInfo.breakdown).length : 0}</div>
+            <div>Nguồn: API trực tiếp</div>
           </div>
           <div className="panel-actions">
             <button className="btn primary" onClick={()=> nav('/forest')}>Xem chi tiết</button>
@@ -79,8 +147,8 @@ export default function Dashboard() {
       <div className="two-col">
         <AIInsightCard />
         <div className="alerts">
-          <div className="card-title">CẢNH BÁO</div>
-          {mockAlerts.map(a=> <AlertCard key={a.id} {...a} />)}
+          <div className="card-title">CẢNH BÁO{liveAlerts ? '' : ' (MINH HỌA)'}</div>
+          {shownAlerts.map(a=> <AlertCard key={a.id} {...a} />)}
         </div>
       </div>
 
@@ -88,11 +156,15 @@ export default function Dashboard() {
         <div className="chart-card">
           <div className="card-title">Xu hướng rủi ro</div>
           <div style={{height:160}}>
+            {trend === null && <div style={{fontSize:13, color:'#64748B'}}>Đang tải…</div>}
+            {trend !== null && trend.length === 0 && <div style={{fontSize:13, color:'#64748B'}}>Chưa có dữ liệu lịch sử — chạy phân tích để tạo bản ghi.</div>}
+            {trend !== null && trend.length > 0 && (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={[{v:42},{v:51},{v:63},{v:58},{v:71},{v:68}]}>
+              <LineChart data={trend}>
                 <Line type="monotone" dataKey="v" stroke="#0F766E" strokeWidth={2} dot={false}/>
               </LineChart>
             </ResponsiveContainer>
+            )}
           </div>
         </div>
         <div className="chart-card">

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { api } from '../services/api'
+import { api, API_BASE } from '../services/api'
 
 type SavedSim = {
   id: string
@@ -53,7 +53,7 @@ export default function WhatIfLab(){
   const [question, setQuestion] = useState('')
 
   useEffect(()=>{
-    fetch(`${(import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'}/api/risk/overview`)
+    fetch(`${API_BASE}/api/risk/overview`)
       .then(r=>r.json()).then(j=> setBaseline(j)).catch(()=> setBaseline({ overall:42 }));
     // reload persisted scenarios (WhatIfEngine) so refresh doesn't lose work
     (async ()=>{

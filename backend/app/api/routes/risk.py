@@ -14,6 +14,7 @@ from app.services.alert_engine import alert_engine
 from app.services.ranking_engine import ranking_engine
 from app.services.recognition_engine import recognition_engine
 from app.core.demo_mode import tag_data_origin
+from app.core.security import get_current_user
 
 router = APIRouter(tags=["Risk"])
 
@@ -81,22 +82,21 @@ def get_alert(alert_id:str, db:Session=Depends(get_db)):
     }
 
 @router.post("/alerts/{alert_id}/acknowledge")
-def ack_alert(alert_id:str, body:dict, db:Session=Depends(get_db)):
-    actor=body.get("actor_id") or body.get("verified_by") or "admin"
-    a=alert_engine.acknowledge(db, alert_id, actor)
+def ack_alert(alert_id:str, body:dict, db:Session=Depends(get_db), user=Depends(get_current_user)):
+    # actor identity comes from the authenticated JWT, never from client body
+    a=alert_engine.acknowledge(db, alert_id, user.username)
     return {"id": a.id, "status": a.status}
 
 @router.post("/alerts/{alert_id}/resolve")
-def resolve_alert(alert_id:str, body:dict, db:Session=Depends(get_db)):
-    actor=body.get("actor_id") or body.get("verified_by")
-    a=alert_engine.resolve(db, alert_id, actor)
+def resolve_alert(alert_id:str, body:dict, db:Session=Depends(get_db), user=Depends(get_current_user)):
+    a=alert_engine.resolve(db, alert_id, user.username)
     return {"id": a.id, "status": a.status}
 
 @router.post("/alerts/{alert_id}/verify")
-def verify_alert(alert_id:str, body:dict, db:Session=Depends(get_db)):
+def verify_alert(alert_id:str, body:dict, db:Session=Depends(get_db), user=Depends(get_current_user)):
     # human override Sec50 — confirm/reject/escalate
     action=body.get("action","VERIFY")  # CONFIRM/REJECT/ESCALATE
-    actor=body.get("actor_id") or "admin"
+    actor=user.username
     reason=body.get("reason","human override")
     a=db.get(Alert, alert_id)
     if not a: raise HTTPException(404, "Alert not found")

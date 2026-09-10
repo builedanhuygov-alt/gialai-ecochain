@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from '../hooks/useLocation'
+import { API_BASE } from '../services/api'
 
 export default function WeatherCard(){
   const { state, request } = useLocation()
@@ -16,7 +17,7 @@ export default function WeatherCard(){
       setLoading(true)
       const fetchWeather = async()=>{
         try{
-          const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+          const base = API_BASE
           const r = await fetch(`${base}/api/weather/current?lat=${state.lat}&lon=${state.lon}`)
           const j = await r.json()
           setWeather(j)

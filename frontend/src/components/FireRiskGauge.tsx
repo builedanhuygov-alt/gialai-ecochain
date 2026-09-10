@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useScope } from '../store/useScope'
+import { API_BASE } from '../services/api'
 
 const LEVELS = [
   { lv:'I', label:'Thấp', color:'bg-sky-500', text:'text-sky-600', bg:'bg-sky-50', border:'border-sky-200' },
@@ -9,7 +10,7 @@ const LEVELS = [
   { lv:'V', label:'Cực kỳ nguy hiểm', color:'bg-red-600', text:'text-red-600', bg:'bg-red-50', border:'border-red-200' },
 ]
 
-const API = ((import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000').replace(/\/$/, '')
+const API = API_BASE.replace(/\/$/, '')
 // Tọa độ đại diện từng khu vực để AI lấy vệ tinh/thời tiết/FIRMS đúng ô
 const AREA_COORDS: [string, number, number][] = [
   ['Chư Prông', 13.55, 107.65], ['Ia Mơr', 13.55, 107.65], ['Kon Ka Kinh', 14.25, 108.45],

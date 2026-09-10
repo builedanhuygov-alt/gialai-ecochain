@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-const API = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'
+import { API_BASE } from '../services/api'
+const API = API_BASE
 
 // where each agent's output is actually surfaced (honest mapping)
 const POWERS: Record<string, { map?: string; pages: [string, string][] }> = {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { API_BASE } from '../services/api'
 
 export type EcoMode = 'live' | 'demo'
 export const MODE_KEY = 'ecogl_mode'
@@ -20,7 +21,7 @@ export default function ModeSwitch() {
     setMode(m)
     window.dispatchEvent(new CustomEvent('ecochain-mode', { detail: { mode: m } }))
     // Gọi backend demo run/reset cho vui (kệ lỗi — frontend vẫn chạy độc lập)
-    const API = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'
+    const API = API_BASE
     fetch(`${API}/api/demo/${m === 'demo' ? 'run' : 'reset'}`, { method: 'POST' }).catch(() => {})
   }
   return (

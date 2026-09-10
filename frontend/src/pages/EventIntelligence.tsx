@@ -1,8 +1,9 @@
 import { Link, useParams } from 'react-router-dom'
 import { VerificationBadge } from '../components/Cards'
 import { useEffect, useState } from 'react'
+import { API_BASE } from '../services/api'
 
-const API = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'
+const API = API_BASE
 
 export default function EventIntelligence(){
   const { id } = useParams()
