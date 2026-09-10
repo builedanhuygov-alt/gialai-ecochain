@@ -79,14 +79,14 @@ def clean_model_name(model: str | None, default: str) -> str:
     return m
 
 class GeminiProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str, model: str = "gemini-3.6-flash"):
         self.api_key = api_key
-        self.model = clean_model_name(model, default="gemini-2.5-flash")
+        self.model = clean_model_name(model, default="gemini-3.6-flash")
     async def generate(self, system, user, schema=None):
         # Gemini API: https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
-        # Model IDs retire over time (gemini-2.5-flash 404s on some keys) —
-        # fall back to gemini-2.0-flash before surfacing an honest error.
-        models = [self.model] + (["gemini-2.0-flash"] if self.model != "gemini-2.0-flash" else [])
+        # Model IDs retire over time (old flash models 404) —
+        # fall back to gemini-3.5-flash before surfacing an honest error.
+        models = [self.model] + (["gemini-3.5-flash"] if self.model != "gemini-3.5-flash" else [])
         last_err = None
         for m in models:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={self.api_key}"
@@ -160,12 +160,12 @@ def get_llm_provider() -> LLMProvider:
     if provider == "openai" and openai_key:
         return OpenAIProvider(openai_key, model or "gpt-4o-mini")
     if provider == "gemini" and gemini_key:
-        return GeminiProvider(gemini_key, model or "gemini-2.5-flash")
+        return GeminiProvider(gemini_key, model or "gemini-3.6-flash")
     if provider == "groq" and groq_key:
         return GroqProvider(groq_key, model or "llama-3.1-70b-versatile")
     # Auto-detect by available key
     if gemini_key:
-        return GeminiProvider(gemini_key, (model or "gemini-2.5-flash") if provider in ("", "gemini") else (model or "gemini-2.5-flash"))
+        return GeminiProvider(gemini_key, (model or "gemini-3.6-flash") if provider in ("", "gemini") else (model or "gemini-3.6-flash"))
     if groq_key:
         return GroqProvider(groq_key, model or "llama-3.1-70b-versatile")
     if openai_key:

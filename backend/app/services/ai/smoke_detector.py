@@ -32,7 +32,7 @@ async def detect_smoke_from_tile(tile_url: str = None, lat: float=13.9, lon: flo
             Chỉ trả JSON."""
             # Send image as inline data
             resp = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.6-flash",
                 contents=[prompt, {"inline_data": {"mime_type": "image/jpeg", "data": image_b64[:200000]}}],
                 config={"response_mime_type": "application/json", "temperature": 0.2}
             )

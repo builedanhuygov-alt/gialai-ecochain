@@ -5,7 +5,7 @@ import AppShell from './components/AppShell'
 import ErrorBoundary from './components/ErrorBoundary'
 import { PageTransition } from './motion/primitives'
 import { LangProvider } from './i18n'
-import { API_BASE } from './services/api'
+import { API_BASE, api } from './services/api'
 const EcoMap = lazy(()=> import('./pages/EcoMap'))
 const MapPage = lazy(()=> import('./pages/MapPage'))
 const EventIntelligence = lazy(()=> import('./pages/EventIntelligence'))
@@ -35,7 +35,39 @@ function AIAssistant(){
   const [stream, setStream] = useState<string>('')
   const [result, setResult] = useState<any>(null)
   const [showInspector, setShowInspector] = useState(false)
+  const [aiStatus, setAiStatus] = useState<any>(null)
   const API = API_BASE
+
+  // Live status of every AI capability (LLM/RAG/streaming) on drawer open.
+  useEffect(()=>{
+    if(!open) return
+    api.aiHealth().then(setAiStatus).catch(()=> setAiStatus(null))
+  },[open])
+
+  const runAiAction = async (kind: 'fire-risk'|'what-if'|'pccc')=>{
+    setLoading(true); setPhase('THINKING'); setStream(''); setResult(null)
+    try{
+      let j: any
+      if(kind === 'fire-risk'){
+        setPhase('ANALYZING')
+        j = await api.aiFireRisk()
+      }else if(kind === 'what-if'){
+        setPhase('ANALYZING')
+        j = await api.aiWhatIf({ temperature: 3, rainfall: -30, wind: 20, lat: 13.9, lon: 108.3 })
+      }else{
+        setPhase('ANALYZING')
+        j = await api.aiPccc({ fire_score: 77, firms_count: 2, weather: { temperature: 34, wind_speed: 20, humidity: 30 }, district: 'Gia Lai' })
+      }
+      setStream(JSON.stringify(j.structured_output || j.simulation || j, null, 2).slice(0, 800))
+      setResult(j)
+      setPhase('COMPLETE')
+    }catch(e:any){
+      let msg = String(e.message || e).slice(0, 400)
+      try{ const jj = JSON.parse(String(e.message || '')); msg = jj.reason || msg }catch{}
+      setStream(msg)
+      setPhase('ERROR')
+    }finally{ setLoading(false) }
+  }
 
   // allow other pages (e.g. Dashboard) to open the assistant with a preset query
   useEffect(()=>{
@@ -133,6 +165,20 @@ function AIAssistant(){
           <div style={{fontSize:11, color:'#64748B', margin:'4px 0'}}>Hệ thống điều phối: Master → RAG → Domain Agent → Tools → Evidence</div>
           <div className="suggestions">
             {suggestions.map(s=> <button key={s} onClick={()=> ask(s)}>{s}</button>)}
+          </div>
+          <div style={{display:'flex', gap:6, flexWrap:'wrap', margin:'8px 0', alignItems:'center'}}>
+            <span style={{fontSize:10, color:'#64748B'}}>AI:</span>
+            {[['LLM', aiStatus?.llm], ['RAG', aiStatus?.rag], ['Stream', aiStatus ? { status: aiStatus.streaming ? 'LIVE' : 'UNAVAILABLE' } : null]].map(([label, v]:any)=>(
+              <span key={label as string} title={`${label}: ${v?.status || '…'}`}
+                style={{fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:999,
+                  background: !v ? '#F1F5F9' : v.status==='LIVE' ? '#DCFCE7' : v.status==='DEMO' ? '#FEF3C7' : '#FEE2E2',
+                  color:'#0F1E1A'}}>{label} · {v?.status || '…'}</span>
+            ))}
+          </div>
+          <div style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:8}}>
+            <button onClick={()=> runAiAction('fire-risk')} disabled={loading} style={{fontSize:11, padding:'4px 10px', borderRadius:999, border:'1px solid #0F766E', background:'#fff', color:'#0F766E'}}>🔥 Nguy cơ cháy AI</button>
+            <button onClick={()=> runAiAction('what-if')} disabled={loading} style={{fontSize:11, padding:'4px 10px', borderRadius:999, border:'1px solid #0F766E', background:'#fff', color:'#0F766E'}}>🧪 Kịch bản What-if</button>
+            <button onClick={()=> runAiAction('pccc')} disabled={loading} style={{fontSize:11, padding:'4px 10px', borderRadius:999, border:'1px solid #0F766E', background:'#fff', color:'#0F766E'}}>🚒 Tổng hợp PCCC</button>
           </div>
           <textarea value={q} onChange={e=>setQ(e.target.value)} placeholder="Gia Lai hiện tại có khu vực nào nguy cơ cháy rừng cao?" aria-label="Hỏi AI" />
           <div style={{display:'flex', gap:8, marginTop:8}}>

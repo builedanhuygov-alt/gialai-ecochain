@@ -139,8 +139,8 @@ describe('api client', () => {
     const f = new File([new Uint8Array([1,2,3])], 'a.jpg', { type: 'image/jpeg' })
     await expect(uploadProposalPhoto('p1', f, 'u1')).resolves.toEqual({ photo_id: 1, is_duplicate: false, hash: 'abc' })
   })
-
-  it('missions + plans command board APIs', async () => {    mockFetch(true, [{ id: 'm1', goal: 'Bảo vệ rừng', scope: 'Province', status: 'ACTIVE' }])
+  it('missions + plans command board APIs', async () => {
+    mockFetch(true, [{ id: 'm1', goal: 'Bảo vệ rừng', scope: 'Province', status: 'ACTIVE' }])
     await expect(api.missions()).resolves.toEqual([{ id: 'm1', goal: 'Bảo vệ rừng', scope: 'Province', status: 'ACTIVE' }])
     mockFetch(false, {}, 500)
     await expect(api.missions()).resolves.toEqual([])
@@ -166,5 +166,18 @@ describe('api client', () => {
     const { API_BASE } = await import('./api')
     expect(API_BASE).not.toContain('localhost')
     expect(API_BASE.startsWith('https://')).toBe(true)
+  })
+
+  it('AI endpoints connect: health, fire-risk, what-if, pccc', async () => {
+    mockFetch(true, { llm: { status: 'LIVE' }, rag: { status: 'LIVE' }, streaming: 'SSE' })
+    await expect(api.aiHealth()).resolves.toEqual({ llm: { status: 'LIVE' }, rag: { status: 'LIVE' }, streaming: 'SSE' })
+    mockFetch(false, {}, 500)
+    await expect(api.aiHealth()).resolves.toBeNull()
+    mockFetch(true, { risk: { score: 70 } })
+    await expect(api.aiFireRisk()).resolves.toEqual({ risk: { score: 70 } })
+    mockFetch(true, { simulation: { affected: {} } })
+    await expect(api.aiWhatIf({ temperature: 3 })).resolves.toEqual({ simulation: { affected: {} } })
+    mockFetch(true, { status: 'LIVE' })
+    await expect(api.aiPccc({})).resolves.toEqual({ status: 'LIVE' })
   })
 })
