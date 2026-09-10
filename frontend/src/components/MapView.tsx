@@ -487,6 +487,8 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   void health
   const [villages, setVillages] = useState<any[]>([])
   const [fireAlerts, setFireAlerts] = useState<any[]>([])
+  // Nhãn thôn tham chiếu chỉ hiện khi zoom gần (>=9) — tránh đè nhau ở tầm tỉnh.
+  const [mapZoom, setMapZoom] = useState(7.8)
   const [mode, setMode] = useState<string>(() => getMode())
   const [tourOpen, setTourOpen] = useState(false)
   const [bannerOff, setBannerOff] = useState<string>('')
@@ -504,6 +506,8 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     if(!mapRef.current || !villages.length) return
     const existing = (mapRef.current as any)._villageMarkers as any[] || []
     existing.forEach((m:any)=>{ try{ m.remove()}catch{} })
+    ;(mapRef.current as any)._villageMarkers = []
+    if(mapZoom < 9) return // tầm tỉnh: ẩn nhãn thôn cho thoáng, vẫn giữ chấm CẤP xã
     const markers:any[]=[]
     villages.forEach((v:any)=>{
       const alert = fireAlerts.find((a:any)=> a.village===v.village)
@@ -524,7 +528,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       }
     })
     ;(mapRef.current as any)._villageMarkers = markers
-  }, [villages, fireAlerts])
+  }, [villages, fireAlerts, mapZoom])
   // Effect 1 — chỉ init map một lần — dùng inline style OSM để tránh CORS style JSON
   useEffect(()=>{
     if(!mapContainer.current || mapRef.current) return
@@ -556,6 +560,8 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     })
     mapRef.current = map as any
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
+    // Theo dõi zoom để ẩn/hiện nhãn thôn tham chiếu (chống đè nhau tầm tỉnh)
+    map.on('zoomend', ()=>{ try{ setMapZoom(map.getZoom()) }catch{} })
     // Toàn cảnh Gia Lai: bounds thực từ gialai_135.geojson [107.45,12.99,109.36,14.70]
     map.fitBounds([[107.45, 12.99], [109.36, 14.70]], { padding:30, duration:0 })
     map.addControl(new (maplibregl as any).AttributionControl({ compact:true }), 'bottom-left')
