@@ -60,7 +60,7 @@ GIALAI EcoChain là **Hệ thống cảnh báo sớm cháy rừng cấp tỉnh**
 | **GEE Gia Lai** | `GET /api/health/geospatial` → `gee LIVE` qua Service Account `gialai-507506` — `backend/app/core/config.py:32` |
 | **LLM PCCC** | `GET /api/health/llm` → Gemini/Groq scenario generation — `backend/app/services/llm_service.py:1` + `Bộ Prompt tiêu biểu` trong `docs/prompts.md` |
 | **Cộng đồng** | `REPORT→PENDING→COMMUNITY VERIFIED (2 confirms)→OFFICIAL VERIFIED (admin, identity từ JWT)` — `photo SHA-256` |
-| **Dashboard** | 1 link công khai duy nhất `https://frontend-jz2k6tnx7-dan1775.vercel.app` — KPI từ API thật (`/api/forest/statistics`, `/api/risk/overview`, `/api/dashboard/green-economy`, `/api/alerts`) + badge `DỮ LIỆU TRỰC TIẾP / DEMO / NGOẠI TUYẾN` (`frontend/src/pages/Dashboard.tsx:1`; mockProvider chỉ là fallback ngoại tuyến có nhãn). API base tập trung duy nhất tại `API_BASE` (`frontend/src/services/api.ts:1`, fallback = backend production, không `localhost`) |
+| **Dashboard** | 2 links công khai: frontend `https://frontend-five-henna-72.vercel.app` + backend `https://gialai-backend-fresh.vercel.app` — KPI từ API thật (`/api/forest/statistics`, `/api/risk/overview`, `/api/dashboard/green-economy`, `/api/alerts`) + badge `DỮ LIỆU TRỰC TIẾP / DEMO / NGOẠI TUYẾN` (`frontend/src/pages/Dashboard.tsx:1`; mockProvider chỉ là fallback ngoại tuyến có nhãn). API base tập trung duy nhất tại `API_BASE` (`frontend/src/services/api.ts:1`, fallback = backend production, không `localhost`) |
 
 ---
 
