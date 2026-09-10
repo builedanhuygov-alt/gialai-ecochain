@@ -8,6 +8,8 @@ import { LANGS, useLang } from '../i18n'
 export default function Header({ onMenu }: { onMenu: ()=>void }) {
   const [now, setNow] = useState(new Date())
   const [activeCount, setActiveCount] = useState(0)
+  // Chấm trạng thái phản ánh backend THẬT (không xanh tĩnh khi mất kết nối).
+  const [backendUp, setBackendUp] = useState<boolean | null>(null)
   const nav = useNavigate()
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<any[]>([])
@@ -32,11 +34,18 @@ export default function Header({ onMenu }: { onMenu: ()=>void }) {
   const { lang, setLang, t } = useLang()
   useEffect(()=>{
     const id=setInterval(()=> setNow(new Date()), 1000)
+    const ping = ()=>{
+      fetch(`${API_BASE}/api/health`, { cache:'no-store' })
+        .then(r=> setBackendUp(r.ok))
+        .catch(()=> setBackendUp(false))
+    }
+    ping()
+    const id2=setInterval(ping, 60000)
     api.alertList().then((d: any)=> {
       const rows = Array.isArray(d) ? d : []
       setActiveCount(rows.filter((a: any)=> a.status === 'ACTIVE').length)
     }).catch(()=> {})
-    return ()=> clearInterval(id)
+    return ()=> { clearInterval(id); clearInterval(id2) }
   },[])
   const timeStr = now.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit', second:'2-digit'}) + ' - ' + now.toLocaleDateString('vi-VN')
   return (
@@ -64,7 +73,10 @@ export default function Header({ onMenu }: { onMenu: ()=>void }) {
       </div>
 
       <div className="header-right">
-        <span className="status"><span className="dot live" style={{animation:'pulse 1.5s infinite'}}/> {t('hdr.live')}</span>
+        <span className="status" title={backendUp === null ? 'Đang kiểm tra backend…' : backendUp ? 'Backend phản hồi' : 'Mất kết nối backend — dữ liệu hiển thị có thể cũ'}>
+          <span className="dot live" style={{animation:'pulse 1.5s infinite', background: backendUp === false ? '#DC2626' : '#10B981'}}/>
+          {backendUp === false ? 'Mất kết nối' : t('hdr.live')}
+        </span>
         <span className="meta">Cập nhật: {timeStr}</span>
         <span title={t('hdr.langNote')} style={{display:'flex', gap:4, alignItems:'center'}}>
           {LANGS.map(l=> (
@@ -72,7 +84,7 @@ export default function Header({ onMenu }: { onMenu: ()=>void }) {
           ))}
         </span>
         <button className="icon-btn" aria-label={t('hdr.notif')} onClick={()=> nav('/notifications')}><Bell size={18}/>{activeCount > 0 && <span className="badge">{activeCount}</span>}</button>
-        <button className="assistant"><Bot size={16}/> {t('hdr.assistant')}</button>
+        <button className="assistant" aria-label={t('hdr.assistant')} onClick={()=> window.dispatchEvent(new CustomEvent('ecochain-open-ai', { detail:{} }))}><Bot size={16}/> {t('hdr.assistant')}</button>
         <div className="user">QT</div>
       </div>
 

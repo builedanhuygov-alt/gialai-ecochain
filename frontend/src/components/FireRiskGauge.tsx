@@ -105,11 +105,17 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
         <button onClick={()=> analyze(scope.commune || scope.village || '')} className="ml-auto underline hover:text-slate-700">Tính lại</button>
       </div>
       {(score !== null || conf !== null) && (
-        <div className="flex items-center gap-2 text-[11px] text-slate-600">
-          {score !== null && <span>Risk <b>{score}/100</b></span>}
-          {conf !== null && <span>Tin cậy <b>{conf}%</b></span>}
-          {factors.length > 0 && <span className="truncate">· {factors.join(', ')}</span>}
-          {missing.length > 0 && <span title="Nguồn thiếu — tin cậy đã hạ tương ứng">· thiếu: {missing.join(', ')}</span>}
+        <div className="text-[11px] text-slate-600 leading-relaxed">
+          <div className="flex items-center gap-2 flex-wrap">
+            {score !== null && <span>Risk <b>{score}/100</b></span>}
+            {conf !== null && <span>Tin cậy <b>{conf}%</b></span>}
+          </div>
+          {(factors.length > 0 || missing.length > 0) && (
+            <div className="mt-0.5 break-words">
+              {factors.length > 0 && <span>· {factors.join(', ')}</span>}
+              {missing.length > 0 && <span title="Nguồn thiếu — tin cậy đã hạ tương ứng"> · thiếu: {missing.join(', ')}</span>}
+            </div>
+          )}
         </div>
       )}
 

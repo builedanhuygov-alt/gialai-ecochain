@@ -5,7 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // Fallback nếu dùng Leaflet (không dùng nhưng giữ để tránh thiếu CSS)
 // import 'leaflet/dist/leaflet.css'; 
 import { useLocation } from '../hooks/useLocation'
-import { API_BASE } from '../services/api'
+import { API_BASE, api } from '../services/api'
 import DemoTour from './DemoTour'
 import { getMode } from './ModeSwitch'
 
@@ -83,6 +83,8 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     const b = ((import.meta as any).env?.BASE_URL || '/') as string
     return (b.endsWith('/') ? b : b + '/') + f
   }
+  // Tìm không dấu: "phu my" vẫn ra "Phù Mỹ" (giống API /search/global)
+  const normVi = (s:string)=> (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   // Cache-buster cho geojson tĩnh — tăng GEOJSON_V mỗi lần regenerate để diệt CDN/browser cache cũ
   const GEOJSON_V = 'v4'
   const fetchJson = async (files:string[])=>{
@@ -188,9 +190,9 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       const map = mapRef.current
       try{
         const feats = communesRef.current?.features || []
-        const q = String(d.name || '').toLowerCase()
+        const q = normVi(String(d.name || ''))
         const f = feats.find((x:any)=>{
-          const n = String(x.properties?.ten_xa || '').toLowerCase()
+          const n = normVi(String(x.properties?.ten_xa || ''))
           return n && (n.includes(q) || (q && n.startsWith(q.slice(0, 6))))
         })
         if(f && map){ selectCommune(f.properties); return }
@@ -211,11 +213,27 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     return ()=> window.removeEventListener('ecochain-search' as any, h)
   },[])
 
-  const tickerLines = [
-    "15:02:10 - Trạm An Khê vừa gửi chỉ số Độ ẩm: 32% (Cảnh báo gió phơn)",
-    "15:01:45 - Vệ tinh Sentinel cập nhật ảnh quét vùng rừng Ia Mơr",
-    "15:00:12 - Hệ thống hoàn tất kiểm tra 135 xã/phường tỉnh Gia Lai",
-  ]
+  // Ticker chạy bằng DỮ LIỆU THẬT (cảnh báo chính thức + alerts đang hoạt động).
+  // Không còn tin mẫu cứng ("Trạm An Khê gửi chỉ số...") — chưa tải được thì
+  // hiện đúng một dòng "đang kết nối", không bịa tin.
+  const [tickerLines, setTickerLines] = useState<string[]>(['⏳ Đang kết nối dữ liệu trực tiếp…'])
+  useEffect(()=>{
+    Promise.all([
+      fetch(`${API}/api/fire/warnings`).then(r=> r.ok ? r.json() : []).catch(()=> []),
+      api.alertList('ACTIVE').catch(()=> []),
+    ]).then(([warns, alerts]: any[])=>{
+      const lines: string[] = []
+      ;(Array.isArray(warns) ? warns : []).slice(0,3).forEach((w:any)=>{
+        const scope = String(w.scope || '').split(';')[0].slice(0, 80)
+        lines.push(`🔥 CẤP ${w.level || '?'} — ${scope} (${String(w.source || '').slice(0, 32)})`)
+      })
+      ;(Array.isArray(alerts) ? alerts : []).slice(0,3).forEach((a:any)=>{
+        lines.push(`⚠ ${a.title || 'Cảnh báo'} — ${a.administrative_unit_id || ''}`)
+      })
+      if(lines.length) setTickerLines(lines)
+      else setTickerLines(['✓ Không có cảnh báo cháy đang hoạt động — hệ thống vẫn giám sát'])
+    }).catch(()=> {})
+  },[])
 
   useEffect(()=>{
     const id=setInterval(()=> setNow(new Date()), 1000)
@@ -721,15 +739,21 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         <div style={{position:'relative', pointerEvents:'auto', width:280, maxWidth:'40vw'}}>
         <div style={{background:'rgba(255,255,255,0.92)', backdropFilter:'blur(12px)', borderRadius:999, padding:'6px 12px', display:'flex', gap:6, alignItems:'center', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', width:'100%'}}>
           <span style={{opacity:0.6}}>⌕</span>
-          <input value={search} placeholder={`Tìm xã...${communesCount?` (${communesCount} xã)`:''}`} style={{border:0, outline:'none', flex:1, fontSize:12, background:'transparent', minWidth:0}} onChange={e=>{ const v=e.target.value; setSearch(v); const all=communesRef.current?.features||[]; const q=v.trim().toLowerCase(); setSuggests(!q?[]:all.filter((f:any)=> (f.properties?.ten_xa||'').toLowerCase().includes(q)).slice(0,8).map((f:any)=>f.properties)) }} onKeyDown={e=>{ if(e.key==='Enter' && suggests[0]) selectCommune(suggests[0]) }} />
+          <input value={search} placeholder={`Tìm xã...${communesCount?` (${communesCount} xã)`:''}`} style={{border:0, outline:'none', flex:1, fontSize:12, background:'transparent', minWidth:0}} onChange={e=>{ const v=e.target.value; setSearch(v); const all=communesRef.current?.features||[]; const q=normVi(v.trim()); setSuggests(!q?[]:all.filter((f:any)=> normVi(f.properties?.ten_xa||'').includes(q)).slice(0,8).map((f:any)=>f.properties)) }} onKeyDown={e=>{ if(e.key==='Enter' && suggests[0]) selectCommune(suggests[0]) }} />
         </div>
         {suggests.length>0 && <div style={{position:'absolute', top:'100%', left:0, right:0, marginTop:6, background:'#fff', borderRadius:12, boxShadow:'0 8px 24px rgba(0,0,0,0.15)', overflow:'hidden', zIndex:20}}>
           {suggests.map((s:any)=> <button key={s.ma_xa} onClick={()=>selectCommune(s)} style={{display:'block', width:'100%', textAlign:'left', padding:'8px 12px', fontSize:12, border:0, background:'transparent', cursor:'pointer', borderBottom:'1px solid #F1F5F9'}}>{s.ten_xa} <span style={{color:'#94A3B8'}}>· {s.ma_xa}</span></button>)}
         </div>}
         </div>
-        <div title={`${mode==='demo'?'DEMO tutorial':liveStatus} · ${now.toLocaleTimeString('vi-VN')}`} style={{background:'rgba(15,23,42,0.75)', backdropFilter:'blur(12px)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:999, padding:'6px 10px', fontSize:11, display:'flex', gap:6, alignItems:'center', color:'#fff', pointerEvents:'auto', whiteSpace:'nowrap'}}>
-          <span style={{width:8, height:8, borderRadius:999, background: mode==='demo'?'#F59E0B':liveStatus==='LIVE'?'#10B981':'#EF4444', display:'inline-block'}}/>
-          <span style={{fontWeight:800}}>{mode==='demo'?'DEMO':'Dữ liệu: '+liveStatus}</span>
+        <div title={`${mode==='demo'?'DEMO tutorial':liveStatus} · FIRMS ${sourceLive.firms||'…'} · GEE ${sourceLive.gee||'…'} · Sentinel-2 ${sourceLive.sentinel2||'…'} · ${now.toLocaleTimeString('vi-VN')}`} style={{background:'rgba(15,23,42,0.75)', backdropFilter:'blur(12px)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:999, padding:'6px 10px', fontSize:11, display:'flex', gap:6, alignItems:'center', color:'#fff', pointerEvents:'auto', whiteSpace:'nowrap'}}>
+          {(()=>{
+            if(mode==='demo') return (<><span style={{width:8, height:8, borderRadius:999, background:'#F59E0B', display:'inline-block'}}/><span style={{fontWeight:800}}>DEMO</span></>)
+            const live = [sourceLive.firms, sourceLive.gee, sourceLive.sentinel2].filter(s=> s==='LIVE').length
+            const known = [sourceLive.firms, sourceLive.gee, sourceLive.sentinel2].filter(Boolean).length
+            if(known > 0 && live === known) return (<><span style={{width:8, height:8, borderRadius:999, background:'#10B981', display:'inline-block'}}/><span style={{fontWeight:800}}>Dữ liệu: ĐẦY ĐỦ</span></>)
+            if(live > 0) return (<><span style={{width:8, height:8, borderRadius:999, background:'#F59E0B', display:'inline-block'}}/><span style={{fontWeight:800}}>Dữ liệu: MỘT PHẦN</span></>)
+            return (<><span style={{width:8, height:8, borderRadius:999, background:'#EF4444', display:'inline-block'}}/><span style={{fontWeight:800}}>Dữ liệu: NGOẠI TUYẾN</span></>)
+          })()}
         </div>
       </div>
       {/* Cấp cháy từng xã chưa tải được: nói rõ, điểm xám = chưa có dữ liệu */}
@@ -835,7 +859,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       {/* Bottom ticker + timeline */}
       <div style={{position:'absolute', bottom:0, left:0, right:0, background:'rgba(11,20,18,0.94)', color:'#fff', padding:'8px 12px', display:'flex', flexDirection:'column', gap:6}}>
         <div style={{display:'flex', gap:10, alignItems:'center', overflow:'hidden', whiteSpace:'nowrap'}}>
-          <span style={{background: liveStatus==='LIVE'?'#10B981': liveStatus==='DEMO'?'#F59E0B':'#64748B', padding:'2px 8px', borderRadius:999, fontSize:11, fontWeight:700}}>{liveStatus==='LIVE'?'● LIVE': liveStatus==='DEMO'?'● DEMO':'● '+liveStatus}</span>
+          <span style={{background: liveStatus==='LIVE'?'#10B981': liveStatus==='DEMO'?'#F59E0B':'#B45309', padding:'2px 8px', borderRadius:999, fontSize:11, fontWeight:700}}>{liveStatus==='LIVE'?'● TRỰC TIẾP': liveStatus==='DEMO'?'● DEMO':'● NGUỒN HẠN CHẾ'}</span>
           <span style={{fontSize:12, animation:'marquee 18s linear infinite'}}>{tickerLines[tickerIdx]}</span>
         </div>
         <div style={{display:'flex', gap:8, alignItems:'center', background:'rgba(255,255,255,0.08)', borderRadius:10, padding:'6px 10px'}}>
