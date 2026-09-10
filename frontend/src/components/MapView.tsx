@@ -109,7 +109,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   const communePopup = async (f:any, lngLat:any, map:any)=>{
     const base = `<div style="font-family:Inter,sans-serif"><b>${f.ten_xa||''}</b><br/><span style="font-size:11px;color:#64748B">mã ${f.ma_xa||''} · ${f.dtich_km2||''} km² · dân số ${f.dan_so||''}</span>`
     const popup = new (maplibregl as any).Popup({ closeButton:true, maxWidth:'320px' }).setLngLat(lngLat).setHTML(base + `<br/>⏳ AI vệ tinh đang chẩn đoán...</div>`).addTo(map)
-    window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: f.ten_xa } }))
+    window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: f.ten_xa, lat: lngLat[1], lon: lngLat[0] } }))
     onSelectRef.current?.('commune', f.ten_xa || ('ma-' + f.ma_xa))
     try{
       const [fr, ds] = await Promise.all([
@@ -169,7 +169,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       }catch{}
     }
     onSelectRef.current?.('watch', a.village || a.commune || '')
-    window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: a.village || a.commune } }))
+    window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: a.village || a.commune, lat: flat, lon: flon } }))
     setInfo({ layer:'watch', status:'ANALYZING', source:'FIRMS + Sentinel-2 + FireRisk', village:a.village, commune:a.commune,
       fire:{ lon:flon, lat:flat, date:a.acq_date, distance_km:a.distance_km, confidence:a.confidence } })
     let sentinel:any = { status:'UNAVAILABLE' }
@@ -214,7 +214,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
             .setHTML(`<div style="font-family:Inter,sans-serif"><b>${d.name || 'Vị trí'}</b><br/><span style="font-size:11px;color:#64748B">${d.level || d.type || ''} · ${d.lat}, ${d.lng}</span></div>`)
             .addTo(map)
         }catch{}
-        window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: d.name } }))
+        window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: d.name, lat: d.lat, lon: d.lng } }))
         onSelectRef.current?.('search', d.name || '')
       }
     }
@@ -414,11 +414,15 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
             el.addEventListener('click', ()=>{
               const conf = String(f.confidence || 'n').toUpperCase()
               const confVi = conf.startsWith('H') ? 'Cao' : conf.startsWith('N') ? 'Thường' : conf.startsWith('L') ? 'Thấp' : conf
+              const artificial = f.suspect_artificial
+              const head = artificial
+                ? `<b>🌡️ Điểm nhiệt nghi nhân tạo</b><br/><span style="font-size:11px;color:#92400E">Gần ${f.artificial_source?.name || 'hạ tầng phát nhiệt'} (${f.artificial_source?.distance_km ?? '?'} km) — <b>không tính là cháy</b></span>`
+                : `<b>🔥 Điểm nóng cháy rừng</b>`
               void new (maplibregl as any).Popup({ closeButton:true, maxWidth:'320px' })
                 .setLngLat([lng, lat] as any)
-                .setHTML(`<div style="font-family:Inter,sans-serif; min-width:220px"><b>🔥 Điểm nóng cháy rừng</b><br/>Vệ tinh <b>${f.satellite || data.satellite || 'VIIRS'}</b> (${f.instrument || ''}) · Độ tin cậy <b>${confVi}</b><br/>🌡 Độ sáng <b>${f.brightness ?? '?'} K</b>${f.frp ? ` · Công suất bức xạ <b>${f.frp} MW</b>` : ''}<br/>🕒 Phát hiện: <b>${f.acq_date || ''} ${f.acq_time || ''}</b><br/>📍 ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}<br/><span style="font-size:10px;color:#64748B">Nguồn: NASA FIRMS · ${data.status || ''} · Đây là điểm nhiệt vệ tinh, cần xác minh thực địa trước khi kết luận cháy</span></div>`)
+                .setHTML(`<div style="font-family:Inter,sans-serif; min-width:220px">${head}<br/>Vệ tinh <b>${f.satellite || data.satellite || 'VIIRS'}</b> (${f.instrument || ''}) · Độ tin cậy <b>${confVi}</b><br/>🌡 Độ sáng <b>${f.brightness ?? '?'} K</b>${f.frp ? ` · Công suất bức xạ <b>${f.frp} MW</b>` : ''}<br/>🕒 Phát hiện: <b>${f.acq_date || ''} ${f.acq_time || ''}</b><br/>📍 ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}<br/><span style="font-size:10px;color:#64748B">Nguồn: NASA FIRMS · ${data.status || ''} · Đây là điểm nhiệt vệ tinh, cần xác minh thực địa trước khi kết luận cháy</span></div>`)
                 .addTo(mapRef.current)
-              window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: `Điểm nóng ${Number(lat).toFixed(2)}, ${Number(lng).toFixed(2)}` } }))
+              window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: `Điểm nóng ${Number(lat).toFixed(2)}, ${Number(lng).toFixed(2)}`, lat, lon: lng } }))
               onSelectRef.current?.('hotspot', `${lat},${lng}`)
             })
             hotspotMarkers.current.push(m)
@@ -639,7 +643,7 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
                 .setLngLat(e.lngLat)
                 .setHTML(`<div style="font-family:Inter,sans-serif; min-width:200px"><b>${f.ten_xa}</b><br/>${body}</div>`)
                 .addTo(map)
-              window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: f.ten_xa } }))
+              window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: f.ten_xa, lat: e.lngLat.lat, lon: e.lngLat.lng } }))
               onSelectRef.current?.('commune-point', f.ten_xa)
             }
             map.on('click','commune-fire',communeFireClickRef.current)

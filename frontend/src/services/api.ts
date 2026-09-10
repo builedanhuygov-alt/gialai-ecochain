@@ -43,6 +43,16 @@ export const api = {
   mobileReport: (body:Record<string, unknown>)=> req('/api/community/mobile-report', { method:'POST', body: JSON.stringify(body) }),
   missions: ()=> req('/api/missions').catch(()=> []),
   createMission: (body:Record<string, unknown>)=> req('/api/missions', { method:'POST', body: JSON.stringify(body) }),
+  approvals: ()=> req('/api/approvals').catch(()=> []),
+  approveApproval: (id:string, reason?:string)=> {
+    const tok = (()=>{ try{ return sessionStorage.getItem('ecogl_admin_token') }catch{ return null } })()
+    return req(`/api/approvals/${id}/approve`, { method:'POST', headers: tok ? { Authorization:`Bearer ${tok}` } : {}, body: JSON.stringify({ reason: reason || 'approved' }) })
+  },
+  rejectApproval: (id:string, reason?:string)=> {
+    const tok = (()=>{ try{ return sessionStorage.getItem('ecogl_admin_token') }catch{ return null } })()
+    return req(`/api/approvals/${id}/reject`, { method:'POST', headers: tok ? { Authorization:`Bearer ${tok}` } : {}, body: JSON.stringify({ reason: reason || 'rejected' }) })
+  },
+  governance: ()=> req('/api/governance').catch(()=> null),
   plans: ()=> req('/api/plans').catch(()=> []),
   planDetail: (id:string)=> req(`/api/plans/${id}`),
   createPlan: (goal:string)=> req('/api/plans', { method:'POST', body: JSON.stringify({ goal }) }),

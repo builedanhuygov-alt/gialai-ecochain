@@ -46,12 +46,13 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
   },[])
 
   // AI vệ tinh: NDVI (GEE Sentinel-2) + thời tiết + FIRMS + địa hình → score → cấp I-V
-  const analyze = async (area:string)=>{
-    const [lat, lon] = coordsFor(area)
+  // Tọa độ ưu tiên từ scope (vị trí user bấm trên bản đồ), fallback bảng tĩnh.
+  const analyze = async (area:string, lat?: number, lon?: number)=>{
+    const [dlat, dlon] = (lat !== undefined && lon !== undefined) ? [lat, lon] : coordsFor(area)
     const unit = area || 'GiaLai'
     setLoading(true)
     try{
-      const r = await fetch(`${API}/api/fire/risk?administrative_unit_id=${encodeURIComponent(unit)}&lat=${lat}&lon=${lon}`)
+      const r = await fetch(`${API}/api/fire/risk?administrative_unit_id=${encodeURIComponent(unit)}&lat=${dlat}&lon=${dlon}`)
       const j = await r.json()
       if(j.warning_level){ setLevel(j.warning_level); setManual(false) }
       setScore(j.risk_score ?? null); setConf(j.confidence ?? null)
@@ -64,14 +65,14 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
     setLoading(false)
   }
 
-  useEffect(()=>{ analyze(scope.commune || scope.village || '') }, [scope.commune, scope.village])
+  useEffect(()=>{ analyze(scope.commune || scope.village || '', scope.lat, scope.lon) }, [scope.commune, scope.village, scope.lat, scope.lon])
 
   // Listen to map selection → chạy lại AI cho khu vực đó
   useEffect(()=>{
     const handler = (e:any)=>{
       const d = e.detail || {}
       const area = d.area || d.commune || ''
-      if(area) analyze(String(area))
+      if(area) analyze(String(area), d.lat, d.lon)
     }
     window.addEventListener('ecochain-demo' as any, handler)
     window.addEventListener('ecochain-select-area' as any, handler)
@@ -102,7 +103,7 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
         <span className={`px-2 py-0.5 rounded-full font-bold ${status==='LIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>{status}</span>
         {manual && <span className="px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-500 border border-slate-200">Chọn tay (admin)</span>}
         {!isAdmin && <span className="px-2 py-0.5 rounded-full font-bold bg-slate-50 text-slate-400 border border-slate-200" title="Chỉ admin/host được chỉnh tay">🔒 AI tính</span>}
-        <button onClick={()=> analyze(scope.commune || scope.village || '')} className="ml-auto underline hover:text-slate-700">Tính lại</button>
+        <button onClick={()=> analyze(scope.commune || scope.village || '', scope.lat, scope.lon)} className="ml-auto underline hover:text-slate-700">Tính lại</button>
       </div>
       {(score !== null || conf !== null) && (
         <div className="text-[11px] text-slate-600 leading-relaxed">

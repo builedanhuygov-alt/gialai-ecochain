@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation, Link } from 'react-router-dom'
 import { api } from '../services/api'
 
 type Mission = { id: string; goal: string; scope?: string; status?: string }
@@ -21,6 +22,14 @@ export default function Missions(){
   const [detail, setDetail] = useState<any>(null)
   const [sim, setSim] = useState<any>(null)
   const [rec, setRec] = useState<any>(null)
+  const location = useLocation() as any
+  const incomingArea: string = location.state?.area || ''
+
+  // Prefill từ khu vực user chọn ở bản đồ/Dashboard — không mất ngữ cảnh.
+  useEffect(()=>{
+    if(incomingArea && !goal) setGoal(`Bảo vệ rừng ${incomingArea} mùa khô`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[incomingArea])
 
   // field checklist (per-device, honest local-only)
   const [steps, setSteps] = useState<boolean[]>(()=>{
@@ -52,7 +61,7 @@ export default function Missions(){
   const create = async ()=>{
     if(!goal.trim()) return
     try{
-      await api.createMission({ goal: goal.trim(), scope: 'Province' })
+      await api.createMission({ goal: goal.trim(), scope: incomingArea || 'Province' })
       setGoal('')
       refresh()
     }catch(e:any){ setError(String(e.message || e).slice(0, 200)) }
@@ -102,6 +111,7 @@ export default function Missions(){
 
       {tab === 'missions' && !loading && (
         <>
+          {incomingArea && <div style={{fontSize:12, color:'#0F766E', background:'#DCFCE7', borderRadius:8, padding:'6px 10px'}}>📍 Từ bản đồ: <b>{incomingArea}</b> — phạm vi nhiệm vụ sẽ gắn khu vực này</div>}
           <div style={{display:'flex', gap:8}}>
             <input value={goal} onChange={e=> setGoal(e.target.value)} placeholder="Mục tiêu nhiệm vụ mới, vd: Bảo vệ rừng Ia Mơr mùa khô..." aria-label="Mục tiêu mới" style={{flex:1, border:'1px solid #E2E8E5', borderRadius:999, padding:'8px 14px', fontSize:13}} onKeyDown={e=> { if(e.key === 'Enter') create() }} />
             <button onClick={create} style={{background:'#0F766E', color:'#fff', border:0, borderRadius:999, padding:'8px 16px', fontWeight:700}}>Tạo</button>
@@ -133,6 +143,7 @@ export default function Missions(){
                   <b>{p.goal}</b>
                   <span style={{fontSize:11, background:'#F1F5F3', padding:'2px 8px', borderRadius:999, whiteSpace:'nowrap'}}>{p.approval_status} · {p.execution_status} {openPlan === p.id ? '▴' : '▾'}</span>
                 </div>
+                {p.approval_status === 'PENDING' && <div style={{marginTop:6}}><Link to="/actions" style={{fontSize:12, color:'#0F766E', fontWeight:700}}>→ Sang trang Quản trị để duyệt</Link></div>}
               </button>
               {openPlan === p.id && detail && (
                 <div style={{marginTop:10, borderTop:'1px solid #F1F5F9', paddingTop:10}}>

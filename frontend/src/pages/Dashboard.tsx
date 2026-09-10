@@ -139,7 +139,7 @@ export default function Dashboard() {
             <button className="btn primary" onClick={()=> nav('/forest')}>Xem chi tiết</button>
             <button className="btn" onClick={()=> askAI(selected)}>Chạy phân tích AI</button>
             <button className="btn" onClick={()=> nav('/what-if')}>Xem kịch bản</button>
-            <button className="btn" onClick={()=> nav('/missions')}>Tạo nhiệm vụ</button>
+            <button className="btn" onClick={()=> nav('/missions', { state:{ area: selected } })}>Tạo nhiệm vụ</button>
           </div>
         </div>
       )}

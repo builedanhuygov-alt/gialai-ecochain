@@ -168,6 +168,20 @@ describe('api client', () => {
     expect(API_BASE.startsWith('https://')).toBe(true)
   })
 
+  it('approvals center: list, approve, reject, governance counts', async () => {
+    mockFetch(true, [{ id: 'a1', plan_id: 'p1', action: 'CREATE_OFFICIAL_ALERT', status: 'PENDING' }])
+    await expect(api.approvals()).resolves.toEqual([{ id: 'a1', plan_id: 'p1', action: 'CREATE_OFFICIAL_ALERT', status: 'PENDING' }])
+    mockFetch(true, { id: 'a1', status: 'APPROVED' })
+    await expect(api.approveApproval('a1')).resolves.toEqual({ id: 'a1', status: 'APPROVED' })
+    mockFetch(true, { id: 'a1', status: 'REJECTED' })
+    await expect(api.rejectApproval('a1')).resolves.toEqual({ id: 'a1', status: 'REJECTED' })
+    mockFetch(true, { ai_decisions: 3, human_decisions: 1, pending_approvals: 2 })
+    await expect(api.governance()).resolves.toEqual({ ai_decisions: 3, human_decisions: 1, pending_approvals: 2 })
+    mockFetch(false, {}, 500)
+    await expect(api.approvals()).resolves.toEqual([])
+    await expect(api.governance()).resolves.toBeNull()
+  })
+
   it('AI endpoints connect: health, fire-risk, what-if, pccc', async () => {
     mockFetch(true, { llm: { status: 'LIVE' }, rag: { status: 'LIVE' }, streaming: 'SSE' })
     await expect(api.aiHealth()).resolves.toEqual({ llm: { status: 'LIVE' }, rag: { status: 'LIVE' }, streaming: 'SSE' })

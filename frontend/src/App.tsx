@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { PageTransition } from './motion/primitives'
 import { LangProvider } from './i18n'
 import { API_BASE, api } from './services/api'
+import { useScope } from './store/useScope'
 const EcoMap = lazy(()=> import('./pages/EcoMap'))
 const MapPage = lazy(()=> import('./pages/MapPage'))
 const EventIntelligence = lazy(()=> import('./pages/EventIntelligence'))
@@ -303,6 +304,16 @@ function AnimatedRoutes(){
 }
 
 export default function App(){
+  // Shared area scope: map selections drive gauge/missions everywhere.
+  useEffect(()=>{
+    useScope.getState().loadHierarchy().catch(()=> {})
+    const h = (e: any)=>{
+      const d = e.detail || {}
+      if(d.area) useScope.getState().setArea(String(d.area), d.lat, d.lon)
+    }
+    window.addEventListener('ecochain-select-area', h)
+    return ()=> window.removeEventListener('ecochain-select-area', h)
+  },[])
   return (
     <MotionConfig reducedMotion="user">
       <BrowserRouter>
