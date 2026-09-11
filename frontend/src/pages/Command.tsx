@@ -120,7 +120,7 @@ export default function Command(){
           <div style={{marginTop:8, fontSize:12}}>
             <div>CẤP <b>{brief.level}</b> · điểm {brief.score}/100 · tin cậy {brief.confidence}% · mưa 14 ngày <b>{brief.rain_14d_mm ?? '?'}mm</b></div>
             {(brief.reasons || []).length > 0 && <ul style={{margin:'4px 0 4px 16px', padding:0}}>{brief.reasons.map((r:string, i:number)=> <li key={i}>{r}</li>)}</ul>}
-            {brief.nearest_water && <div>💧 Nguồn nước gần nhất: <b>{brief.nearest_water.name}</b> ({brief.nearest_water.distance_km} km{brief.nearest_water.capacity_liters ? ` · ${brief.nearest_water.capacity_liters} L` : ''})</div>}
+            {brief.nearest_water && <div>💧 Nguồn nước gần nhất: <b>{brief.nearest_water.name}</b> ({brief.nearest_water.distance_km} km{brief.nearest_water.capacity_m3 ? ` · ${brief.nearest_water.capacity_m3} m³` : brief.nearest_water.capacity_liters ? ` · ${brief.nearest_water.capacity_liters} L` : ''}{brief.nearest_water.priority ? ` · hạng ${brief.nearest_water.priority}` : ''})</div>}
             {brief.nearest_station && <div>🏕️ Trạm/tổ gần nhất: <b>{brief.nearest_station.name}</b> ({brief.nearest_station.distance_km} km)</div>}
             {(brief.watch_communes || []).length > 0 && <div style={{color:'#64748B'}}>Theo dõi: {brief.watch_communes.map((w:any)=> w.name).join(' · ')}</div>}
           </div>

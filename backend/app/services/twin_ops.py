@@ -163,3 +163,83 @@ def ffmc_isi_same_day(temp_c: float, humidity_pct: float, wind_kmh: float,
 
 def travel_minutes(distance_km: float, speed_kmh: float = ASSUMED_RURAL_SPEED_KMH) -> float:
     return round(distance_km / speed_kmh * 60.0, 1)
+
+
+# ── Curated water scoring per ops spec (40/30/20/10, A/B/C) ──────────
+# distance: 100 at 0km → 0 at 25km+ (linear, published)
+# capacity tiers: >=100M=100, >=10M=80, >=1M=60, >=100K=40, >0=20, unknown=0
+# road_access: True=100 else 0 (unknown counts as no — documented)
+# infra: verified=100 else 0 (manager known is necessary but not sufficient)
+# Priority: A if score>=80, B if 50-79, C if <50 OR status != verified.
+SPEC_WATER_WEIGHTS = {"distance": 0.40, "capacity": 0.30, "road_access": 0.20, "infrastructure": 0.10}
+ROAD_FACTOR = 1.3  # winding-road multiplier for ETA (documented assumption)
+
+
+def _capacity_score(cap_m3) -> float:
+    try:
+        c = float(cap_m3)
+    except Exception:
+        return 0.0
+    if c >= 100_000_000:
+        return 100.0
+    if c >= 10_000_000:
+        return 80.0
+    if c >= 1_000_000:
+        return 60.0
+    if c >= 100_000:
+        return 40.0
+    if c > 0:
+        return 20.0
+    return 0.0
+
+
+def score_water_spec(fire_lon: float, fire_lat: float, wind_toward_deg: float,
+                     waters: list) -> dict:
+    """Spec scoring over curated water_assets (+compatible dicts).
+
+    Each entry needs: name, longitude, latitude, capacity_m3 (or None),
+    road_access (bool), status. Returns ranked list with components shown.
+    """
+    scored = []
+    for w in waters:
+        get = (lambda k, d=None: w.get(k, d)) if isinstance(w, dict) else (lambda k, d=None: getattr(w, k, d))
+        try:
+            d = haversine_km(fire_lon, fire_lat, float(get("longitude")), float(get("latitude")))
+        except Exception:
+            continue
+        s_dist = max(0.0, 100.0 - d * 4.0)
+        s_cap = _capacity_score(get("capacity_m3"))
+        s_road = 100.0 if get("road_access") else 0.0
+        verified = str(get("status") or "") == "verified"
+        s_infra = 100.0 if verified else 0.0
+        total = round(s_dist * SPEC_WATER_WEIGHTS["distance"] + s_cap * SPEC_WATER_WEIGHTS["capacity"]
+                      + s_road * SPEC_WATER_WEIGHTS["road_access"] + s_infra * SPEC_WATER_WEIGHTS["infrastructure"], 1)
+        to_w = bearing_deg(fire_lon, fire_lat, float(get("longitude")), float(get("latitude")))
+        ang = abs((to_w - (wind_toward_deg % 360.0) + 180.0) % 360.0 - 180.0)
+        downwind = ang < 45.0
+        if not verified or total < 50:
+            prio = "C"
+        elif total >= 80:
+            prio = "A"
+        else:
+            prio = "B"
+        scored.append({
+            "id": get("id"), "name": get("name"), "asset_type": get("asset_type", "water"),
+            "distance_km": round(d, 2),
+            "capacity_m3": get("capacity_m3"), "road_access": bool(get("road_access")),
+            "status": get("status"), "manager": get("manager"),
+            "components": {"distance": round(s_dist, 1), "capacity": s_cap,
+                           "road_access": s_road, "infrastructure": s_infra},
+            "score": total, "priority": prio, "downwind": downwind,
+        })
+    scored.sort(key=lambda x: ({"A": 0, "B": 1, "C": 2}[x["priority"]], -x["score"]))
+    return {
+        "weights": SPEC_WATER_WEIGHTS,
+        "formula": "0.40*distance + 0.30*capacity + 0.20*road + 0.10*infra; A>=80, B 50-79, C<50 hoặc chưa xác minh",
+        "ranked": scored,
+    }
+
+
+def road_eta_minutes(distance_km: float, speed_kmh: float = ASSUMED_RURAL_SPEED_KMH) -> float:
+    """ETA with winding-road factor (documented, not pgRouting)."""
+    return round(distance_km * ROAD_FACTOR / speed_kmh * 60.0, 1)

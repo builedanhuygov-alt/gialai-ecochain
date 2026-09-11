@@ -79,7 +79,9 @@ def test_response_plan_shape_and_honesty():
                 "water_ranking", "travel_time", "asset_threats", "tactical_recommendations",
                 "generated_at"):
         assert key in d, key
-    assert d["nearest_water"]["name"] == "Be PCCC"
+    assert d["nearest_water"]["priority"] in ("A", "B", "C")
+    # curated reservoirs (capacity + road data) outrank the small demo tank
+    assert d["nearest_water"]["name"] != "Be PCCC"
     assert d["nearest_station"]["name"] == "Tram PCCC"
     assert "assumption" in d["travel_time"]
     assert isinstance(d["tactical_recommendations"], list) and d["tactical_recommendations"]

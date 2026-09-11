@@ -257,6 +257,8 @@ async def fire_brief(administrative_unit_id: str = Query(...), lat: float = Quer
     temp = cur.get("temperature")
     humidity = cur.get("humidity")
     wind = cur.get("wind_speed")
+    wind_dir = cur.get("wind_direction")
+    wind_toward_b = ((wind_dir + 180.0) % 360.0) if wind_dir is not None else 45.0
     try:
         firms = await fetch_firms(lat, lon)
         hotspots = [h for h in firms.get("fires", [])
@@ -281,7 +283,7 @@ async def fire_brief(administrative_unit_id: str = Query(...), lat: float = Quer
         reasons.append(f"{len(hotspots)} điểm nhiệt FIRMS trong 25km")
     if result.get("missing"):
         reasons.append(f"Thiếu dữ liệu: {', '.join(result['missing'])} — tin cậy đã hạ")
-    # nearest operational water + station (ranger-entered assets; honest when empty)
+    # nearest operational water/station + curated water ranking (spec)
     nearest_water, nearest_station = None, None
     try:
         from app.models.ops import OperationalAsset
@@ -297,6 +299,22 @@ async def fire_brief(administrative_unit_id: str = Query(...), lat: float = Quer
                              "capacity_liters": best_w.capacity_liters}
         if best_s is not None:
             nearest_station = {"name": best_s.name, "distance_km": round(ds, 2)}
+    except Exception:
+        pass
+    # curated reservoirs/hydro (capacity + road access known) outrank tanks
+    try:
+        from app.models.water import WaterAsset as _WA
+        from app.services import twin_ops as _ops
+        rows = [{"name": w.name, "longitude": w.longitude, "latitude": w.latitude,
+                 "capacity_m3": w.capacity_m3, "road_access": w.road_access,
+                 "status": w.status, "manager": w.manager}
+                for w in db.query(_WA).all()]
+        spec = _ops.score_water_spec(lon, lat, wind_toward_b, rows)
+        if spec["ranked"]:
+            top = spec["ranked"][0]
+            nearest_water = {"name": top["name"], "distance_km": top["distance_km"],
+                             "capacity_m3": top["capacity_m3"], "priority": top["priority"],
+                             "manager": top.get("manager")}
     except Exception:
         pass
     # watch: 5 nearest communes by centroid (real boundaries)
@@ -395,14 +413,23 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
         step["affected_communes"] = spread_svc.affected_communes(step["polygon"]["coordinates"][0], communes)
     ros = sim["steps"][0]["length_km"] / max(sim["steps"][0]["hour"], 0.01) if sim["steps"] else 0.3
 
-    # 4. assets: threats + water ranking + station + route
+    # 4. assets: threats + water ranking (SPEC 40/30/20/10 over curated
+    # water_assets) + station + route
     assets = [{"id": a.id, "name": a.name, "asset_type": a.asset_type, "status": a.status,
                "latitude": a.latitude, "longitude": a.longitude,
                "capacity_liters": a.capacity_liters}
               for a in db.query(OperationalAsset).all()]
     threats = ops.assess_asset_threat(lon, lat, ros, assets)
-    waters = [a for a in assets if a["asset_type"] == "water" and a["status"] == "active"]
-    ranking = ops.score_water_sources(lon, lat, wind_toward, waters)
+    from app.models.water import WaterAsset
+    speed = float(body.get("avg_speed_kmh") or 30.0)
+    spec_rows = [{"id": w.id, "name": w.name, "asset_type": w.asset_type,
+                  "longitude": w.longitude, "latitude": w.latitude,
+                  "capacity_m3": w.capacity_m3, "road_access": w.road_access,
+                  "status": w.status, "manager": w.manager}
+                 for w in db.query(WaterAsset).all()]
+    ranking = ops.score_water_spec(lon, lat, wind_toward, spec_rows)
+    for s in ranking["ranked"]:
+        s["eta_minutes"] = ops.road_eta_minutes(s["distance_km"], speed)
     station = None
     for a in sorted([a for a in assets if a["asset_type"] in ("station", "team") and a["status"] == "active"],
                     key=lambda a: _haversine_km(lon, lat, a["longitude"], a["latitude"])):
@@ -444,10 +471,14 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
         recs.append(f"Ưu tiên bảo vệ: {', '.join(t['name'] for t in threatened[:3])} (ETA < 3h theo lan truyền hiện tại)")
     if ranking["ranked"]:
         top = ranking["ranked"][0]
-        recs.append(f"Lấy nước tại {top['name']} (hạng {top['priority']}, {top['distance_km']} km"
-                    + (f", {top['capacity_liters']} L" if top.get("capacity_liters") else "") + ")")
+        cap = f", {top['capacity_m3']:,} m³".replace(",", ".") if top.get("capacity_m3") else ""
+        recs.append(f"Điều xe lấy nước tại {top['name']} (hạng {top['priority']}, {top['distance_km']} km, ETA ~{top['eta_minutes']} phút{cap})")
+        for s in ranking["ranked"][:3]:
+            if s.get("downwind"):
+                recs.append(f"⚠ {s['name']} nằm hướng gió — khói có thể ảnh hưởng đường lấy nước, ưu tiên nguồn khác nếu được")
+                break
     else:
-        recs.append("Chưa có bể/nước trong hệ thống — nhập GPS bể gần nhất trên trang Quản trị")
+        recs.append("Chưa có dữ liệu hồ chứa — kiểm tra seed water_assets")
     if station:
         tmin = ops.travel_minutes(station["distance_km"])
         recs.append(f"Điều động từ {station['name']} ({station['distance_km']} km, ~{tmin} phút đường chim bay @30km/h)")
