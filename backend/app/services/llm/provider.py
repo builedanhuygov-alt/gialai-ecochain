@@ -121,21 +121,24 @@ class GeminiProvider(LLMProvider):
         return {"status": "LIVE" if self.api_key else "CONFIGURATION_REQUIRED", "provider": "Gemini", "model": self.model}
 
 class GroqProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "llama-3.1-70b-versatile"):
+    # Cloudflare in front of api.groq.com blocks default python UA (403/1010)
+    # — send a browser-like UA on every call.
+    _HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) EcoGL/1.0"}
+    def __init__(self, api_key: str, model: str = "groq/compound-mini"):
         self.api_key = api_key
         self.model = model
     async def generate(self, system, user, schema=None):
         async with httpx.AsyncClient(timeout=30) as client:
             payload = {"model": self.model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], "temperature": 0.3}
             r = await client.post("https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {self.api_key}"}, json=payload)
+                headers={"Authorization": f"Bearer {self.api_key}", **self._HEADERS}, json=payload)
             r.raise_for_status()
             j = r.json()
             return {"content": j["choices"][0]["message"]["content"], "model": self.model, "provider": "Groq"}
     async def stream(self, system, user):
         async with httpx.AsyncClient(timeout=30) as client:
             async with client.stream("POST", "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {self.api_key}"}, json={"model": self.model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], "stream": True}) as r:
+                headers={"Authorization": f"Bearer {self.api_key}", **self._HEADERS}, json={"model": self.model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], "stream": True}) as r:
                 async for line in r.aiter_lines():
                     if line.startswith("data: "):
                         data = line[6:]
@@ -162,12 +165,12 @@ def get_llm_provider() -> LLMProvider:
     if provider == "gemini" and gemini_key:
         return GeminiProvider(gemini_key, model or "gemini-3.6-flash")
     if provider == "groq" and groq_key:
-        return GroqProvider(groq_key, model or "llama-3.1-70b-versatile")
+        return GroqProvider(groq_key, model or "groq/compound-mini")
     # Auto-detect by available key
     if gemini_key:
         return GeminiProvider(gemini_key, (model or "gemini-3.6-flash") if provider in ("", "gemini") else (model or "gemini-3.6-flash"))
     if groq_key:
-        return GroqProvider(groq_key, model or "llama-3.1-70b-versatile")
+        return GroqProvider(groq_key, model or "groq/compound-mini")
     if openai_key:
         return OpenAIProvider(openai_key, model or "gpt-4o-mini")
     # DEMO_MODE -> Mock, else CONFIGURATION_REQUIRED but still return Mock for health check (caller decides)

@@ -40,7 +40,7 @@ async def check_llm() -> Dict:
         "configured": bool(gemini or groq or openai),
         "status": "LIVE" if (gemini or groq or openai) else "DEMO",
         "provider": provider,
-        "model": "gemini-3.6-flash" if provider=="Gemini" else ("llama-3.1-70b" if provider=="Groq" else "gpt-4o-mini" if provider=="OpenAI" else "mock-llm-v1"),
+        "model": "gemini-3.6-flash" if provider=="Gemini" else ("groq/compound-mini" if provider=="Groq" else "gpt-4o-mini" if provider=="OpenAI" else "mock-llm-v1"),
         "capability": "PCCC synthesis + Vision + What-if advisor (Gemini 3.6 Flash)",
         "free_tier": "15 RPM, 1M TPM" if provider=="Gemini" else "",
         "fallback": "mock" if not (gemini or groq or openai) else "live",
