@@ -592,6 +592,28 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     const markers: any[] = []
     api.assetsList().then((rows: any)=>{
       if(cancelled || !mapRef.current || !Array.isArray(rows)) return
+      // Hồ chứa curated (16 hồ thật) — marker xanh dương phân biệt bể mini
+      try{
+        fetch(`${API_BASE}/api/water/assets`).then(r=> r.ok ? r.json() : null).then((w:any)=>{
+          const list = Array.isArray(w?.assets) ? w.assets : []
+          if(cancelled || !mapRef.current) return
+          list.forEach((a:any)=>{
+            if(typeof a.latitude !== 'number' || typeof a.longitude !== 'number') return
+            const el = document.createElement('div')
+            el.style.cssText = 'width:26px;height:26px;border-radius:999px;display:grid;place-items:center;background:#0369A1;color:#fff;font-size:14px;border:2px solid #fff;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.3)'
+            el.textContent = a.asset_type === 'hydro' ? '⚡' : '🌊'
+            el.title = `${a.name} (${a.capacity_m3 ? (a.capacity_m3 / 1e6).toFixed(0) + ' triệu m³' : 'chưa rõ dung tích'})`
+            const m = new (maplibregl as any).Marker({ element: el }).setLngLat([a.longitude, a.latitude] as any).addTo(mapRef.current!)
+            markers.push(m)
+            el.addEventListener('click', ()=>{
+              void new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' })
+                .setLngLat([a.longitude, a.latitude] as any)
+                .setHTML(`<div style="font-family:Inter,sans-serif"><b>🌊 ${a.name}</b><br/><span style="font-size:11px;color:#0369A1;font-weight:700">${a.asset_type} · ${a.status === 'verified' ? 'ĐÃ XÁC MINH' : 'CẦN XÁC MINH'}</span><br/><span style="font-size:11px;color:#334155">${a.capacity_m3 ? `Dung tích <b>${(a.capacity_m3 / 1e6).toFixed(0)} triệu m³</b>` : 'Chưa rõ dung tích'}${a.water_area_ha ? ` · ${a.water_area_ha} ha` : ''}<br/>${a.manager || ''} · ${a.commune || ''}</span><br/><span style="font-size:10px;color:#64748B">📍 ${a.latitude}, ${a.longitude}</span></div>`)
+                .addTo(mapRef.current!)
+            })
+          })
+        }).catch(()=> {})
+      }catch{}
       rows.filter((a:any)=> a.status === 'active').forEach((a:any)=>{
         if(typeof a.latitude !== 'number' || typeof a.longitude !== 'number') return
         const el = document.createElement('div')
