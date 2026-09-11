@@ -184,9 +184,133 @@ async def commune_levels(body: dict):
             continue
     return {"levels": out, "count": len(out), "failed": failed, "status": "LIVE", "origin": tag_data_origin()}
 
+@router.post("/fire/spread")
+async def fire_spread(body: dict):
+    """Simplified elliptical spread sketch (spread.ELLIPTICAL_HEURISTIC_V1).
+
+    Wind defaults to live Open-Meteo at the ignition point (direction
+    converted FROM-meteorological to TOWARD for the ellipse); affected
+    communes come from REAL boundaries via point-in-polygon.
+    """
+    from app.services import spread as spread_svc
+    from app.services.weather_service import fetch_current
+    try:
+        lon = float(body["lon"])
+        lat = float(body["lat"])
+    except Exception:
+        raise HTTPException(400, "lon/lat required")
+    wind_speed = body.get("wind_speed_kmh")
+    wind_toward = body.get("wind_direction_deg")
+    wind_source = "request"
+    if wind_speed is None or wind_toward is None:
+        try:
+            w = await fetch_current(lat, lon)
+            cur = w.get("current", {}) or {}
+            if wind_speed is None:
+                wind_speed = float(cur.get("wind_speed_10m", 15))
+            if wind_toward is None:
+                wind_toward = (float(cur.get("wind_direction_10m", 45)) + 180.0) % 360.0
+            wind_source = "Open-Meteo live" if w.get("status") == "LIVE" else "default"
+        except Exception:
+            pass
+    if wind_speed is None:
+        wind_speed = 15.0
+    if wind_toward is None:
+        wind_toward = 45.0
+    try:
+        hours = [float(h) for h in (body.get("hours") or [1, 3, 6])][:4]
+    except Exception:
+        hours = [1.0, 3.0, 6.0]
+    slope = float(body.get("slope_deg", 12.0))
+    sim = spread_svc.simulate(lon, lat, float(wind_speed), float(wind_toward), slope, hours)
+    communes = spread_svc.load_commune_shapes()
+    for step in sim["steps"]:
+        step["affected_communes"] = spread_svc.affected_communes(step["polygon"]["coordinates"][0], communes)
+    sim["wind_source"] = wind_source
+    sim["status"] = "SIMULATION"
+    return sim
+
+
+@router.get("/fire/brief")
+async def fire_brief(administrative_unit_id: str = Query(...), lat: float = Query(default=13.9), lon: float = Query(default=108.3)):
+    """    Commune AI brief: 14-day rain + current weather + FIRMS + heuristic risk,
+    assembled deterministically (reasons cited, no invented numbers)."""
+    from app.services.weather_service import fetch_current, fetch_history
+    from app.services.firms_service import fetch_firms, _haversine_km
+    from app.services import spread as spread_svc
+    from app.core.time import utcnow
+
+    hist = await fetch_history(lat, lon)
+    daily_rain = (hist.get("daily", {}) or {}).get("precipitation_sum") or []
+    last_rain = daily_rain[-1] if daily_rain else None
+    cur = {}
+    try:
+        w = await fetch_current(lat, lon)
+        cur = w.get("current", {}) or {}
+    except Exception:
+        pass
+    temp = cur.get("temperature")
+    humidity = cur.get("relative_humidity_2m", cur.get("humidity"))
+    wind = cur.get("wind_speed_10m", cur.get("windspeed"))
+    try:
+        firms = await fetch_firms(lat, lon)
+        hotspots = [h for h in firms.get("fires", [])
+                    if not h.get("suspect_artificial")
+                    and _haversine_km(lon, lat, float(h.get("longitude") or 0), float(h.get("latitude") or 0)) < 25]
+    except Exception:
+        hotspots, firms = [], {}
+    result = fire_risk_engine.analyze(
+        administrative_unit_id,
+        satellite={},
+        weather={k: v for k, v in {"temperature": temp, "humidity": humidity,
+                                   "rainfall": last_rain, "wind_speed": wind}.items() if v is not None},
+        terrain={}, hotspots=hotspots, community=0)
+    reasons = []
+    if (hist.get("dry_days") or 0) >= 7:
+        reasons.append(f"{hist['dry_days']} ngày liền không mưa (tổng {hist.get('rain_mm', 0)}mm/14 ngày)")
+    if humidity is not None and humidity < 35:
+        reasons.append(f"Độ ẩm thấp {humidity}%")
+    if temp is not None and temp >= 35:
+        reasons.append(f"Nhiệt độ cao {temp}°C")
+    if hotspots:
+        reasons.append(f"{len(hotspots)} điểm nhiệt FIRMS trong 25km")
+    if result.get("missing"):
+        reasons.append(f"Thiếu dữ liệu: {', '.join(result['missing'])} — tin cậy đã hạ")
+    # watch: 5 nearest communes by centroid (real boundaries)
+    watch = []
+    try:
+        shapes = spread_svc.load_commune_shapes()
+        import math as _m
+        scored = []
+        for c in shapes:
+            g = c.get("geometry") or {}
+            polys = [g["coordinates"]] if g.get("type") == "Polygon" else g.get("coordinates", [])
+            xs = [p[0] for poly in polys for ring in [poly[0] if poly else []] for p in ring]
+            ys = [p[1] for poly in polys for ring in [poly[0] if poly else []] for p in ring]
+            if not xs:
+                continue
+            cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
+            d = _m.hypot((cx - lon) * 111.32 * _m.cos(_m.radians(lat)), (cy - lat) * 111.32)
+            if c.get("name") != administrative_unit_id:
+                scored.append((d, c))
+        scored.sort(key=lambda t: t[0])
+        watch = [{"code": c["code"], "name": c["name"], "distance_km": round(d, 1)} for d, c in scored[:5]]
+    except Exception:
+        pass
+    return {
+        "administrative_unit_id": administrative_unit_id,
+        "level": result["warning_level"], "score": result["risk_score"],
+        "confidence": result["confidence"], "reasons": reasons,
+        "rain_14d_mm": hist.get("rain_mm"), "dry_days": hist.get("dry_days"),
+        "temperature": temp, "humidity": humidity, "wind_speed_kmh": wind,
+        "firms_nearby": len(hotspots), "watch_communes": watch,
+        "weather_status": hist.get("status"), "firms_status": (firms or {}).get("status"),
+        "generated_at": utcnow().isoformat(), "origin": tag_data_origin(),
+    }
+
+
 @router.post("/fire/simulation")
-def fire_simulation(body:dict):
-    # Sec16
+def fire_simulation(body:dict):    # Sec16
     temp=body.get("temperature",35); humidity=body.get("humidity",30); wind=body.get("wind",15)
     # simple delta
     base=62; delta=int((temp-30)*2 + (50-humidity)*0.3 + wind*0.5)

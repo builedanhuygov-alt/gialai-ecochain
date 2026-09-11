@@ -68,6 +68,43 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
   const [tickerIdx, setTickerIdx] = useState(0)
   const [showLayers, setShowLayers] = useState(false)
   const [showBounds, setShowBounds] = useState(true)
+  // 3D địa hình (MapLibre terrain, DEM miễn phí Terrarium — không cần key)
+  const [terrain3d, setTerrain3d] = useState(false)
+  useEffect(()=>{
+    const map = mapRef.current as any
+    if(!map) return
+    try{
+      if(terrain3d){
+        if(!map.getSource('terrain-dem')){
+          map.addSource('terrain-dem', { type:'raster-dem', tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'], tileSize:256, maxzoom:15, encoding:'terrarium' } as any)
+        }
+        map.setTerrain({ source:'terrain-dem', exaggeration:1.2 })
+        map.easeTo({ pitch: 60, duration: 1200 })
+      }else{
+        map.setTerrain(null)
+        try{ map.easeTo({ pitch: 0, duration: 800 }) }catch{}
+      }
+    }catch(e){ console.warn('3D terrain failed', e); setTerrain3d(false) }
+  },[terrain3d])
+  // Kết quả mô phỏng lan truyền cháy (polygons + xã ảnh hưởng)
+  const [spreadInfo, setSpreadInfo] = useState<any>(null)
+  const runSpread = async (lon:number, lat:number)=>{
+    try{
+      setSpreadInfo({ loading:true })
+      const r = await fetch(TILE_FIX(`${API}/api/fire/spread`), { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ lon, lat, hours:[1,3,6] }) })
+      const j = await r.json()
+      const map = mapRef.current as any
+      if(map){
+        try{ if(map.getLayer('spread-fill')) map.removeLayer('spread-fill'); if(map.getSource('spread-src')) map.removeSource('spread-src') }catch{}
+        const feats = (j.steps || []).map((s:any)=> ({ type:'Feature', properties:{ hour:s.hour, area_ha:s.area_ha },
+          geometry: s.polygon }))
+        map.addSource('spread-src', { type:'geojson', data:{ type:'FeatureCollection', features: feats } } as any)
+        map.addLayer({ id:'spread-fill', type:'fill', source:'spread-src', paint:{ 'fill-color':'#DC2626', 'fill-opacity':0.35, 'fill-outline-color':'#7F1D1D' } } as any)
+      }
+      setSpreadInfo(j)
+    }catch(e:any){ setSpreadInfo({ error: String(e.message || e).slice(0, 200) }) }
+  }
   useEffect(()=>{
     const map = mapRef.current
     if(!map) return
@@ -141,7 +178,18 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       const sigs = (ds?.signals || []).filter((s:any)=> s.risk_type !== 'FIRE').slice(0,4)
       const sigHtml = sigs.length ? `<div style="font-size:11px;color:#334155;margin-top:4px">🛡️ Đa thiên tai (DisasterGuard): ${sigs.map((s:any)=> `${hazardVi(s.risk_type)} <b>${s.score}</b>`).join(' · ')}</div>` : ''
       const miss = Array.isArray(j.missing) && j.missing.length ? `<div style="font-size:10px;color:#B45309;margin-top:2px">Thiếu: ${j.missing.join(', ')} — tin cậy đã hạ tương ứng</div>` : ''
-      popup.setHTML(base + `<br/><div style="margin-top:6px;display:flex;gap:6px;align-items:center"><span style="background:${c};color:#fff;font-weight:800;font-size:12px;padding:2px 10px;border-radius:999">CẤP ${lv} · ${LEVEL_VI[lv]||''}</span><span style="font-size:11px">Risk <b>${j.risk_score ?? '?'}/100</b></span><span style="font-size:10px;background:${j.status==='LIVE'?'#DCFCE7':'#FEF3C7'};padding:2px 6px;border-radius:999">${j.status||''}</span></div><div style="font-size:11px;color:#334155;margin-top:4px">🛰️ NDVI ${ev.satellite?.ndvi ?? '?'} · ${ev.weather?.temperature ?? '?'}°C · FIRMS ${n} điểm · Tin cậy ${j.confidence ?? '?'}%</div>${sigHtml}${miss}<div style="font-size:10px;color:#64748B">${Object.keys(j.factors||{}).join(', ')}</div></div>`)
+      popup.setHTML(base + `<br/><div style="margin-top:6px;display:flex;gap:6px;align-items:center"><span style="background:${c};color:#fff;font-weight:800;font-size:12px;padding:2px 10px;border-radius:999">CẤP ${lv} · ${LEVEL_VI[lv]||''}</span><span style="font-size:11px">Risk <b>${j.risk_score ?? '?'}/100</b></span><span style="font-size:10px;background:${j.status==='LIVE'?'#DCFCE7':'#FEF3C7'};padding:2px 6px;border-radius:999">${j.status||''}</span></div><div style="font-size:11px;color:#334155;margin-top:4px">🛰️ NDVI ${ev.satellite?.ndvi ?? '?'} · ${ev.weather?.temperature ?? '?'}°C · FIRMS ${n} điểm · Tin cậy ${j.confidence ?? '?'}%</div>${sigHtml}${miss}<div style="font-size:10px;color:#64748B">${Object.keys(j.factors||{}).join(', ')}</div><div data-brief="1" style="font-size:11px;color:#64748B;margin-top:4px">⏳ Đang lấy bản tin 14 ngày…</div></div>`)
+      // Bản tin AI xã: mưa 14 ngày + lý do + xã cần theo dõi (không bịa số)
+      fetch(TILE_FIX(`${API}/api/fire/brief?administrative_unit_id=${encodeURIComponent(f.ten_xa||('ma-'+f.ma_xa))}&lat=${lngLat[1].toFixed(4)}&lon=${lngLat[0].toFixed(4)}`)).then(r=> r.ok ? r.json() : null).then((b:any)=>{
+        if(!b) return
+        const el = popup.getElement()?.querySelector('[data-brief]')
+        if(!el) return
+        const reasons = (b.reasons || []).map((x:string)=> `<li>${x}</li>`).join('')
+        const watch = (b.watch_communes || []).map((w:any)=> w.name).join(' · ')
+        el.innerHTML = `📋 <b>Bản tin xã</b> — mưa 14 ngày <b>${b.rain_14d_mm ?? '?'}mm</b> (${b.dry_days ?? '?'} ngày khô) · FIRMS gần: <b>${b.firms_nearby ?? 0}</b>${reasons ? `<ul style="margin:4px 0 4px 16px;padding:0">${reasons}</ul>` : ''}${watch ? `<div>Theo dõi: ${watch}</div>` : ''}`
+      }).catch(()=> {
+        try{ const el = popup.getElement()?.querySelector('[data-brief]'); if(el) el.innerHTML = '' }catch{}
+      })
     }catch{ popup.setHTML(base + `<br/><span style="font-size:11px;color:#B45309">AI chưa kết nối (UNAVAILABLE) — thử lại sau</span></div>`) }
   }
   const communeBounds = (feat:any)=>{
@@ -434,10 +482,14 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
               const head = artificial
                 ? `<b>🌡️ Điểm nhiệt nghi nhân tạo</b><br/><span style="font-size:11px;color:#92400E">Gần ${f.artificial_source?.name || 'hạ tầng phát nhiệt'} (${f.artificial_source?.distance_km ?? '?'} km) — <b>không tính là cháy</b></span>`
                 : `<b>🔥 Điểm nóng cháy rừng</b>`
-              void new (maplibregl as any).Popup({ closeButton:true, maxWidth:'320px' })
+              const pop = new (maplibregl as any).Popup({ closeButton:true, maxWidth:'320px' })
                 .setLngLat([lng, lat] as any)
-                .setHTML(`<div style="font-family:Inter,sans-serif; min-width:220px">${head}<br/>Vệ tinh <b>${f.satellite || data.satellite || 'VIIRS'}</b> (${f.instrument || ''}) · Độ tin cậy <b>${confVi}</b><br/>🌡 Độ sáng <b>${f.brightness ?? '?'} K</b>${f.frp ? ` · Công suất bức xạ <b>${f.frp} MW</b>` : ''}<br/>🕒 Phát hiện: <b>${f.acq_date || ''} ${f.acq_time || ''}</b><br/>📍 ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}<br/><span style="font-size:10px;color:#64748B">Nguồn: NASA FIRMS · ${data.status || ''} · Đây là điểm nhiệt vệ tinh, cần xác minh thực địa trước khi kết luận cháy</span></div>`)
+                .setHTML(`<div style="font-family:Inter,sans-serif; min-width:220px">${head}<br/>Vệ tinh <b>${f.satellite || data.satellite || 'VIIRS'}</b> (${f.instrument || ''}) · Độ tin cậy <b>${confVi}</b><br/>🌡 Độ sáng <b>${f.brightness ?? '?'} K</b>${f.frp ? ` · Công suất bức xạ <b>${f.frp} MW</b>` : ''}<br/>🕒 Phát hiện: <b>${f.acq_date || ''} ${f.acq_time || ''}</b><br/>📍 ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}<br/><span style="font-size:10px;color:#64748B">Nguồn: NASA FIRMS · ${data.status || ''} · Đây là điểm nhiệt vệ tinh, cần xác minh thực địa trước khi kết luận cháy</span><br/><button data-spread="1" style="margin-top:6px;background:#DC2626;color:#fff;border:0;border-radius:999;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer">🔥 Mô phỏng lan truyền 1-6h</button></div>`)
                 .addTo(mapRef.current)
+              try{
+                const btn = pop.getElement().querySelector('[data-spread]') as HTMLElement | null
+                btn?.addEventListener('click', ()=> runSpread(lng, lat))
+              }catch{}
               window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: `Điểm nóng ${Number(lat).toFixed(2)}, ${Number(lng).toFixed(2)}`, lat, lon: lng } }))
               onSelectRef.current?.('hotspot', `${lat},${lng}`)
             })
@@ -813,6 +865,29 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         <div style={{position:'absolute', top:56, left:'50%', transform:'translateX(-50%)', zIndex:15, background:'rgba(245,158,11,0.95)', color:'#451A03', borderRadius:999, padding:'6px 14px', fontSize:11, fontWeight:700, boxShadow:'0 4px 12px rgba(0,0,0,0.15)', maxWidth:'92vw', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>⚠ {suspicious.length} điểm nghi ngờ trong 20km — quét FIRMS mỗi 60s</div>
       ) : null}
 
+      {/* Kết quả mô phỏng lan truyền: polygons theo giờ + xã ảnh hưởng thật */}
+      {spreadInfo && (
+        <div style={{position:'absolute', left:12, top:112, zIndex:10, width:300, maxWidth:'80vw', background:'rgba(255,255,255,0.97)', borderRadius:12, padding:12, boxShadow:'0 8px 24px rgba(0,0,0,0.2)', border:'1px solid #FECACA'}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <b style={{fontSize:12}}>🔥 Mô phỏng lan truyền</b>
+            <button onClick={()=> { setSpreadInfo(null); try{ const m = mapRef.current as any; if(m?.getLayer('spread-fill')) m.removeLayer('spread-fill'); if(m?.getSource('spread-src')) m.removeSource('spread-src') }catch{} }} style={{border:0, background:'transparent', cursor:'pointer'}}>✕</button>
+          </div>
+          {spreadInfo.loading && <div style={{fontSize:12, color:'#64748B', marginTop:6}}>Đang mô phỏng theo gió thực tế…</div>}
+          {spreadInfo.error && <div style={{fontSize:12, color:'#B91C1C', marginTop:6}}>⚠ {spreadInfo.error}</div>}
+          {spreadInfo.steps && (
+            <div style={{marginTop:6, display:'flex', flexDirection:'column', gap:6}}>
+              {spreadInfo.steps.map((s:any)=> (
+                <div key={s.hour} style={{fontSize:11, background:'#FEF2F2', borderRadius:8, padding:'6px 8px'}}>
+                  <b>Sau {s.hour}h:</b> lan {s.length_km} km · {s.area_ha} ha · gió {spreadInfo.inputs?.wind_speed_kmh ?? '?'} km/h
+                  {(s.affected_communes?.length > 0) && <div style={{marginTop:2}}>🏘️ {s.affected_communes.map((c:any)=> c.name).join(' · ')}</div>}
+                </div>
+              ))}
+              <div style={{fontSize:10, color:'#64748B'}}>Mô hình ellipse heuristic theo gió/dốc · gió: {spreadInfo.wind_source || ''} · {spreadInfo.disclaimer || ''}</div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Control Panel — Glassmorphism + Collapse/Expand, logic giữ nguyên */}
       {!showLayers ? (
         <button onClick={()=>setShowLayers(true)} title="Mở bảng điều khiển lớp phủ" style={{position:'absolute', top:64, left:12, zIndex:10, width:38, height:38, display:'grid', placeItems:'center', background:'rgba(15,23,42,0.75)', backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:12, color:'#fff', fontSize:16, cursor:'pointer', boxShadow:'0 8px 24px rgba(0,0,0,0.25)', transition:'transform .25s ease, opacity .25s ease'}}>⚙️</button>
@@ -832,6 +907,9 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
         <div style={{fontSize:11, fontWeight:700, opacity:.9}}>Ranh giới hành chính</div>
         <label style={{display:'flex', gap:6, alignItems:'center', background: showBounds?'rgba(16,185,129,0.25)':'rgba(255,255,255,0.08)', padding:'6px 8px', borderRadius:8, fontSize:12, border:'1px solid rgba(255,255,255,0.15)', cursor:'pointer', color:'#fff'}}>
           <input type="checkbox" checked={showBounds} onChange={()=> setShowBounds(v=> !v)} /> 🗺️ Ranh 134 xã + tỉnh
+        </label>
+        <label style={{display:'flex', gap:6, alignItems:'center', background: terrain3d?'rgba(16,185,129,0.25)':'rgba(255,255,255,0.08)', padding:'6px 8px', borderRadius:8, fontSize:12, border:'1px solid rgba(255,255,255,0.15)', cursor:'pointer', color:'#fff'}}>
+          <input type="checkbox" checked={terrain3d} onChange={()=> setTerrain3d(v=> !v)} /> ⛰️ 3D địa hình (kéo chuột phải để nghiêng)
         </label>
         <div style={{fontSize:11, fontWeight:700, opacity:.9}}>Lớp AI/GEE</div>
         {[
