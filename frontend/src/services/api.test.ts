@@ -168,8 +168,7 @@ describe('api client', () => {
     expect(API_BASE.startsWith('https://')).toBe(true)
   })
 
-  it('approvals center: list, approve, reject, governance counts', async () => {
-    mockFetch(true, [{ id: 'a1', plan_id: 'p1', action: 'CREATE_OFFICIAL_ALERT', status: 'PENDING' }])
+  it('approvals center: list, approve, reject, governance counts', async () => {    mockFetch(true, [{ id: 'a1', plan_id: 'p1', action: 'CREATE_OFFICIAL_ALERT', status: 'PENDING' }])
     await expect(api.approvals()).resolves.toEqual([{ id: 'a1', plan_id: 'p1', action: 'CREATE_OFFICIAL_ALERT', status: 'PENDING' }])
     mockFetch(true, { id: 'a1', status: 'APPROVED' })
     await expect(api.approveApproval('a1')).resolves.toEqual({ id: 'a1', status: 'APPROVED' })
@@ -193,5 +192,16 @@ describe('api client', () => {
     await expect(api.aiWhatIf({ temperature: 3 })).resolves.toEqual({ simulation: { affected: {} } })
     mockFetch(true, { status: 'LIVE' })
     await expect(api.aiPccc({})).resolves.toEqual({ status: 'LIVE' })
+  })
+
+  it('assets: list, create, delete', async () => {
+    mockFetch(true, [{ id: 'w1', asset_type: 'water', name: 'Be A', status: 'active' }])
+    await expect(api.assetsList()).resolves.toEqual([{ id: 'w1', asset_type: 'water', name: 'Be A', status: 'active' }])
+    mockFetch(true, { id: 'w2', asset_type: 'watchtower', name: 'Choi', status: 'active' })
+    await expect(api.createAsset({ asset_type: 'watchtower', name: 'Choi', latitude: 1, longitude: 2 })).resolves.toEqual({ id: 'w2', asset_type: 'watchtower', name: 'Choi', status: 'active' })
+    mockFetch(true, { id: 'w2', status: 'DELETED' })
+    await expect(api.deleteAsset('w2')).resolves.toEqual({ id: 'w2', status: 'DELETED' })
+    mockFetch(false, {}, 500)
+    await expect(api.assetsList()).resolves.toEqual([])
   })
 })

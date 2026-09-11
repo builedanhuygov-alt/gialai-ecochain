@@ -86,6 +86,64 @@ function AgentBoard(){
   )
 }
 
+function AssetBoard(){
+  const TYPES = [['watchtower','🗼 Chòi canh'],['camera','📷 Camera'],['water','🌊 Bể/nước'],['firetruck','🚒 Xe chữa cháy'],['pump','🔧 Máy bơm'],['team','⛺ Tổ kiểm lâm'],['station','🏕️ Trạm']]
+  const [items, setItems] = useState<any[]>([])
+  const [msg, setMsg] = useState('')
+  const [f, setF] = useState({ asset_type:'watchtower', name:'', latitude:'', longitude:'', status:'active', capacity_liters:'', coverage_radius_m:'', note:'' })
+  const token = (()=>{ try{ return sessionStorage.getItem('ecogl_admin_token') }catch{ return null } })()
+  const load = async ()=>{
+    try{ const d: any = await api.assetsList(); setItems(Array.isArray(d) ? d : []) }catch{}
+  }
+  useEffect(()=>{ load() },[])
+  const create = async ()=>{
+    setMsg('')
+    if(!f.name.trim() || !f.latitude || !f.longitude){ setMsg('Nhập tên + lat/lon.'); return }
+    if(!token){ setMsg('Cần đăng nhập (bất kỳ tài khoản nào) mới thêm được tài sản.'); return }
+    try{
+      const body: any = { asset_type: f.asset_type, name: f.name.trim(), latitude: Number(f.latitude), longitude: Number(f.longitude), status: f.status, note: f.note.trim() || undefined }
+      if(f.capacity_liters) body.capacity_liters = Number(f.capacity_liters)
+      if(f.coverage_radius_m) body.coverage_radius_m = Number(f.coverage_radius_m)
+      await api.createAsset(body)
+      setF({ asset_type:'watchtower', name:'', latitude:'', longitude:'', status:'active', capacity_liters:'', coverage_radius_m:'', note:'' })
+      setMsg('Đã thêm tài sản — hiện ngay trên bản đồ.')
+      load()
+    }catch(e:any){ setMsg(String(e.message || e).slice(0, 200)) }
+  }
+  const remove = async (id: string)=>{
+    try{ await api.deleteAsset(id); load() }catch(e:any){ setMsg(String(e.message || e).slice(0, 200)) }
+  }
+  const icon = (t: string)=> (TYPES.find(x=> x[0] === t)?.[1] || '📍').split(' ')[0]
+  return (
+    <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:16, marginTop:12}}>
+      <h3 style={{margin:'0 0 4px'}}>🏕️ Tài sản vận hành ({items.length})</h3>
+      <div style={{fontSize:11, color:'#64748B', marginBottom:8}}>Chòi/cam/bể/xe/máy bơm/tổ/trạm do kiểm lâm nhập GPS — bản đồ vẽ ngay, bản tin AI đo “nguồn nước gần nhất” từ đây.</div>
+      <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>
+        <select value={f.asset_type} onChange={e=> setF({...f, asset_type: e.target.value})} style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 8px', fontSize:12}}>
+          {TYPES.map(([v, l])=> <option key={v} value={v}>{l}</option>)}
+        </select>
+        <input value={f.name} onChange={e=> setF({...f, name: e.target.value})} placeholder="Tên (vd: Chòi Ia HDreh 01)" aria-label="Tên tài sản" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, flex:'1 1 160px'}} />
+        <input value={f.latitude} onChange={e=> setF({...f, latitude: e.target.value})} placeholder="Vĩ độ" aria-label="Vĩ độ" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:90}} />
+        <input value={f.longitude} onChange={e=> setF({...f, longitude: e.target.value})} placeholder="Kinh độ" aria-label="Kinh độ" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:90}} />
+        <input value={f.capacity_liters} onChange={e=> setF({...f, capacity_liters: e.target.value})} placeholder="Dung tích (lít)" aria-label="Dung tích" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:110}} />
+        <input value={f.coverage_radius_m} onChange={e=> setF({...f, coverage_radius_m: e.target.value})} placeholder="Phủ sóng (m)" aria-label="Bán kính phủ sóng" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:110}} />
+        <button onClick={create} style={{fontSize:12, background:'#0F766E', color:'#fff', border:0, borderRadius:999, padding:'6px 14px', fontWeight:700}}>Thêm</button>
+      </div>
+      {msg && <div style={{marginTop:8, fontSize:12}}>{msg}</div>}
+      {items.length === 0 && <div style={{marginTop:8, fontSize:12, color:'#64748B'}}>Chưa có tài sản nào — bản đồ và bản tin AI sẽ ghi rõ “chưa có” thay vì bịa.</div>}
+      {items.map((a:any)=> (
+        <div key={a.id} style={{marginTop:6, display:'flex', gap:8, alignItems:'center', fontSize:12, border:'1px solid #F1F5F9', borderRadius:8, padding:'6px 10px'}}>
+          <span>{icon(a.asset_type)}</span>
+          <b style={{flex:1}}>{a.name}</b>
+          <span style={{color:'#64748B'}}>{a.latitude}, {a.longitude}</span>
+          <span style={{fontSize:10, padding:'2px 8px', borderRadius:999, background: a.status==='active' ? '#DCFCE7' : '#FEE2E2'}}>{a.status}</span>
+          <button onClick={()=> remove(a.id)} title="Xóa (cần admin)" style={{fontSize:11, background:'#fff', border:'1px solid #E2E8E5', borderRadius:999, padding:'2px 8px'}}>Xóa</button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function DemoRunner(){
   const [out, setOut] = useState<any>(null)
   const [busy, setBusy] = useState(false)
@@ -162,6 +220,17 @@ function ConfigBoard({ geo }: { geo: any }){  return (
   )
 }
 
+function RecentAudit(){
+  const [rows, setRows] = useState<any[]>([])
+  useEffect(()=>{ api.auditLog().then((d: any)=> setRows(Array.isArray(d) ? d.slice(0, 3) : [])).catch(()=> setRows([])) },[])
+  if(rows.length === 0) return null
+  return (
+    <div className="audit">Nhật ký mới nhất:<br/>{rows.map((l: any, i: number)=> (
+      <div key={i}>{l.created_at} · {l.action} · {l.resource_type}{l.actor_id ? ` · ${l.actor_id}` : ''}</div>
+    ))}</div>
+  )
+}
+
 // NOTE (security): service-account private keys must NEVER touch the browser.
 // They live only in backend env / secret manager. This page therefore has no
 // key input — it only shows the live backend GEE status + setup instructions.
@@ -187,7 +256,6 @@ export default function Admin(){
     <div className="page">
       <h1>Quản trị — Người dùng · Vai trò · Nguồn dữ liệu · Agent · Sức khỏe hệ thống</h1>
       <div className="health"><div>Cơ sở dữ liệu ● Trực tuyến</div><div>API ● Trực tuyến</div><div>GEE ● {gee ? (connected ? 'Đã kết nối LIVE' : 'Chưa cấu hình (cần key ở backend)') : 'Đang kiểm tra...'}</div><div>AI Services ● Trực tuyến</div></div>
-      <div className="agents"><div>AGENT RỪNG ● TRỰC TUYẾN 99.1% <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:'#FEF3C7'}}>DEMO DATA</span></div><div>AGENT THIÊN TAI ● TRỰC TUYẾN</div><div>AGENT LOGISTICS ● TRỰC TUYẾN</div></div>
 
       <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:16, marginTop:12}}>
         <h3>0. Tình trạng cấu hình (live từ backend)</h3>
@@ -238,9 +306,10 @@ export default function Admin(){
       <ModelSwitcher />
       <FeedbackTriage />
       <AgentBoard />
+      <AssetBoard />
       <DemoRunner />
       <AccountPanel />
-      <div className="audit">Nhật ký: 14:32 Quản trị Tỉnh đã xác minh sự cố Thôn A — THÀNH CÔNG</div>
+      <RecentAudit />
       <style>{`.health,.agents{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:12px} .health div,.agents div{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:12px; font-size:13px} .audit{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:12px; margin-top:12px; font-size:13px; font-family:monospace} @media (max-width: 640px){ .health,.agents{ grid-template-columns:1fr; } }`}</style>
     </div>
   )

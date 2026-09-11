@@ -58,6 +58,15 @@ export const api = {
     return req(`/api/approvals/${id}/reject`, { method:'POST', headers: tok ? { Authorization:`Bearer ${tok}` } : {}, body: JSON.stringify({ reason: reason || 'rejected' }) })
   },
   governance: ()=> req('/api/governance').catch(()=> null),
+  assetsList: ()=> req('/api/assets').catch(()=> []),
+  createAsset: (body:Record<string, unknown>)=> {
+    const tok = (()=>{ try{ return sessionStorage.getItem('ecogl_admin_token') }catch{ return null } })()
+    return req('/api/assets', { method:'POST', headers: tok ? { Authorization:`Bearer ${tok}` } : {}, body: JSON.stringify(body) })
+  },
+  deleteAsset: (id:string)=> {
+    const tok = (()=>{ try{ return sessionStorage.getItem('ecogl_admin_token') }catch{ return null } })()
+    return req(`/api/assets/${id}`, { method:'DELETE', headers: tok ? { Authorization:`Bearer ${tok}` } : {} })
+  },
   plans: ()=> req('/api/plans').catch(()=> []),
   planDetail: (id:string)=> req(`/api/plans/${id}`),
   createPlan: (goal:string)=> req('/api/plans', { method:'POST', body: JSON.stringify({ goal }) }),

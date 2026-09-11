@@ -583,6 +583,39 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
     const t=setTimeout(()=> mapRef.current?.resize(), 300)
     return ()=> clearTimeout(t)
   }, [])
+  // Tài sản vận hành (chòi/cam/bể/xe/máy bơm/tổ/trạm) do kiểm lâm nhập GPS.
+  // Không có tài sản thì không vẽ gì — tuyệt đối không bịa marker mẫu.
+  useEffect(()=>{
+    let cancelled = false
+    const ICON: Record<string,string> = { watchtower:'🗼', camera:'📷', water:'🌊', firetruck:'🚒', pump:'🔧', team:'⛺', station:'🏕️' }
+    const TYPE_VI: Record<string,string> = { watchtower:'Chòi canh', camera:'Camera', water:'Bể/nước', firetruck:'Xe chữa cháy', pump:'Máy bơm', team:'Tổ kiểm lâm', station:'Trạm' }
+    const markers: any[] = []
+    api.assetsList().then((rows: any)=>{
+      if(cancelled || !mapRef.current || !Array.isArray(rows)) return
+      rows.filter((a:any)=> a.status === 'active').forEach((a:any)=>{
+        if(typeof a.latitude !== 'number' || typeof a.longitude !== 'number') return
+        const el = document.createElement('div')
+        el.style.cssText = 'width:26px;height:26px;border-radius:999px;display:grid;place-items:center;background:#0B1412;color:#fff;font-size:14px;border:2px solid #fff;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.3)'
+        el.textContent = ICON[a.asset_type] || '📍'
+        el.title = `${a.name} (${TYPE_VI[a.asset_type] || a.asset_type})`
+        const m = new (maplibregl as any).Marker({ element: el }).setLngLat([a.longitude, a.latitude] as any).addTo(mapRef.current!)
+        markers.push(m)
+        el.addEventListener('click', ()=>{
+          const extra = [
+            a.capacity_liters ? `Dung tích <b>${a.capacity_liters} L</b>` : '',
+            a.coverage_radius_m ? `Phủ sóng <b>${a.coverage_radius_m} m</b>` : '',
+            a.note || '',
+          ].filter(Boolean).join('<br/>')
+          void new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' })
+            .setLngLat([a.longitude, a.latitude] as any)
+            .setHTML(`<div style="font-family:Inter,sans-serif"><b>${ICON[a.asset_type] || ''} ${a.name}</b><br/><span style="font-size:11px;color:#0F766E;font-weight:700">${TYPE_VI[a.asset_type] || a.asset_type} · ĐANG HOẠT ĐỘNG</span><br/><span style="font-size:11px;color:#334155">${extra}</span><br/><span style="font-size:10px;color:#64748B">📍 ${a.latitude}, ${a.longitude}</span></div>`)
+            .addTo(mapRef.current!)
+        })
+      })
+      ;(mapRef.current as any)._assetMarkers = markers
+    }).catch(()=> {})
+    return ()=>{ cancelled = true; try{ ((mapRef.current as any)?._assetMarkers || []).forEach((m:any)=> m.remove()) }catch{} }
+  },[])
   // Hiển thị xã/thôn phân định + highlight 20km khi có cháy
   useEffect(()=>{
     if(!mapRef.current || !villages.length) return

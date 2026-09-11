@@ -13,7 +13,6 @@ from app.database import Base
 class ForestJob(Base):
     """Sec 41 — QUEUED/RUNNING/COMPLETED/FAILED/NO_DATA/CANCELLED."""
     __tablename__ = "forest_jobs"
-
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     administrative_unit_id: Mapped[str] = mapped_column(String(36), nullable=False)
     job_type: Mapped[str] = mapped_column(String(30), default="FOREST_MONITORING")
@@ -87,3 +86,31 @@ class QuotaLog(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False)  # OK|QUOTA_EXCEEDED|RATE_LIMITED
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+ASSET_TYPES = ("watchtower", "camera", "water", "firetruck", "pump", "team", "station")
+ASSET_STATUS = ("active", "inactive", "maintenance")
+
+
+class OperationalAsset(Base):
+    """Command-center assets entered by rangers (no external dataset needed).
+
+    type: watchtower|camera|water|firetruck|pump|team|station
+    Water tanks carry capacity_liters; towers/cameras carry coverage_radius_m.
+    Positions are operator-supplied GPS — the map renders them, the AI brief
+    measures "nearest water / nearest station" from them.
+    """
+    __tablename__ = "operational_assets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    asset_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    capacity_liters: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    coverage_radius_m: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

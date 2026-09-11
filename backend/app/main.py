@@ -122,6 +122,7 @@ def create_app() -> FastAPI:
     from app.api.routes.villages import router as villages_router
     from app.api.routes.auth import router as auth_router
     from app.api.routes.feedback import router as feedback_router
+    from app.api.routes.assets import router as assets_router
 
     app.include_router(health_router, prefix="/api", tags=["Health"])
     app.include_router(admin_router, prefix="/api", tags=["Administrative"])
@@ -142,6 +143,7 @@ def create_app() -> FastAPI:
     app.include_router(villages_router, prefix="/api", tags=["Villages"])
     app.include_router(auth_router, prefix="/api", tags=["Auth"])
     app.include_router(feedback_router, prefix="/api", tags=["Feedback"])
+    app.include_router(assets_router, prefix="/api", tags=["Assets"])
     # Sec77 versioned alias
     app.include_router(geo_router, prefix="/api/v1", tags=["Geospatial-v1"])
 

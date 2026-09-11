@@ -238,8 +238,8 @@ async def fire_spread(body: dict):
 
 
 @router.get("/fire/brief")
-async def fire_brief(administrative_unit_id: str = Query(...), lat: float = Query(default=13.9), lon: float = Query(default=108.3)):
-    """    Commune AI brief: 14-day rain + current weather + FIRMS + heuristic risk,
+async def fire_brief(administrative_unit_id: str = Query(...), lat: float = Query(default=13.9), lon: float = Query(default=108.3), db: Session = Depends(get_db)):
+    """Commune AI brief: 14-day rain + current weather + FIRMS + heuristic risk,
     assembled deterministically (reasons cited, no invented numbers)."""
     from app.services.weather_service import fetch_current, fetch_history, current_summary
     from app.services.firms_service import fetch_firms, _haversine_km
@@ -281,6 +281,24 @@ async def fire_brief(administrative_unit_id: str = Query(...), lat: float = Quer
         reasons.append(f"{len(hotspots)} điểm nhiệt FIRMS trong 25km")
     if result.get("missing"):
         reasons.append(f"Thiếu dữ liệu: {', '.join(result['missing'])} — tin cậy đã hạ")
+    # nearest operational water + station (ranger-entered assets; honest when empty)
+    nearest_water, nearest_station = None, None
+    try:
+        from app.models.ops import OperationalAsset
+        best_w, best_s, dw, ds = None, None, None, None
+        for a in db.query(OperationalAsset).filter(OperationalAsset.status == "active").all():
+            d = _haversine_km(lon, lat, a.longitude, a.latitude)
+            if a.asset_type == "water" and (dw is None or d < dw):
+                best_w, dw = a, d
+            if a.asset_type in ("station", "team") and (ds is None or d < ds):
+                best_s, ds = a, d
+        if best_w is not None:
+            nearest_water = {"name": best_w.name, "distance_km": round(dw, 2),
+                             "capacity_liters": best_w.capacity_liters}
+        if best_s is not None:
+            nearest_station = {"name": best_s.name, "distance_km": round(ds, 2)}
+    except Exception:
+        pass
     # watch: 5 nearest communes by centroid (real boundaries)
     watch = []
     try:
@@ -309,6 +327,7 @@ async def fire_brief(administrative_unit_id: str = Query(...), lat: float = Quer
         "rain_14d_mm": hist.get("rain_mm"), "dry_days": hist.get("dry_days"),
         "temperature": temp, "humidity": humidity, "wind_speed_kmh": wind,
         "firms_nearby": len(hotspots), "watch_communes": watch,
+        "nearest_water": nearest_water, "nearest_station": nearest_station,
         "weather_status": hist.get("status"), "firms_status": (firms or {}).get("status"),
         "generated_at": utcnow().isoformat(), "origin": tag_data_origin(),
     }
