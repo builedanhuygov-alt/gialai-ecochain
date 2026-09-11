@@ -2,7 +2,6 @@ import { MetricCard, AIInsightCard, AlertCard } from '../components/Cards'
 import MapView from '../components/MapView'
 import WeatherCard from '../components/WeatherCard'
 import { StaggerContainer, StaggerItem } from '../motion/primitives'
-import { mockKPIs, mockAlerts } from '../services/mockProvider'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LineChart, Line, ResponsiveContainer } from 'recharts'
@@ -32,8 +31,8 @@ export default function Dashboard() {
   },[])
 
   useEffect(()=>{
-    // KPIs + alerts come from real backend endpoints. mockProvider is ONLY a
-    // labeled offline fallback — never presented as live data.
+    // KPIs + alerts come ONLY from real backend endpoints. When unreachable,
+    // show an explicit offline state — never invented placeholder numbers.
     Promise.all([
       api.forestStats().catch(()=> null),
       api.riskOverview().catch(()=> null),
@@ -42,8 +41,8 @@ export default function Dashboard() {
     ]).then(([stats, overview, green, alerts]: any[])=>{
       const origins = [stats?.origin, overview?.origin, green?.origin].filter(Boolean)
       if(!stats && !overview && !green){
-        setBadge('NGOẠI TUYẾN — SỐ MINH HỌA')
-        setKpis(null); setLiveAlerts(null)
+        setBadge('NGOẠI TUYẾN')
+        setKpis(null); setLiveAlerts([])
         return
       }
       setBadge(origins.some(isDemoOrigin) ? 'DỮ LIỆU DEMO' : 'DỮ LIỆU TRỰC TIẾP')
@@ -67,7 +66,7 @@ export default function Dashboard() {
         time: String(a.created_at || '').slice(0,16).replace('T',' '),
         status: a.status || '',
       })))
-    }).catch(()=> { setBadge('NGOẠI TUYẾN — SỐ MINH HỌA'); setKpis(null); setLiveAlerts(null) })
+    }).catch(()=> { setBadge('NGOẠI TUYẾN'); setKpis(null); setLiveAlerts([]) })
     // trend from real risk history; empty state when no records yet
     api.riskHistory('Gia Lai').then((h:any)=>{
       const recs = Array.isArray(h?.records) ? h.records : []
@@ -99,8 +98,9 @@ export default function Dashboard() {
   const askAI = (area: string)=>{
     window.dispatchEvent(new CustomEvent('ecochain-open-ai', { detail:{ query: `Phân tích nguy cơ cháy rừng tại ${area}, Gia Lai` } }))
   }
-  const shownKpis = kpis || mockKPIs
-  const shownAlerts = liveAlerts || mockAlerts
+  const shownKpis: any[] = kpis || []
+  const shownAlerts: any[] = liveAlerts || []
+  const offline = kpis === null
   return (
     <div className="dash">
       <div className="welcome">
@@ -115,12 +115,18 @@ export default function Dashboard() {
       </div>
 
       <StaggerContainer>
+        {offline ? (
+          <div className="card" style={{fontSize:13}}>Không kết nối được backend — kiểm tra mạng rồi tải lại trang. Không hiển thị số liệu cũ để tránh hiểu nhầm.</div>
+        ) : (
+        <>
         <div className="kpi-grid">
-          {shownKpis.slice(0,4).map(k=> <StaggerItem key={k.label}><MetricCard {...k} icon={<span>●</span>} /></StaggerItem>)}
+          {shownKpis.slice(0,4).map((k:any)=> <StaggerItem key={k.label}><MetricCard {...k} icon={<span>●</span>} /></StaggerItem>)}
         </div>
         <div className="kpi-grid">
-          {shownKpis.slice(4,8).map(k=> <StaggerItem key={k.label}><MetricCard {...k} icon={<span>■</span>} /></StaggerItem>)}
+          {shownKpis.slice(4,8).map((k:any)=> <StaggerItem key={k.label}><MetricCard {...k} icon={<span>■</span>} /></StaggerItem>)}
         </div>
+        </>
+        )}
       </StaggerContainer>
 
       <WeatherCard />
@@ -147,8 +153,9 @@ export default function Dashboard() {
       <div className="two-col">
         <AIInsightCard />
         <div className="alerts">
-          <div className="card-title">CẢNH BÁO{liveAlerts ? '' : ' (MINH HỌA)'}</div>
-          {shownAlerts.map(a=> <AlertCard key={a.id} {...a} />)}
+          <div className="card-title">CẢNH BÁO</div>
+          {shownAlerts.length === 0 && <div style={{fontSize:12, color:'#64748B'}}>{offline ? 'Ngoại tuyến.' : 'Không có cảnh báo đang hoạt động.'}</div>}
+          {shownAlerts.map((a:any)=> <AlertCard key={a.id} {...a} />)}
         </div>
       </div>
 
@@ -178,6 +185,7 @@ export default function Dashboard() {
 
       <style>{`
         .dash{ display:flex; flex-direction:column; gap:18px; }
+        .card{ background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:12px; }
         .welcome{ background:#fff; border:1px solid #E2E8E5; border-radius:16px; padding:18px; display:flex; justify-content:space-between; align-items:center; }
         .welcome h1{ font-size:18px; font-weight:800; margin:0; }
         .welcome p{ font-size:13px; color:#64748B; margin:4px 0 0; }

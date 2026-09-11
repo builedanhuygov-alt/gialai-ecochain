@@ -190,6 +190,20 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
       }).catch(()=> {
         try{ const el = popup.getElement()?.querySelector('[data-brief]'); if(el) el.innerHTML = '' }catch{}
       })
+      // Ảnh vệ tinh tĩnh — CHỈ khi backend trả URL http(s) thật (GEE live).
+      // mock:// hoặc thiếu URL => không render gì, tránh ảnh giả.
+      fetch(TILE_FIX(`${API}/api/forest/satellite/thumbnail?lat=${lngLat[1].toFixed(4)}&lon=${lngLat[0].toFixed(4)}`)).then(r=> r.ok ? r.json() : null).then((t:any)=>{
+        const url = t?.thumbnail_url
+        if(!url || !String(url).startsWith('http')) return
+        const el = popup.getElement()?.querySelector('[data-brief]')
+        if(!el) return
+        const img = document.createElement('img')
+        img.src = url
+        img.alt = 'Ảnh vệ tinh khu vực'
+        img.loading = 'lazy'
+        img.style.cssText = 'width:100%;border-radius:8px;margin-top:6px;display:block'
+        el.appendChild(img)
+      }).catch(()=> {})
     }catch{ popup.setHTML(base + `<br/><span style="font-size:11px;color:#B45309">AI chưa kết nối (UNAVAILABLE) — thử lại sau</span></div>`) }
   }
   const communeBounds = (feat:any)=>{

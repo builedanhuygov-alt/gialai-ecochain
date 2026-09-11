@@ -149,7 +149,11 @@ def get_proposal(proposal_id: str, db: Session = Depends(get_db)):
         "confidence": p.confidence, "source": p.source,
         "lineage": {"verified_data_id": lineage.verified_data_id if lineage else None, "dataset": lineage.dataset if lineage else None},
         "confirmations": [{"user_id": c.user_id, "confirmed": c.confirmed} for c in confs],
-        "photos": [{"id": ph.id, "file_hash": ph.file_hash, "is_duplicate": ph.is_duplicate} for ph in photos],
+        "photos": [{"id": ph.id, "file_hash": ph.file_hash, "is_duplicate": ph.is_duplicate,
+                      "has_bytes": bool(ph.data),
+                      "url": f"/api/forest/proposals/{proposal_id}/photos/{ph.id}/file" if ph.data else None,
+                      "thumb_url": f"/api/forest/proposals/{proposal_id}/photos/{ph.id}/file?thumb=1" if ph.data else None}
+                     for ph in photos],
         "origin": tag_data_origin(),
     }
 
@@ -300,16 +304,26 @@ def history(administrative_unit_id: str, db: Session = Depends(get_db)):
 
 @router.post("/proposals/{proposal_id}/photos")
 def upload_photo(proposal_id: str, file: UploadFile = File(...), uploader_id: str = Form(...), lat: Optional[float] = Form(None), lng: Optional[float] = Form(None), db: Session = Depends(get_db)):
+    import uuid
+    from app.services.photo_service import MAX_UPLOAD_BYTES, make_variants
     p = db.get(DataProposal, proposal_id)
     if not p:
         raise HTTPException(status_code=404, detail="Proposal not found")
     data = file.file.read()
-    h = compute_hash(data)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 5MB)")
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    try:
+        full_jpeg, thumb_jpeg, w, h_px = make_variants(data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    digest = compute_hash(data)
     ph = compute_perceptual_hash(data)
     existing = db.query(PhotoEvidence).all()
     existing_hashes = [e.file_hash for e in existing]
     existing_phashes = [e.perceptual_hash for e in existing if e.perceptual_hash]
-    dup, _ = is_duplicate(h, existing_hashes, ph, existing_phashes)
+    dup, _ = is_duplicate(digest, existing_hashes, ph, existing_phashes)
     # geo check
     payload = json.loads(p.payload) if p.payload else {}
     geometry = payload.get("geometry")
@@ -318,12 +332,19 @@ def upload_photo(proposal_id: str, file: UploadFile = File(...), uploader_id: st
         unit = db.get(AdministrativeUnit, p.administrative_unit_id)
         geometry = unit.geometry_dict() if unit else {"type": "Polygon", "coordinates": [[[108,13],[109,13],[109,14],[108,14],[108,13]]]}
     geo_ok = check_geo_consistency(lat, lng, geometry)
+    pid = str(uuid.uuid4())
     photo = PhotoEvidence(
+        id=pid,
         proposal_id=proposal_id,
         uploader_id=uploader_id,
-        file_path=f"uploads/{proposal_id}/{file.filename}",
-        file_hash=h,
+        file_path=f"db://photo_evidences/{pid}",
+        file_hash=digest,
         perceptual_hash=ph,
+        data=full_jpeg,
+        thumb=thumb_jpeg,
+        content_type="image/jpeg",
+        width=w,
+        height=h_px,
         location_lat=lat,
         location_lng=lng,
         is_duplicate=dup,
@@ -337,7 +358,62 @@ def upload_photo(proposal_id: str, file: UploadFile = File(...), uploader_id: st
     auto = maybe_auto_verify(db, proposal_id)
     db.commit()
     db.refresh(photo)
-    return {"photo_id": photo.id, "is_duplicate": dup, "geo_check": geo_ok, "auto_verify": auto, "hash": h}
+    base = f"/api/forest/proposals/{proposal_id}/photos/{photo.id}/file"
+    return {"photo_id": photo.id, "is_duplicate": dup, "geo_check": geo_ok,
+            "auto_verify": auto, "hash": digest, "url": base, "thumb_url": base + "?thumb=1",
+            "width": photo.width, "height": photo.height}
+
+
+@router.get("/proposals/{proposal_id}/photos/{photo_id}/file")
+def get_photo_file(proposal_id: str, photo_id: str, thumb: int = 0, db: Session = Depends(get_db)):
+    from fastapi.responses import Response
+    ph = db.query(PhotoEvidence).filter_by(id=photo_id, proposal_id=proposal_id).first()
+    if not ph:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    blob = ph.thumb if thumb and ph.thumb else ph.data
+    if not blob:
+        raise HTTPException(status_code=404, detail="Photo bytes unavailable (legacy record)")
+    return Response(content=bytes(blob), media_type=ph.content_type or "image/jpeg",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
+@router.get("/photos/recent")
+def recent_photos(limit: int = Query(default=6, ge=1, le=20), db: Session = Depends(get_db)):
+    """Newest community field photos with displayable URLs (thumbs first)."""
+    rows = db.query(PhotoEvidence).order_by(PhotoEvidence.created_at.desc()).limit(limit).all()
+    out = []
+    for ph in rows:
+        if not ph.data:
+            continue  # legacy hash-only record: nothing to display
+        base = f"/api/forest/proposals/{ph.proposal_id}/photos/{ph.id}/file" if ph.proposal_id else None
+        out.append({"id": ph.id, "proposal_id": ph.proposal_id,
+                    "url": base, "thumb_url": base + "?thumb=1" if base else None,
+                    "created_at": str(ph.created_at), "is_duplicate": ph.is_duplicate,
+                    "location": [ph.location_lat, ph.location_lng] if ph.location_lat else None})
+    return {"photos": out, "count": len(out)}
+
+
+@router.get("/satellite/thumbnail")
+def satellite_thumbnail(lat: float = Query(...), lon: float = Query(...),
+                        start: str = Query(default="2026-08-01"), end: str = Query(default="2026-09-01"),
+                        db: Session = Depends(get_db)):
+    """Static satellite thumbnail URL for popups — ONLY a real http(s) URL when
+    GEE is connected; otherwise {thumbnail_url: None} so the UI shows an
+    honest empty state instead of a fake image."""
+    try:
+        from app.services.earth_engine.service import EEQueryParams, get_earth_engine_service
+        svc = get_earth_engine_service()
+        params = EEQueryParams(administrative_unit_id="thumb", geometry={"type": "Point", "coordinates": [lon, lat]},
+                               start_date=start, end_date=end, cloud_percentage=20,
+                               dataset=SatelliteSource.SENTINEL2)
+        t = svc.get_thumbnail(params) or {}
+        url = t.get("thumbnail_url") or t.get("tile_url")
+        if url and str(url).startswith("http"):
+            return {"thumbnail_url": url, "status": "LIVE", "source": t.get("source", "Google Earth Engine")}
+        return {"thumbnail_url": None, "status": t.get("status", "UNAVAILABLE"),
+                "reason": "No renderable thumbnail (GEE not connected)"}
+    except Exception as e:
+        return {"thumbnail_url": None, "status": "UNAVAILABLE", "reason": str(e)[:150]}
 
 @router.post("/proposals/{proposal_id}/field-task")
 def request_field_task(proposal_id: str, body: dict, db: Session = Depends(get_db)):

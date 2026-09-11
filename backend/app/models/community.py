@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, func, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -36,6 +36,13 @@ class PhotoEvidence(Base):
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     file_hash: Mapped[str] = mapped_column(String(128), nullable=False)  # sha256 or pHash
     perceptual_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Real bytes live IN the DB (works on serverless, no object storage needed).
+    # file_path is a storage key (db://photo_evidences/<id>), never a filesystem lie.
+    data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    thumb: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    content_type: Mapped[str] = mapped_column(String(30), default="image/jpeg")
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     upload_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     location_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     location_lng: Mapped[float | None] = mapped_column(Float, nullable=True)

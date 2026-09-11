@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, uploadProposalPhoto } from '../services/api'
+import { api, photoUrl, uploadProposalPhoto } from '../services/api'
 import { useLang } from '../i18n'
 
 type Post = {
@@ -38,34 +38,35 @@ function timeAgo(s?: string){  if(!s) return ''
   return `${Math.round(h / 24)} ngày trước`
 }
 
-const FIELD_PHOTOS = [
-  { src: 'field/lick-fire-night.jpg', caption: 'Cháy rừng ban đêm — Umatilla (minh họa)', credit: 'U.S. Forest Service · Public domain', url: 'https://commons.wikimedia.org/wiki/File:Lick_Fire_on_the_Umatilla_National_Forest_burning_at_night.jpg' },
-  { src: 'field/forest-fire-hisgett.jpg', caption: 'Đám cháy rừng — khói cột (minh họa)', credit: 'Tony Hisgett · CC BY 2.0', url: 'https://commons.wikimedia.org/wiki/File:Forest_Fire_(8045036104).jpg' },
-  { src: 'field/mullen-fire.jpg', caption: 'Khói cháy rừng Wyoming (minh họa)', credit: 'U.S. Forest Service · Public domain', url: 'https://commons.wikimedia.org/wiki/File:Mullen_Fire_shadow.jpg' },
-  { src: 'field/roadside-fire.jpg', caption: 'Cháy bìa rừng ven đường (minh họa)', credit: 'PJeganathan · CC BY-SA 4.0', url: 'https://commons.wikimedia.org/wiki/File:Roadside_forest_fire_JEG7882.jpg' },
-  { src: 'field/yellowstone-pyro.jpg', caption: 'Mây khói trên đám cháy (minh họa)', credit: 'Brocken Inaglory · CC BY-SA 3.0', url: 'https://commons.wikimedia.org/wiki/File:Wildfire_in_Yellowstone_National_Park_produces_Pyrocumulus_clouds1.jpg' },
-  { src: 'field/forest-fire-2-hisgett.jpg', caption: 'Lính cứu hỏa dập lửa (minh họa)', credit: 'Tony Hisgett · CC BY 2.0', url: 'https://commons.wikimedia.org/wiki/File:Forest_Fire_2_(8066648136).jpg' },
-]
-
-function Gallery(){  const [open, setOpen] = useState<string | null>(null)
+function Gallery(){
+  const [open, setOpen] = useState<string | null>(null)
+  const [photos, setPhotos] = useState<any[]>([])
+  const [loaded, setLoaded] = useState(false)
+  useEffect(()=>{
+    api.recentPhotos(6).then((d: any)=> setPhotos(Array.isArray(d?.photos) ? d.photos : [])).catch(()=> setPhotos([])).finally(()=> setLoaded(true))
+  },[])
   return (
     <div className="card">
-      <b>📷 Ảnh hiện trường tham khảo</b>
-      <div style={{fontSize:11, color:'#64748B', margin:'2px 0 8px'}}>Ảnh minh họa quốc tế (Wikimedia Commons, tự do bản quyền) — ảnh thực tế Gia Lai do cộng đồng tải lên qua nút 📷 ở từng bài</div>
+      <b>📷 Ảnh thực địa Gia Lai</b>
+      <div style={{fontSize:11, color:'#64748B', margin:'2px 0 8px'}}>Ảnh thật do cộng đồng tải lên (xác minh hash + vị trí) — không dùng ảnh minh họa nước ngoài</div>
+      {loaded && photos.length === 0 && (
+        <div style={{fontSize:13, background:'#F8FAF9', borderRadius:10, padding:'12px'}}>
+          Chưa có ảnh thực địa nào. Hãy là người đầu tiên báo cáo kèm ảnh ở mục bên dưới 📷
+        </div>
+      )}
+      {photos.length > 0 && (
       <div className="photo-grid" style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8}}>
-        {FIELD_PHOTOS.map(p=> (
-          <button key={p.src} onClick={()=> setOpen(p.src)} style={{border:0, padding:0, background:'none', cursor:'zoom-in'}}>
-            <img src={`${(import.meta as any).env?.BASE_URL || '/'}${p.src}`} alt={p.caption} loading="lazy" style={{width:'100%', height:110, objectFit:'cover', borderRadius:10, display:'block'}} />
+        {photos.map((p:any)=> (
+          <button key={p.id} onClick={()=> setOpen(photoUrl(p.url))} style={{border:0, padding:0, background:'none', cursor:'zoom-in'}}>
+            <img src={photoUrl(p.thumb_url || p.url)} alt={`Ảnh hiện trường ${p.id}`} loading="lazy" style={{width:'100%', height:110, objectFit:'cover', borderRadius:10, display:'block'}} />
           </button>
         ))}
       </div>
+      )}
       {open && (
         <div onClick={()=> setOpen(null)} style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', zIndex:60, display:'grid', placeItems:'center', padding:16}}>
           <figure style={{margin:0, maxWidth:640, width:'100%'}}>
-            <img src={`${(import.meta as any).env?.BASE_URL || '/'}${open}`} alt="Ảnh hiện trường" style={{width:'100%', borderRadius:12}} />
-            {FIELD_PHOTOS.filter(p=> p.src === open).map(p=> (
-              <figcaption key={p.src} style={{color:'#fff', fontSize:12, marginTop:8}}>{p.caption} — Nguồn: <a href={p.url} target="_blank" rel="noreferrer" style={{color:'#93C5FD'}}>{p.credit}</a></figcaption>
-            ))}
+            <img src={open} alt="Ảnh hiện trường" style={{width:'100%', borderRadius:12}} />
           </figure>
         </div>
       )}
@@ -273,6 +274,15 @@ export default function Community(){
                 </div>
                 {(detail.photos?.length ?? 0) > 0 && (
                   <div style={{fontSize:12, color:'#334155', marginBottom:6}}>📷 {detail.photos!.length} ảnh bằng chứng {detail.photos!.some(x=> x.is_duplicate) && '(có ảnh trùng hash)'}</div>
+                )}
+                {(detail.photos?.some((x:any)=> x.thumb_url || x.url)) && (
+                  <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:6, marginBottom:8}}>
+                    {detail.photos!.filter((x:any)=> x.thumb_url || x.url).map((x:any)=> (
+                      <a key={x.id} href={photoUrl(x.url)} target="_blank" rel="noreferrer">
+                        <img src={photoUrl(x.thumb_url || x.url)} alt="Ảnh bằng chứng" loading="lazy" style={{width:'100%', height:80, objectFit:'cover', borderRadius:8, display:'block'}} />
+                      </a>
+                    ))}
+                  </div>
                 )}
                 {confs.length === 0 && <div style={{fontSize:12, color:'#64748B'}}>Chưa có xác minh nào — bạn là người đầu tiên?</div>}
                 {confs.map((c, i)=> (

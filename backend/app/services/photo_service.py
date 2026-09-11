@@ -25,6 +25,42 @@ def is_duplicate(new_hash: str, existing_hashes: list[str], phash: Optional[str]
     return False, None
 
 
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
+
+def make_variants(data: bytes, max_full: int = 1600, max_thumb: int = 320) -> tuple[bytes, bytes, int, int]:
+    """Validate + normalize an upload into (full_jpeg, thumb_jpeg, w, h).
+
+    Raises ValueError when the bytes are not a decodable image. Pillow is a
+    hard dependency (see requirements.txt); the import stays local so unit
+    tests can still exercise hash logic without it.
+    """
+    try:
+        from PIL import Image, ImageOps
+    except Exception as exc:
+        raise ValueError(f"image library unavailable: {exc}")
+    import io
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.verify()
+        img = Image.open(io.BytesIO(data))
+    except Exception:
+        raise ValueError("not a decodable image")
+    img = ImageOps.exif_transpose(img).convert("RGB")
+    w, h = img.size
+
+    def _dump(im, quality: int) -> bytes:
+        buf = io.BytesIO()
+        im.save(buf, format="JPEG", quality=quality, optimize=True)
+        return buf.getvalue()
+
+    full = img.copy()
+    full.thumbnail((max_full, max_full))
+    thumb = img.copy()
+    thumb.thumbnail((max_thumb, max_thumb))
+    return _dump(full, 82), _dump(thumb, 70), w, h
+
+
 def check_geo_consistency(
     photo_lat: Optional[float],
     photo_lng: Optional[float],

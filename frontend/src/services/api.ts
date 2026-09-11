@@ -2,8 +2,12 @@
 // build time (Vercel project env). The fallback MUST be a reachable production
 // backend — never http://localhost:8000, which breaks the deployed site with
 // mixed-content errors (the viewer's own machine has no backend running).
-export const API_BASE = (import.meta.env.VITE_API_BASE || 'https://gialai-ecochainbb-bui11.vercel.app').replace(/\/$/, '')
+export const API_BASE = (import.meta.env.VITE_API_BASE || 'https://gialai-backend-fresh.vercel.app').replace(/\/$/, '')
 const BASE = API_BASE
+
+// Backend returns photo paths relative to its own origin (/api/forest/...);
+// <img> tags need the absolute backend URL.
+export const photoUrl = (rel?: string | null)=> rel ? `${API_BASE}${rel}` : ''
 
 async function req(path: string, init?: RequestInit) {
   const r = await fetch(`${BASE}${path}`, { headers: { 'Content-Type': 'application/json', ...(init?.headers||{}) }, ...init })
@@ -43,6 +47,7 @@ export const api = {
   mobileReport: (body:Record<string, unknown>)=> req('/api/community/mobile-report', { method:'POST', body: JSON.stringify(body) }),
   missions: ()=> req('/api/missions').catch(()=> []),
   createMission: (body:Record<string, unknown>)=> req('/api/missions', { method:'POST', body: JSON.stringify(body) }),
+  recentPhotos: (limit = 6)=> req(`/api/forest/photos/recent?limit=${limit}`).catch(()=> ({ photos: [] })),
   approvals: ()=> req('/api/approvals').catch(()=> []),
   approveApproval: (id:string, reason?:string)=> {
     const tok = (()=>{ try{ return sessionStorage.getItem('ecogl_admin_token') }catch{ return null } })()
