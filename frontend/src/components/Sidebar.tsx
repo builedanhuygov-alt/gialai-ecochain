@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { Map, Flame, FileCheck, Truck, Layers, Users, Settings, HelpCircle, X } from 'lucide-react'
+import { Map, Flame, FileCheck, Truck, Layers, Users, Settings, HelpCircle, X, Radio } from 'lucide-react'
 import FireRiskGauge from './FireRiskGauge'
 import { useLang } from '../i18n'
 
@@ -8,6 +8,7 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
   const groups = [
     { label: t('nav.main'), items:[
       { to:'/', label: t('nav.eco'), icon: Map },
+      { to:'/command', label: t('nav.command'), icon: Radio },
       { to:'/events', label: t('nav.events'), icon: Flame },
       { to:'/what-if', label: t('nav.whatif'), icon: Layers },
       { to:'/missions', label: t('nav.missions'), icon: FileCheck },

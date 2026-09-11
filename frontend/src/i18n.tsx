@@ -11,6 +11,7 @@ const dict: Record<Lang, Record<string, string>> = {
   vi: {
     'nav.main': 'CHÍNH',
     'nav.eco': 'Eco Map',
+    'nav.command': 'Chỉ huy',
     'nav.events': 'Event Intelligence',
     'nav.whatif': 'What-if Lab',
     'nav.missions': 'Missions',

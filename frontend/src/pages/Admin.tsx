@@ -87,10 +87,10 @@ function AgentBoard(){
 }
 
 function AssetBoard(){
-  const TYPES = [['watchtower','🗼 Chòi canh'],['camera','📷 Camera'],['water','🌊 Bể/nước'],['firetruck','🚒 Xe chữa cháy'],['pump','🔧 Máy bơm'],['team','⛺ Tổ kiểm lâm'],['station','🏕️ Trạm']]
+  const TYPES = [['watchtower','🗼 Chòi canh'],['camera','📷 Camera'],['water','🌊 Bể/nước'],['firetruck','🚒 Xe chữa cháy'],['pump','🔧 Máy bơm'],['team','⛺ Tổ kiểm lâm'],['station','🏕️ Trạm'],['route','🛣️ Tuyến tiếp cận']]
   const [items, setItems] = useState<any[]>([])
   const [msg, setMsg] = useState('')
-  const [f, setF] = useState({ asset_type:'watchtower', name:'', latitude:'', longitude:'', status:'active', capacity_liters:'', coverage_radius_m:'', note:'' })
+  const [f, setF] = useState({ asset_type:'watchtower', name:'', latitude:'', longitude:'', status:'active', capacity_liters:'', coverage_radius_m:'', note:'', viewer_url:'', geometry:'' })
   const token = (()=>{ try{ return sessionStorage.getItem('ecogl_admin_token') }catch{ return null } })()
   const load = async ()=>{
     try{ const d: any = await api.assetsList(); setItems(Array.isArray(d) ? d : []) }catch{}
@@ -104,8 +104,13 @@ function AssetBoard(){
       const body: any = { asset_type: f.asset_type, name: f.name.trim(), latitude: Number(f.latitude), longitude: Number(f.longitude), status: f.status, note: f.note.trim() || undefined }
       if(f.capacity_liters) body.capacity_liters = Number(f.capacity_liters)
       if(f.coverage_radius_m) body.coverage_radius_m = Number(f.coverage_radius_m)
+      if(f.viewer_url.trim()) body.viewer_url = f.viewer_url.trim()
+      if(f.geometry.trim()){
+        try{ body.geometry = JSON.parse(f.geometry) }
+        catch{ setMsg('geometry phải là GeoJSON LineString/Polygon hợp lệ.'); return }
+      }
       await api.createAsset(body)
-      setF({ asset_type:'watchtower', name:'', latitude:'', longitude:'', status:'active', capacity_liters:'', coverage_radius_m:'', note:'' })
+      setF({ asset_type:'watchtower', name:'', latitude:'', longitude:'', status:'active', capacity_liters:'', coverage_radius_m:'', note:'', viewer_url:'', geometry:'' })
       setMsg('Đã thêm tài sản — hiện ngay trên bản đồ.')
       load()
     }catch(e:any){ setMsg(String(e.message || e).slice(0, 200)) }
@@ -127,6 +132,8 @@ function AssetBoard(){
         <input value={f.longitude} onChange={e=> setF({...f, longitude: e.target.value})} placeholder="Kinh độ" aria-label="Kinh độ" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:90}} />
         <input value={f.capacity_liters} onChange={e=> setF({...f, capacity_liters: e.target.value})} placeholder="Dung tích (lít)" aria-label="Dung tích" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:110}} />
         <input value={f.coverage_radius_m} onChange={e=> setF({...f, coverage_radius_m: e.target.value})} placeholder="Phủ sóng (m)" aria-label="Bán kính phủ sóng" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:110}} />
+        <input value={f.viewer_url} onChange={e=> setF({...f, viewer_url: e.target.value})} placeholder="URL xem 360° (Panoee, có thì điền)" aria-label="URL 360" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, flex:'1 1 200px'}} />
+        <input value={f.geometry} onChange={e=> setF({...f, geometry: e.target.value})} placeholder='Tuyến: GeoJSON LineString (vd tuyến tiếp cận)' aria-label="Geometry tuyến" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, flex:'1 1 200px'}} />
         <button onClick={create} style={{fontSize:12, background:'#0F766E', color:'#fff', border:0, borderRadius:999, padding:'6px 14px', fontWeight:700}}>Thêm</button>
       </div>
       {msg && <div style={{marginTop:8, fontSize:12}}>{msg}</div>}

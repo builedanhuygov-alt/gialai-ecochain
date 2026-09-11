@@ -606,12 +606,21 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
             a.coverage_radius_m ? `Phủ sóng <b>${a.coverage_radius_m} m</b>` : '',
             a.note || '',
           ].filter(Boolean).join('<br/>')
+          const pano = a.viewer_url ? `<br/><a href="${a.viewer_url}" target="_blank" rel="noreferrer" style="display:inline-block;margin-top:6px;background:#0F766E;color:#fff;border-radius:999;padding:6px 12px;font-size:11px;font-weight:700;text-decoration:none">🎥 Xem 360°</a>` : ''
           void new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' })
             .setLngLat([a.longitude, a.latitude] as any)
-            .setHTML(`<div style="font-family:Inter,sans-serif"><b>${ICON[a.asset_type] || ''} ${a.name}</b><br/><span style="font-size:11px;color:#0F766E;font-weight:700">${TYPE_VI[a.asset_type] || a.asset_type} · ĐANG HOẠT ĐỘNG</span><br/><span style="font-size:11px;color:#334155">${extra}</span><br/><span style="font-size:10px;color:#64748B">📍 ${a.latitude}, ${a.longitude}</span></div>`)
+            .setHTML(`<div style="font-family:Inter,sans-serif"><b>${ICON[a.asset_type] || ''} ${a.name}</b><br/><span style="font-size:11px;color:#0F766E;font-weight:700">${TYPE_VI[a.asset_type] || a.asset_type} · ĐANG HOẠT ĐỘNG</span><br/><span style="font-size:11px;color:#334155">${extra}</span><br/><span style="font-size:10px;color:#64748B">📍 ${a.latitude}, ${a.longitude}</span>${pano}</div>`)
             .addTo(mapRef.current!)
         })
       })
+      // Tuyến tiếp cận (LineString) — vẽ đường, không marker
+      try{
+        const lines = (rows as any[]).filter((a:any)=> a.status === 'active' && a.geometry && (a.geometry.type === 'LineString' || a.geometry.type === 'MultiLineString'))
+        if(lines.length && mapRef.current && !mapRef.current.getSource('asset-routes')){
+          mapRef.current.addSource('asset-routes', { type:'geojson', data:{ type:'FeatureCollection', features: lines.map((a:any)=> ({ type:'Feature', properties:{ name:a.name }, geometry:a.geometry })) } } as any)
+          mapRef.current.addLayer({ id:'asset-routes', type:'line', source:'asset-routes', paint:{ 'line-color':'#0F766E', 'line-width':3, 'line-dasharray':[2,1.5] } } as any)
+        }
+      }catch{}
       ;(mapRef.current as any)._assetMarkers = markers
     }).catch(()=> {})
     return ()=>{ cancelled = true; try{ ((mapRef.current as any)?._assetMarkers || []).forEach((m:any)=> m.remove()) }catch{} }

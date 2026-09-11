@@ -18,11 +18,17 @@ router = APIRouter(tags=["Assets"])
 
 
 def _shape(a: OperationalAsset) -> dict:
+    import json as _json
+    try:
+        geom = _json.loads(a.geometry) if a.geometry else None
+    except Exception:
+        geom = None
     return {
         "id": a.id, "asset_type": a.asset_type, "name": a.name,
         "latitude": a.latitude, "longitude": a.longitude, "status": a.status,
         "capacity_liters": a.capacity_liters, "coverage_radius_m": a.coverage_radius_m,
-        "note": a.note, "created_by": a.created_by, "created_at": str(a.created_at),
+        "note": a.note, "viewer_url": a.viewer_url, "geometry": geom,
+        "created_by": a.created_by, "created_at": str(a.created_at),
     }
 
 
@@ -67,10 +73,32 @@ def create_asset(body: dict, db: Session = Depends(get_db), user=Depends(get_cur
     status = str(body.get("status") or "active").lower()
     if status not in ASSET_STATUS:
         raise HTTPException(400, f"status must be one of {', '.join(ASSET_STATUS)}")
+    geometry = body.get("geometry")
+    if geometry is not None:
+        import json as _json
+        if isinstance(geometry, dict):
+            if geometry.get("type") not in ("LineString", "Polygon", "MultiLineString"):
+                raise HTTPException(400, "geometry must be GeoJSON LineString/Polygon")
+            geometry = _json.dumps(geometry)
+        elif isinstance(geometry, str):
+            try:
+                g = _json.loads(geometry)
+                if g.get("type") not in ("LineString", "Polygon", "MultiLineString"):
+                    raise HTTPException(400, "geometry must be GeoJSON LineString/Polygon")
+            except HTTPException:
+                raise
+            except Exception:
+                raise HTTPException(400, "geometry must be valid GeoJSON")
+        else:
+            raise HTTPException(400, "geometry must be valid GeoJSON")
+    viewer_url = str(body.get("viewer_url") or "").strip()[:500] or None
+    if viewer_url and not (viewer_url.startswith("http://") or viewer_url.startswith("https://")):
+        raise HTTPException(400, "viewer_url must be http(s)")
     a = OperationalAsset(
         asset_type=atype, name=name, latitude=lat, longitude=lon, status=status,
         capacity_liters=body.get("capacity_liters"), coverage_radius_m=body.get("coverage_radius_m"),
-        note=(str(body.get("note") or "")[:500] or None), created_by=user.username,
+        note=(str(body.get("note") or "")[:500] or None), viewer_url=viewer_url,
+        geometry=geometry, created_by=user.username,
     )
     db.add(a)
     db.commit()

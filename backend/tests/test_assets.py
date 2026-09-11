@@ -56,8 +56,7 @@ def test_nearest_water_and_station():
     assert "chưa có" in empty["note"].lower()
 
 
-def test_brief_includes_asset_keys():
-    c = setup()
+def test_brief_includes_asset_keys():    c = setup()
     h = auth_headers(c)
     c.post("/api/assets", json={"asset_type": "water", "name": "Be Brief",
                                 "latitude": 13.9, "longitude": 108.3}, headers=h)
@@ -66,3 +65,25 @@ def test_brief_includes_asset_keys():
     d = r.json()
     assert "nearest_water" in d and "nearest_station" in d
     assert d["nearest_water"]["name"] == "Be Brief"
+
+
+def test_route_geometry_and_viewer_url():
+    c = setup()
+    h = auth_headers(c)
+    line = {"type": "LineString", "coordinates": [[108.0, 13.9], [108.1, 13.95]]}
+    r = c.post("/api/assets", json={"asset_type": "route", "name": "Tuyen A",
+                                    "latitude": 13.9, "longitude": 108.0,
+                                    "geometry": line,
+                                    "viewer_url": "https://pano.example.com/a"}, headers=h)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["geometry"]["type"] == "LineString"
+    assert d["viewer_url"] == "https://pano.example.com/a"
+    bad = c.post("/api/assets", json={"asset_type": "route", "name": "Bad",
+                                      "latitude": 13.9, "longitude": 108.0,
+                                      "geometry": {"type": "Point", "coordinates": [1, 2]}}, headers=h)
+    assert bad.status_code == 400
+    bad2 = c.post("/api/assets", json={"asset_type": "camera", "name": "Cam",
+                                       "latitude": 13.9, "longitude": 108.0,
+                                       "viewer_url": "ftp://x"}, headers=h)
+    assert bad2.status_code == 400

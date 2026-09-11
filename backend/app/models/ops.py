@@ -88,7 +88,7 @@ class QuotaLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-ASSET_TYPES = ("watchtower", "camera", "water", "firetruck", "pump", "team", "station")
+ASSET_TYPES = ("watchtower", "camera", "water", "firetruck", "pump", "team", "station", "route")
 ASSET_STATUS = ("active", "inactive", "maintenance")
 
 
@@ -111,6 +111,10 @@ class OperationalAsset(Base):
     capacity_liters: Mapped[int | None] = mapped_column(Integer, nullable=True)
     coverage_radius_m: Mapped[int | None] = mapped_column(Integer, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 360°: paste viewer_url (PTGui/Panoee) when field photos exist — nothing
+    # to code until then. Routes (tuyến tiếp cận) store LineString GeoJSON here.
+    viewer_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    geometry: Mapped[str | None] = mapped_column(Text, nullable=True)  # GeoJSON LineString/Polygon
     created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
