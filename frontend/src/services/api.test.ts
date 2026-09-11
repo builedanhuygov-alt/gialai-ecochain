@@ -204,4 +204,9 @@ describe('api client', () => {
     mockFetch(false, {}, 500)
     await expect(api.assetsList()).resolves.toEqual([])
   })
+
+  it('responsePlan posts fire point and returns a plan', async () => {
+    mockFetch(true, { risk_summary: { level: 'IV' }, tactical_recommendations: ['x'] })
+    await expect(api.responsePlan({ lat: 13.9, lon: 108.3 })).resolves.toEqual({ risk_summary: { level: 'IV' }, tactical_recommendations: ['x'] })
+  })
 })
