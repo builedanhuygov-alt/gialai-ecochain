@@ -22,6 +22,7 @@ async def detect_smoke_from_tile(tile_url: str = None, lat: float=13.9, lon: flo
         except: pass
     
     # Gemini Vision multimodal
+    sdk_error = ""
     if has_key and image_b64:
         try:
             from google import genai
@@ -43,20 +44,26 @@ async def detect_smoke_from_tile(tile_url: str = None, lat: float=13.9, lon: flo
                 data["alert"] = {"level": "CRITICAL", "message": f"Phát hiện khói tại {lat},{lon} - {data.get('reason')}", "bbox": bbox, "timestamp": time.time(), "source": "Gemini Vision", "tile_url": tile_url}
             return {"status": "LIVE", "provider": "Gemini Vision 2.5", "result": data, "tile_url": tile_url}
         except Exception as e:
-            pass
-    # Fallback heuristic DEMO — screenshot bạn gửi có vệt khói trắng rõ trên rừng Gia Lai
-    # Khi bbox Gia Lai và tile Esri/Sentinel, luôn trả is_smoke True để demo
-    is_demo_smoke = "107.3" in bbox or lat==13.9
+            sdk_error = str(e)[:150]
+    # Fallback TRUNG THỰC — không bao giờ bịa phát hiện khói.
+    # Quy tắc: không phân tích được ảnh = is_smoke False + status UNAVAILABLE,
+    # KHÔNG bbox giả, KHÔNG alert giả, KHÔNG confidence giả.
+    if not has_key:
+        why = "chưa cấu hình GEMINI_API_KEY — Vision chưa chạy, không kết luận khói"
+    elif not image_b64:
+        why = "không tải được ảnh tile vệ tinh — Vision chưa chạy, không kết luận khói"
+    else:
+        why = f"Vision lỗi ({sdk_error}) — không kết luận khói, thử lại sau"
     return {
-        "status": "DEMO" if not has_key else "LIVE",
+        "status": "UNAVAILABLE",
         "provider": "Gemini Vision" if has_key else "Mock Vision",
         "result": {
-            "is_smoke": True if is_demo_smoke else False,
-            "confidence": 0.87 if is_demo_smoke else 0.92,
-            "bbox": [0.42, 0.38, 0.18, 0.22],
-            "reason": "Vệt khói trắng/xám lan từ rừng Gia Lai, dạng plume điển hình — khớp ảnh bạn gửi",
-            "alert": {"level": "CRITICAL", "message": "Cảnh báo cháy rừng: phát hiện khói tại Gia Lai 13.9,108.3", "bbox": bbox} if is_demo_smoke else None
+            "is_smoke": False,
+            "confidence": None,
+            "bbox": None,
+            "reason": why,
+            "alert": None,
         },
         "tile_url": tile_url,
-        "note": "Demo smoke detection cho screenshot — khi có GEMINI_API_KEY sẽ chạy Vision thật"
+        "note": "UNAVAILABLE = chưa phân tích (thiếu key/thiếu ảnh/lỗi SDK). Frontend không được vẽ marker hay báo 'an toàn' từ kết quả này.",
     }

@@ -1072,10 +1072,11 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           try{
             const r=await fetch(`${API}/api/ai/smoke/detect`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tile_url: tileUrl, lat: center?.lat || 13.9, lon: center?.lng || 108.3, bbox }) })
             const j=await r.json()
-            const isSmoke = j.result?.is_smoke
-            setInfo({ layer:'smoke', status: j.status, source:'Gemini Vision', satellite: tileUrl.includes('arcgis')?'Esri':tileUrl.includes('eox')?'Sentinel-2':'Google', acquired: new Date().toISOString().slice(0,10), is_smoke: isSmoke, confidence: j.result?.confidence, reason: j.result?.reason, alert: j.result?.alert, bbox })
+            const analyzed = j.status === 'LIVE'
+            const isSmoke = analyzed ? j.result?.is_smoke === true : null
+            setInfo({ layer:'smoke', status: j.status, source:'Gemini Vision', satellite: tileUrl.includes('arcgis')?'Esri':tileUrl.includes('eox')?'Sentinel-2':'Google', acquired: new Date().toISOString().slice(0,10), is_smoke: isSmoke, confidence: j.result?.confidence, reason: j.result?.reason || (analyzed ? undefined : 'AI khói chưa khả dụng (thiếu key/thiếu ảnh) — không kết luận, không vẽ marker'), alert: j.result?.alert, bbox })
             if(isSmoke){
-              // Thêm marker cảnh báo khói
+              // Chỉ vẽ marker khi Vision THẬT xác nhận khói — không vẽ từ fallback
               const el=document.createElement('div'); el.style.width='22px'; el.style.height='22px'; el.style.borderRadius='999px'; el.style.background='#DC2626'; el.style.border='3px solid #fff'; el.style.boxShadow='0 0 12px rgba(220,38,38,1)'; el.style.animation='pulse 1s infinite'
               new (maplibregl as any).Marker({ element: el }).setLngLat([center?.lng || 108.3, center?.lat || 13.9] as any).addTo(mapRef.current)
             }
@@ -1089,8 +1090,9 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
           <div><i style={{width:10,height:10,borderRadius:999,background:'#1F2937',border:'2px solid #FBBF24',display:'inline-block',marginRight:6}}/> Từng cháy Hè 2026</div>
           <div><i style={{width:10,height:10,borderRadius:999,background:'#F59E0B',display:'inline-block',marginRight:6}}/> Vùng trọng điểm</div>
           <div><i style={{width:10,height:10,borderRadius:999,background:'#1E40AF',display:'inline-block',marginRight:6}}/> Cháy nhà/cơ sở</div>
-          {info?.layer==='smoke' && info?.is_smoke && <div style={{marginTop:6, padding:'6px 8px', background:'#FEE2E2', borderRadius:8, color:'#991B1B', fontWeight:700}}>🚨 {info.alert?.message || 'Phát hiện khói'}<br/><span style={{fontWeight:400, fontSize:10}}>Độ tin cậy {(info.confidence*100).toFixed(0)}% · {info.reason}</span></div>}
-          {info?.layer==='smoke' && info?.is_smoke===false && <div style={{marginTop:6, padding:'6px 8px', background:'#DCFCE7', borderRadius:8, color:'#065F46'}}>✓ Không có khói — an toàn</div>}
+          {info?.layer==='smoke' && info?.is_smoke && <div style={{marginTop:6, padding:'6px 8px', background:'#FEE2E2', borderRadius:8, color:'#991B1B', fontWeight:700}}>🚨 {info.alert?.message || 'Phát hiện khói'}<br/><span style={{fontWeight:400, fontSize:10}}>{typeof info.confidence === 'number' ? `Độ tin cậy ${(info.confidence*100).toFixed(0)}% · ` : ''}{info.reason}</span></div>}
+          {info?.layer==='smoke' && info?.is_smoke===false && info?.status==='LIVE' && <div style={{marginTop:6, padding:'6px 8px', background:'#DCFCE7', borderRadius:8, color:'#065F46'}}>✓ Không có khói — an toàn</div>}
+          {info?.layer==='smoke' && info?.is_smoke!==true && info?.is_smoke!==false && <div style={{marginTop:6, padding:'6px 8px', background:'#FEF3C7', borderRadius:8, color:'#92400E'}}>{info.reason || 'AI khói chưa khả dụng — không kết luận.'}</div>}
         </div>
       </div>
 

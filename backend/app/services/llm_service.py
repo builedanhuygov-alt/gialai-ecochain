@@ -82,20 +82,23 @@ Hãy xuất JSON chuẩn PCCCResponse với risk_level, summary, action_items (3
                 return {"source": "Gemini 3.6 Flash", "provider": "Gemini", "status": "LIVE", "model": "gemini-3.6-flash", **data}
         except Exception:
             pass
-        # Mock fallback JSON chuẩn
+        # Mock fallback: chỉ suy từ score THẬT của FireRiskEngine, mọi chữ đều
+        # ghi rõ là mẫu dự phòng. Status luôn DEMO trên path này (bug cũ trả LIVE).
         level = "CRITICAL" if fire_score>=80 else "WARNING" if fire_score>=60 else "WATCH"
         return {
-            "source": "Gemini 3.6 Flash (mock fallback)",
+            "source": "rule-based fallback (chưa có LLM)",
             "provider": check["provider"],
-            "status": "DEMO" if check["status"]=="DEMO" else "LIVE",
-            "model": "gemini-3.6-flash",
+            "status": "DEMO",
+            "model": "rule-based-v1",
             "risk_level": level,
-            "summary": f"Chư Prông khô hạn NDVI thấp, {firms_count} điểm nhiệt, gió Phơn {weather.get('wind_speed',20)}km/h — nguy cơ {level}",
-            "action_items": ["Triển khai tổ tuần tra Chư Prông - Ia Mơr", "Tạo đường băng cản lửa 500m quanh VQG Kon Ka Kinh", "Cảnh báo SMS 135 xã/phường Gia Lai"],
+            "summary": f"Mẫu dự phòng (chưa có LLM): score {fire_score}/100 tại {district} với {firms_count} điểm FIRMS → {level}. Cần LLM để có khuyến nghị cụ thể.",
+            "action_items": [f"Tuần tra khu vực {district} theo quy trình hiện hành",
+                             "Rà soát đường băng cản lửa quanh điểm nóng FIRMS",
+                             "Cảnh báo các xã trong diện theo dõi khi gió mạnh"],
             "affected_district": district,
-            "confidence": 0.89,
+            "confidence": 0.5,
             "evidence": {"fire_score": fire_score, "firms": firms_count},
-            "note": f"Mock: {str(e1)[:120]}",
+            "note": f"Fallback khi LLM lỗi: {str(e1)[:120]}",
         }
 
 async def verify_fire_image(image_b64: str, gps: Dict) -> Dict:
@@ -107,7 +110,11 @@ async def verify_fire_image(image_b64: str, gps: Dict) -> Dict:
         resp = await _sdk_generate(prompt)
         return {"status": "LIVE", "provider": "Gemini Vision 3.6", "gps": gps, "result": resp.text[:500]}
     except Exception as e:
-        return {"status": "DEMO", "provider": "Mock Vision", "gps": gps, "result": {"is_real": True, "confidence": 0.82, "reason": f"Mock: {str(e)[:100]}"}}
+        # Không xác minh được = không kết luận. is_real False + UNAVAILABLE,
+        # không bao giờ "xác nhận khói thật" khi chưa phân tích.
+        return {"status": "UNAVAILABLE", "provider": "Mock Vision", "gps": gps,
+                "result": {"is_real": False, "confidence": None,
+                           "reason": f"Chưa xác minh được ảnh (thiếu key/lỗi Vision) — không kết luận: {str(e)[:100]}"}}
 
 async def what_if_advisor(district: str, temp_delta: float, ndvi: float) -> Dict:
     """Vai trò 3: What-if Advisor"""
@@ -116,7 +123,9 @@ async def what_if_advisor(district: str, temp_delta: float, ndvi: float) -> Dict
         resp = await _sdk_generate(prompt)
         return {"status": "LIVE", "provider": "Gemini", "answer": resp.text[:800]}
     except Exception as e:
-        return {"status": "DEMO", "answer": f"Mock What-if: {district} EXTREME do NDVI {ndvi} thấp, +{temp_delta}°C sẽ tăng nguy cơ 23% (chi tiết khi có GEMINI_API_KEY). Lỗi: {str(e)[:80]}"}
+        return {"status": "UNAVAILABLE",
+                "answer": f"Chưa tư vấn được kịch bản {district} (thiếu key/lỗi LLM: {str(e)[:80]}) — không suy đoán số % nguy cơ khi chưa phân tích.",
+                "reason": "LLM what-if chưa khả dụng"}
 
 async def generate_pccc_scenario(prompt: str = "Simulate forest fire spread in Gia Lai with wind 20km/h") -> Dict:
     return await synthesis_pccc(fire_score=77, firms_count=2, weather={"temperature": 34, "wind_speed": 20, "humidity": 30}, district="Huyện Chư Prông")

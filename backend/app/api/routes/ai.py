@@ -190,9 +190,20 @@ async def smoke_detect(body: dict):
         if image_b64:
             from app.services.llm_service import verify_fire_image
             r = await verify_fire_image(image_b64=image_b64, gps={"lat": lat, "lon": lon})
-            # Map to smoke format
-            is_smoke = r.get("result", {}).get("is_real", False) if isinstance(r.get("result"), dict) else False
-            return {"status": r.get("status"), "provider": r.get("provider"), "result": {"is_smoke": is_smoke, "confidence": 0.87, "bbox": [0.42,0.38,0.18,0.22], "reason": "Vệt khói trắng/xám — khớp ảnh vệ tinh bạn gửi", "alert": {"level": "CRITICAL", "message": "Cảnh báo cháy: khói tại Gia Lai"} if is_smoke else None}, "tile_url": tile_url}
+            # Pass-through trung thực: KHÔNG tự thêm confidence/bbox/alert.
+            # verify_fire_image LIVE trả result là text; chỉ dict mới có số liệu.
+            raw = r.get("result", {})
+            if isinstance(raw, dict):
+                result = {"is_smoke": bool(raw.get("is_real", False)),
+                          "confidence": raw.get("confidence"),
+                          "bbox": None,
+                          "reason": raw.get("reason"),
+                          "alert": None}
+            else:
+                result = {"is_smoke": None, "confidence": None, "bbox": None,
+                          "reason": str(raw)[:300], "alert": None}
+            return {"status": r.get("status"), "provider": r.get("provider"),
+                    "result": result, "tile_url": tile_url}
         return await detect_smoke_from_tile(tile_url=tile_url, lat=lat, lon=lon, bbox=bbox)
     except Exception as e:
         return _ai_error(e, t0)
