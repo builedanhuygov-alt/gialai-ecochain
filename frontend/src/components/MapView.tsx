@@ -606,9 +606,15 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
             const m = new (maplibregl as any).Marker({ element: el }).setLngLat([a.longitude, a.latitude] as any).addTo(mapRef.current!)
             markers.push(m)
             el.addEventListener('click', ()=>{
+              const wv = a.viewer
+              const wview = wv?.viewer_type === 'panoee' && wv?.viewer_url
+                ? `<br/><a href="/viewer/${a.id}" style="display:inline-block;margin-top:6px;background:#0369A1;color:#fff;border-radius:999;padding:6px 12px;font-size:11px;font-weight:700;text-decoration:none">🌐 Xem hiện trường 360°</a>`
+                : wv?.viewer_type === 'streetview'
+                ? `<br/><span style="font-size:10px;color:#64748B">🌐 Street View đã xác minh.</span>`
+                : ''
               void new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' })
                 .setLngLat([a.longitude, a.latitude] as any)
-                .setHTML(`<div style="font-family:Inter,sans-serif"><b>🌊 ${a.name}</b><br/><span style="font-size:11px;color:#0369A1;font-weight:700">${a.asset_type} · ${a.status === 'verified' ? 'ĐÃ XÁC MINH' : 'CẦN XÁC MINH'}</span><br/><span style="font-size:11px;color:#334155">${a.capacity_m3 ? `Dung tích <b>${(a.capacity_m3 / 1e6).toFixed(0)} triệu m³</b>` : 'Chưa rõ dung tích'}${a.water_area_ha ? ` · ${a.water_area_ha} ha` : ''}<br/>${a.manager || ''} · ${a.commune || ''}</span><br/><span style="font-size:10px;color:#64748B">📍 ${a.latitude}, ${a.longitude}</span></div>`)
+                .setHTML(`<div style="font-family:Inter,sans-serif"><b>🌊 ${a.name}</b><br/><span style="font-size:11px;color:#0369A1;font-weight:700">${a.asset_type} · ${a.status === 'verified' ? 'ĐÃ XÁC MINH' : 'CẦN XÁC MINH'}</span><br/><span style="font-size:11px;color:#334155">${a.capacity_m3 ? `Dung tích <b>${(a.capacity_m3 / 1e6).toFixed(0)} triệu m³</b>` : 'Chưa rõ dung tích'}${a.water_area_ha ? ` · ${a.water_area_ha} ha` : ''}<br/>${a.manager || ''} · ${a.commune || ''}</span><br/><span style="font-size:10px;color:#64748B">📍 ${a.latitude}, ${a.longitude}</span>${wview}</div>`)
                 .addTo(mapRef.current!)
             })
           })
@@ -628,14 +634,28 @@ export default function MapView({ onSelect }: { onSelect?: (type:string, id:stri
             a.coverage_radius_m ? `Phủ sóng <b>${a.coverage_radius_m} m</b>` : '',
             a.note || '',
           ].filter(Boolean).join('<br/>')
-          // Ưu tiên ảnh: 1) viewer_url 360 (Panoee/PTGui) 2) ảnh cộng đồng gần đó
-          // 3) vệ tinh tĩnh khi GEE live — hết cách mới ghi "chưa có".
-          const pano = a.viewer_url ? `<br/><a href="${a.viewer_url}" target="_blank" rel="noreferrer" style="display:inline-block;margin-top:6px;background:#0F766E;color:#fff;border-radius:999;padding:6px 12px;font-size:11px;font-weight:700;text-decoration:none">🎥 Xem 360°</a>` : `<br/><span data-assetphotos="1" style="font-size:10px;color:#64748B">Đang tìm ảnh quanh đây…</span>`
+          // Viewer chain (backend, panoee-first): panoee → streetview → photos
+          // → satellite → none. Nút sáng khi có viewer mở được, mờ khi chưa có.
+          const v = a.viewer || (a.viewer_url ? { viewer_type:'panoee', viewer_url:a.viewer_url, verification_status:'field_check_required' } : null)
+          const bright = 'display:inline-block;margin-top:6px;background:#0F766E;color:#fff;border-radius:999;padding:6px 12px;font-size:11px;font-weight:700;text-decoration:none'
+          const dim = 'display:inline-block;margin-top:6px;font-size:10px;color:#64748B'
+          let pano = `<br/><span style="${dim}">Chưa có dữ liệu 360°</span>`
+          if(v?.viewer_type === 'panoee' && v?.viewer_url){
+            pano = `<br/><a href="/viewer/${a.id}" style="${bright}">🌐 Xem hiện trường 360°</a>`
+          } else if(v?.viewer_type === 'streetview' && v?.viewer_url){
+            pano = `<br/><a href="${v.viewer_url}" target="_blank" rel="noreferrer" style="${bright}">🌐 Mở Street View</a>`
+          } else if(v?.viewer_type === 'streetview'){
+            pano = `<br/><span style="${dim}">🌐 Street View đã xác minh — chưa lưu URL, bổ sung trong Quản trị.</span>`
+          } else if(v?.viewer_type === 'photos'){
+            pano = `<br/><span data-assetphotos="1" style="font-size:10px;color:#64748B">Đang tìm ảnh quanh đây…</span>`
+          } else if(v?.viewer_type === 'satellite'){
+            pano = `<br/><span style="${dim}">🛰️ Chưa có 360° — xem nền vệ tinh khi LIVE.</span>`
+          }
           const pop = new (maplibregl as any).Popup({ closeButton:true, maxWidth:'300px' })
             .setLngLat([a.longitude, a.latitude] as any)
             .setHTML(`<div style="font-family:Inter,sans-serif"><b>${ICON[a.asset_type] || ''} ${a.name}</b><br/><span style="font-size:11px;color:#0F766E;font-weight:700">${TYPE_VI[a.asset_type] || a.asset_type} · ĐANG HOẠT ĐỘNG</span><br/><span style="font-size:11px;color:#334155">${extra}</span><br/><span style="font-size:10px;color:#64748B">📍 ${a.latitude}, ${a.longitude}</span>${pano}</div>`)
             .addTo(mapRef.current!)
-          if(!a.viewer_url){
+          if(v?.viewer_type === 'photos'){
             api.recentPhotos(20).then((d:any)=>{
               const rows = Array.isArray(d?.photos) ? d.photos : []
               const near = rows.filter((p:any)=> Array.isArray(p.location) && typeof p.location[0] === 'number' &&

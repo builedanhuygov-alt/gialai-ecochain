@@ -141,17 +141,34 @@ export default function Command(){
         {planLoading && <div style={{fontSize:12, color:'#64748B', marginTop:8}}>Đang tổng hợp kế hoạch…</div>}
         {plan && !planLoading && !plan.error && (
           <div style={{marginTop:8, fontSize:12, display:'flex', flexDirection:'column', gap:8}}>
-            <div><b>{plan._title}</b> — CẤP <b>{plan.risk_summary?.level}</b> · điểm {plan.risk_summary?.score}/100 · tin cậy {plan.risk_summary?.confidence}% {plan._geoNote && <span style={{color:'#B45309'}}>({plan._geoNote})</span>}</div>
+            <div><b>{plan._title}</b> — CẤP <b>{plan.risk_summary?.level}</b> · điểm {plan.risk_summary?.score}/100 · tin cậy {plan.risk_summary?.confidence}% · trạng thái <b>{plan.command_status}</b> {plan._geoNote && <span style={{color:'#B45309'}}>({plan._geoNote})</span>}</div>
             <div>🌬️ Gió {plan.weather?.wind_speed_kmh ?? '?'} km/h → hướng {plan.weather?.wind_toward_deg ?? '?'}° · {plan.weather?.temperature ?? '?'}°C · ẩm {plan.weather?.humidity ?? '?'}%
               {plan.fwi && <span> · FWI cùng ngày: FFMC <b>{plan.fwi.ffmc}</b> / ISI <b>{plan.fwi.isi}</b> <span style={{color:'#64748B'}}>(Van Wagner, {plan.fwi.assumption})</span></span>}</div>
-            <div>💧 {plan.nearest_water ? <>Nước: <b>{plan.nearest_water.name}</b> ({plan.nearest_water.distance_km} km{plan.nearest_water.capacity_liters ? ` · ${plan.nearest_water.capacity_liters} L` : ''})</> : 'Chưa có bể/nước.'}
-              {' '}🏕️ {plan.nearest_station ? <>{plan.nearest_station.name} ({plan.nearest_station.distance_km} km, ~{plan.nearest_station.travel_minutes} phút)</> : 'Chưa có trạm/tổ.'}
-              {' '}🛣️ {plan.nearest_route ? <>{plan.nearest_route.name} ({plan.nearest_route.distance_km} km)</> : 'Chưa có tuyến.'}</div>
+            <div>💧 {plan.primary_water ? <>Chính: <b>{plan.primary_water.name}</b> (hạng {plan.primary_water.priority}, {plan.primary_water.distance_km} km, ETA ~{plan.primary_water.eta_minutes} phút){plan.backup_water ? <> · Dự phòng: <b>{plan.backup_water.name}</b> ({plan.backup_water.distance_km} km)</> : ' · Không có dự phòng'}</> : 'Chưa có nguồn nước.'}</div>
+            <div>🏕️ {plan.primary_station ? <>Chính: <b>{plan.primary_station.station_name}</b> ({plan.primary_station.distance_km} km, ~{plan.primary_station.eta_minutes} phút){plan.primary_station.contact ? <> · ☎ {plan.primary_station.contact}</> : ''}{plan.backup_station ? <> · Dự phòng: <b>{plan.backup_station.station_name}</b></> : ''}</> : 'Chưa có trạm/tổ.'}</div>
+            <div>🛣️ {plan.primary_route ? <>{plan.primary_route.route_name} ({plan.primary_route.distance_km} km{plan.primary_route.road_condition ? ` · ${plan.primary_route.road_condition}` : ''}){plan.backup_route ? <> · Dự phòng: {plan.backup_route.route_name}</> : ''}</> : 'Chưa có tuyến.'}</div>
+            {plan.affected_area && <div>📐 Vùng ảnh hưởng: tối đa <b>{plan.affected_area.max_area_ha} ha</b> · {plan.affected_area.n_communes} xã{plan.affected_area.communes?.length > 0 && <>: {plan.affected_area.communes.slice(0,5).join(', ')}</>}</div>}
             {(plan.spread?.steps || []).length > 0 && (
               <div>{plan.spread.steps.map((s:any)=> <span key={s.hour} style={{display:'inline-block', background:'#FEF2F2', borderRadius:8, padding:'4px 8px', marginRight:6, marginBottom:4}}>+{s.hour}h: {s.length_km} km · {s.area_ha} ha{(s.affected_communes?.length > 0) && <> · {s.affected_communes.map((c:any)=> c.name).join(', ')}</>}</span>)}</div>
             )}
             {(plan.asset_threats || []).filter((t:any)=> t.band !== 'SAFE').length > 0 && (
               <div>🛡️ Đe dọa tài sản: {plan.asset_threats.filter((t:any)=> t.band !== 'SAFE').slice(0,5).map((t:any)=> `${t.name} (${t.band}, ETA ${t.eta_hours}h)`).join(' · ')}</div>
+            )}
+            {(plan.water_threats || []).filter((t:any)=> t.band !== 'SAFE').length > 0 && (
+              <div>🌊 Hồ bị đe dọa: {plan.water_threats.filter((t:any)=> t.band !== 'SAFE').slice(0,5).map((t:any)=> `${t.name} (${t.band})`).join(' · ')}</div>
+            )}
+            {plan.analyst_bulletin && (
+              <div style={{background:'#F8FAFC', borderRadius:8, padding:8}}>
+                <b>🔥 Bản tin AI (CẤP {plan.analyst_bulletin.cap_nguy_co?.level} · tin cậy {plan.analyst_bulletin.cap_nguy_co?.confidence}%)</b>
+                <div>📍 {JSON.stringify(plan.analyst_bulletin.vi_tri)} · {plan.analyst_bulletin.tinh_hinh_chay}</div>
+                <div>🌬️ {plan.analyst_bulletin.dieu_kien_thoi_tiet}</div>
+                <div>📈 {plan.analyst_bulletin.huong_lan_du_kien}</div>
+                <div>🏕️ {plan.analyst_bulletin.tram_trien_khai} · 💧 {plan.analyst_bulletin.nguon_nuoc_uu_tien} · 🛣️ {plan.analyst_bulletin.tuyen_tiep_can}</div>
+                <div>❗ {(plan.analyst_bulletin.tai_san_bi_de_doa || []).join(' · ')}</div>
+                {(plan.analyst_bulletin.hinh_anh_hien_truong || []).length > 0 && (
+                  <div>🌐 {plan.analyst_bulletin.hinh_anh_hien_truong.join(' · ')}</div>
+                )}
+              </div>
             )}
             <div><b>🚒 Khuyến nghị:</b><ul style={{margin:'4px 0 4px 16px', padding:0}}>{(plan.tactical_recommendations || []).map((r:string, i:number)=> <li key={i}>{r}</li>)}</ul></div>
             <div style={{fontSize:10, color:'#64748B'}}>Di chuyển: {plan.travel_time?.assumption} · Mô hình: {plan.spread?.model}</div>

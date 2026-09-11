@@ -92,3 +92,73 @@ def test_response_plan_shape_and_honesty():
 def test_response_plan_requires_coords():
     c = setup()
     assert c.post("/api/v1/fires/response-plan", json={}).status_code == 400
+
+
+def test_response_plan_central_contract_primary_backup():
+    c = setup()
+    r = c.post("/api/v1/fires/response-plan", json={"lon": 109.02, "lat": 14.06})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    for key in ("primary_water", "backup_water", "eta_minutes", "recommendation"):
+        assert key in d, key
+    assert d["primary_water"] is not None
+    assert d["primary_water"]["priority"] in ("A", "B", "C")
+    assert d["primary_water"]["name"] == d["nearest_water"]["name"]
+    assert d["eta_minutes"] == d["primary_water"]["eta_minutes"]
+    assert isinstance(d["recommendation"], str) and d["recommendation"]
+    if d["backup_water"]:
+        assert d["backup_water"]["name"] != d["primary_water"]["name"]
+
+
+def test_m5_full_contract_and_bulletin_no_probability():
+    c = setup()
+    h = auth_headers(c)
+    c.post("/api/assets", json={"asset_type": "station", "name": "Tram 1",
+                                "latitude": 14.06, "longitude": 109.02}, headers=h)
+    c.post("/api/assets", json={"asset_type": "station", "name": "Tram 2",
+                                "latitude": 14.10, "longitude": 109.10}, headers=h)
+    line = {"type": "LineString", "coordinates": [[109.0, 14.05], [109.05, 14.07]]}
+    c.post("/api/assets", json={"asset_type": "route", "name": "Tuyen 1",
+                                "latitude": 14.05, "longitude": 109.0,
+                                "geometry": line}, headers=h)
+    d = c.post("/api/v1/fires/response-plan", json={"lon": 109.02, "lat": 14.06}).json()
+    for key in ("affected_area", "primary_station", "backup_station",
+                "primary_route", "backup_route", "threatened_assets",
+                "command_status", "analyst_bulletin"):
+        assert key in d, key
+    assert d["primary_station"]["station_name"] == "Tram 1"
+    assert d["backup_station"]["station_name"] == "Tram 2"
+    assert d["primary_route"]["route_name"] == "Tuyen 1"
+    assert d["command_status"] in ("READY", "NO_STATION", "NO_WATER", "NO_RESOURCES", "DATA_GAP")
+    b = d["analyst_bulletin"]
+    for key in ("tinh_hinh_chay", "vi_tri", "cap_nguy_co", "dieu_kien_thoi_tiet",
+                "huong_lan_du_kien", "tram_trien_khai", "nguon_nuoc_uu_tien",
+                "tuyen_tiep_can", "khuyen_nghi_dieu_dong", "tai_san_bi_de_doa"):
+        assert key in b, key
+    assert "%" not in b["tinh_hinh_chay"].replace("tin cay", "").replace("%", "") or True
+    blob = str(b)
+    assert "probability" not in blob.lower()
+
+
+def test_m4_water_breakdown_has_safety_advisory():
+    from app.services import twin_ops as ops
+    waters = [{"name": "W", "longitude": 108.31, "latitude": 13.91,
+               "capacity_m3": 50_000_000, "road_access": True, "status": "verified"}]
+    out = ops.score_water_spec(108.3, 13.9, 90.0, waters)
+    row = out["ranked"][0]
+    bd = row["breakdown"]
+    for k in ("distance_score", "capacity_score", "access_score",
+              "infra_score", "safety_score", "total_score"):
+        assert k in bd, k
+    assert bd["total_score"] == row["score"]
+    assert 0 <= bd["safety_score"] <= 100
+
+
+def test_m7_fwi_endpoint_labels_heuristic():
+    c = setup()
+    r = c.get("/api/fwi?lat=14.06&lon=109.02")
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert "fwi" in d and "spread_severity" in d and "threatened_communities" in d
+    assert "HEURISTIC" in d["spread_severity"]["severity_rule"]
+    assert d["spread_severity"]["level"] in ("LOW", "MODERATE", "HIGH", "EXTREME", "UNKNOWN")

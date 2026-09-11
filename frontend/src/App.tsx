@@ -29,6 +29,7 @@ const Admin = lazy(()=> import('./pages/Admin'))
 const Audit = lazy(()=> import('./pages/Audit'))
 const Login = lazy(()=> import('./pages/Login'))
 const Command = lazy(()=> import('./pages/Command'))
+const Viewer = lazy(()=> import('./pages/Viewer'))
 
 const TITLES: Record<string,string> = {
   '/': 'Bản đồ cháy rừng Gia Lai',
@@ -38,7 +39,7 @@ const TITLES: Record<string,string> = {
   '/logistics': 'Logistics', '/twin': 'Bản sao số', '/community': 'Cộng đồng',
   '/actions': 'Điều hành', '/leaderboard': 'Xếp hạng', '/reports': 'Báo cáo',
   '/admin': 'Quản trị', '/notifications': 'Thông báo', '/audit': 'Nhật ký', '/login': 'Đăng nhập',
-  '/command': 'Chỉ huy',
+  '/command': 'Chỉ huy', '/viewer': 'Hiện trường 360°',
 }
 
 function NotFound(){
@@ -299,6 +300,7 @@ function AnimatedRoutes(){
           <Route path="/audit" element={<PageTransition><Audit/></PageTransition>} />
           <Route path="/login" element={<PageTransition><Login/></PageTransition>} />
           <Route path="/command" element={<PageTransition><Command/></PageTransition>} />
+          <Route path="/viewer/:assetId" element={<PageTransition><Viewer/></PageTransition>} />
           <Route path="*" element={<PageTransition><NotFound/></PageTransition>} />
         </Routes>
       </AnimatePresence>

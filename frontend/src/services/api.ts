@@ -45,6 +45,10 @@ export const api = {
   firmsLive: (lat = 13.9, lon = 108.3)=> req(`/api/fire/hotspots?lat=${lat}&lon=${lon}`).catch(()=> null),
   fireBrief: (name:string, lat:number, lon:number)=> req(`/api/fire/brief?administrative_unit_id=${encodeURIComponent(name)}&lat=${lat}&lon=${lon}`).catch(()=> null),
   responsePlan: (body:Record<string, unknown>)=> req('/api/v1/fires/response-plan', { method:'POST', body: JSON.stringify(body) }),
+  stationsNearest: (lat:number, lon:number)=> req(`/api/stations/nearest?lat=${lat}&lon=${lon}`).catch(()=> null),
+  routesNearest: (lat:number, lon:number)=> req(`/api/routes/nearest?lat=${lat}&lon=${lon}`).catch(()=> null),
+  threatsUnified: (lat:number, lon:number)=> req(`/api/assets/threatened?lat=${lat}&lon=${lon}`).catch(()=> null),
+  fwi: (lat:number, lon:number)=> req(`/api/fwi?lat=${lat}&lon=${lon}`).catch(()=> null),
   proposals: (status?:string)=> req(`/api/forest/proposals${status ? `?status=${status}` : ''}`).catch(()=> []),
   proposalDetail: (id:string)=> req(`/api/forest/proposals/${id}`),
   confirmProposal: (id:string, body:Record<string, unknown>)=> req(`/api/forest/proposals/${id}/community-confirm`, { method:'POST', body: JSON.stringify(body) }),
@@ -63,6 +67,7 @@ export const api = {
   },
   governance: ()=> req('/api/governance').catch(()=> null),
   assetsList: ()=> req('/api/assets').catch(()=> []),
+  assetDetail: (id:string)=> req(`/api/assets/${id}/detail`),
   createAsset: (body:Record<string, unknown>)=> {
     const tok = (()=>{ try{ return sessionStorage.getItem('ecogl_admin_token') }catch{ return null } })()
     return req('/api/assets', { method:'POST', headers: tok ? { Authorization:`Bearer ${tok}` } : {}, body: JSON.stringify(body) })
@@ -71,6 +76,14 @@ export const api = {
     const tok = (()=>{ try{ return sessionStorage.getItem('ecogl_admin_token') }catch{ return null } })()
     return req(`/api/assets/${id}`, { method:'DELETE', headers: tok ? { Authorization:`Bearer ${tok}` } : {} })
   },
+  patchAsset: (id:string, body:Record<string, unknown>)=> {
+    const tok = (()=>{ try{ return sessionStorage.getItem('ecogl_admin_token') }catch{ return null } })()
+    return req(`/api/assets/${id}`, { method:'PATCH', headers: tok ? { Authorization:`Bearer ${tok}` } : {}, body: JSON.stringify(body) })
+  },
+  stationsRegistry: ()=> req('/api/stations/registry').catch(()=> null),
+  assetsContacts: ()=> req('/api/assets/contacts').catch(()=> null),
+  opsGaps: ()=> req('/api/ops/gaps').catch(()=> null),
+  communitiesThreatened: (lat:number, lon:number)=> req(`/api/communities/threatened?lat=${lat}&lon=${lon}`).catch(()=> null),
   plans: ()=> req('/api/plans').catch(()=> []),
   planDetail: (id:string)=> req(`/api/plans/${id}`),
   createPlan: (goal:string)=> req('/api/plans', { method:'POST', body: JSON.stringify({ goal }) }),

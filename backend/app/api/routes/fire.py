@@ -351,6 +351,71 @@ async def fire_brief(administrative_unit_id: str = Query(...), lat: float = Quer
     }
 
 
+@router.get("/fwi")
+async def fwi_index(lat: float = Query(...), lon: float = Query(...),
+                    slope_deg: float = Query(default=12.0, ge=0)):
+    """MODULE 7 — FWI integration (honest subset).
+
+    Returns Van Wagner FFMC/ISI same-day + heuristic spread severity +
+    threatened communes. Full FWI/BUI/DMC/DC are NOT returned (require
+    multi-day history — fabricating them would violate data integrity).
+    Heuristic severity rule is published in `severity_rule`.
+    """
+    from app.services.weather_service import fetch_current, fetch_history, current_summary
+    from app.services import spread as spread_svc
+    from app.services import twin_ops as ops
+    from app.core.time import utcnow
+    try:
+        cur = current_summary(await fetch_current(lat, lon))
+    except Exception:
+        cur = {}
+    temp, humidity = cur.get("temperature"), cur.get("humidity")
+    wind = cur.get("wind_speed") if cur.get("wind_speed") is not None else 15.0
+    wfrom = cur.get("wind_direction") if cur.get("wind_direction") is not None else 45.0
+    wtoward = (wfrom + 180.0) % 360.0
+    rain_mm = 0.0
+    try:
+        hist = await fetch_history(lat, lon)
+        daily = (hist.get("daily", {}) or {}).get("precipitation_sum") or []
+        rain_mm = round(sum(float(x or 0) for x in daily), 1)
+    except Exception:
+        hist = {}
+    fwi = None
+    if temp is not None and humidity is not None:
+        fwi = ops.ffmc_isi_same_day(float(temp), float(humidity), float(wind), rain_mm)
+    ros = spread_svc.head_ros_kmh(float(wind), float(slope_deg))
+    # heuristic severity (published, NOT calibrated probability)
+    isi = (fwi or {}).get("isi")
+    if isi is None:
+        severity = "UNKNOWN"
+    elif isi >= 10 or ros >= 1.5:
+        severity = "EXTREME"
+    elif isi >= 5 or ros >= 0.8:
+        severity = "HIGH"
+    elif isi >= 2 or ros >= 0.4:
+        severity = "MODERATE"
+    else:
+        severity = "LOW"
+    sim = spread_svc.simulate(lon, lat, float(wind), float(wtoward), float(slope_deg), [1.0, 3.0, 6.0])
+    communes = spread_svc.load_commune_shapes()
+    per_step = []
+    for s in sim["steps"]:
+        aff = spread_svc.affected_communes(s["polygon"]["coordinates"][0], communes)
+        per_step.append({"hour": s["hour"], "communes": [c.get("name") for c in aff]})
+    return {
+        "fire": {"lon": lon, "lat": lat},
+        "weather": {"temperature": temp, "humidity": humidity, "wind_speed_kmh": wind,
+                    "wind_toward_deg": round(wtoward, 1), "rain_14d_mm": rain_mm,
+                    "status": "LIVE" if temp is not None else "UNAVAILABLE"},
+        "fwi": fwi,
+        "spread_severity": {"level": severity, "ros_kmh": ros,
+                            "severity_rule": "HEURISTIC (chua hieu chuan): EXTREME neu ISI>=10 hoac ROS>=1.5; HIGH neu ISI>=5 hoac ROS>=0.8; MODERATE neu ISI>=2 hoac ROS>=0.4; else LOW"},
+        "threatened_communities": per_step,
+        "spread_model": spread_svc.MODEL,
+        "generated_at": utcnow().isoformat(), "origin": tag_data_origin(),
+    }
+
+
 @router.post("/v1/fires/response-plan")
 async def response_plan(body: dict, db: Session = Depends(get_db)):
     """Tactical Decision Engine — assembles live inputs into an explained plan.
@@ -430,34 +495,41 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
     ranking = ops.score_water_spec(lon, lat, wind_toward, spec_rows)
     for s in ranking["ranked"]:
         s["eta_minutes"] = ops.road_eta_minutes(s["distance_km"], speed)
+    water_threats = ops.assess_water_threat(lon, lat, ros, spec_rows, sim["steps"])
+    # M5 full contract: top-2 stations/routes via shared rankers (PostGIS KNN
+    # inside when available, haversine fallback on SQLite).
+    from app.api.routes.assets import _rank_routes, _rank_stations
+    st_ranked = _rank_stations(db, lon, lat, speed, top=2)
     station = None
-    for a in sorted([a for a in assets if a["asset_type"] in ("station", "team") and a["status"] == "active"],
-                    key=lambda a: _haversine_km(lon, lat, a["longitude"], a["latitude"])):
-        station = {"name": a["name"], "distance_km": round(_haversine_km(lon, lat, a["longitude"], a["latitude"]), 2)}
-        break
-    route = None
-    # route assets carry geometry; measure to nearest vertex (documented
-    # approximation until road-network routing exists)
-    try:
-        import json as _json
-        best_r, best_rn = None, None
-        for row in db.query(OperationalAsset).filter(OperationalAsset.asset_type == "route",
-                                                     OperationalAsset.status == "active").all():
-            try:
-                g = _json.loads(row.geometry) if row.geometry else None
-            except Exception:
-                g = None
-            if not g:
-                continue
-            lines = [g["coordinates"]] if g.get("type") == "LineString" else g.get("coordinates", [])
-            for line in lines:
-                for px, py in line:
-                    d = _haversine_km(lon, lat, px, py)
-                    if best_r is None or d < best_r:
-                        best_r, best_rn = d, row.name
-        route = {"name": best_rn, "distance_km": round(best_r, 2)} if best_rn else None
-    except Exception:
-        pass
+    if st_ranked:
+        station = {"name": st_ranked[0]["name"], "distance_km": st_ranked[0]["distance_km"]}
+    primary_station = None
+    if st_ranked:
+        s0 = st_ranked[0]
+        primary_station = {"station_name": s0["name"], "station_type": s0["asset_type"],
+                           "distance_km": s0["distance_km"], "eta_minutes": s0["eta_minutes"],
+                           "contact": s0.get("contact"), "operational_status": s0.get("status")}
+    backup_station = None
+    if len(st_ranked) > 1:
+        s1 = st_ranked[1]
+        backup_station = {"station_name": s1["name"], "station_type": s1["asset_type"],
+                          "distance_km": s1["distance_km"], "eta_minutes": s1["eta_minutes"],
+                          "contact": s1.get("contact"), "operational_status": s1.get("status")}
+    rt_ranked = _rank_routes(db, lon, lat, top=2)
+    route = {"name": rt_ranked[0]["route_name"], "distance_km": rt_ranked[0]["distance_km"]} if rt_ranked else None
+    primary_route = rt_ranked[0] if rt_ranked else None
+    backup_route = rt_ranked[1] if len(rt_ranked) > 1 else None
+    # affected_area: max footprint + union of communes across 1/3/6h steps
+    _areas = [s.get("area_ha") or 0 for s in sim["steps"]]
+    _comm_union = sorted({c.get("name") for s in sim["steps"] for c in (s.get("affected_communes") or []) if c.get("name")})
+    affected_area = {"max_area_ha": max(_areas) if _areas else 0,
+                     "steps_ha": {str(s.get("hour")): s.get("area_ha") for s in sim["steps"]},
+                     "communes": _comm_union, "n_communes": len(_comm_union)}
+    threatened_assets = sorted(
+        ([{**t, "source": "operational"} for t in threats]
+         + [{**t, "source": "water"} for t in water_threats]),
+        key=lambda t: ({"CRITICAL": 0, "THREATENED": 1, "WATCH": 2, "SAFE": 3}.get(t.get("band"), 9),
+                       t.get("distance_km") or 9e9))
 
     # 5. FWI same-day (standard, labeled assumption)
     fwi = None
@@ -469,6 +541,9 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
     threatened = [t for t in threats if t["band"] in ("CRITICAL", "THREATENED")]
     if threatened:
         recs.append(f"Ưu tiên bảo vệ: {', '.join(t['name'] for t in threatened[:3])} (ETA < 3h theo lan truyền hiện tại)")
+    w_threat = [t for t in water_threats if t["band"] in ("CRITICAL", "THREATENED")]
+    if w_threat:
+        recs.append(f"Hồ chứa bị đe dọa: {', '.join(t['name'] for t in w_threat[:3])} ({w_threat[0]['band']}, ETA ~{w_threat[0]['eta_hours']}h) — ưu tiên bảo vệ nguồn nước chiến lược")
     if ranking["ranked"]:
         top = ranking["ranked"][0]
         cap = f", {top['capacity_m3']:,} m³".replace(",", ".") if top.get("capacity_m3") else ""
@@ -495,7 +570,82 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
         recs.append(f"Dữ liệu còn thiếu ({', '.join(result['missing'])}) — mọi con số trên đã hạ tin cậy tương ứng")
 
     station_travel = ops.travel_minutes(station["distance_km"]) if station else None
-    return {
+    # ── Central contract (P1): primary/backup water + ETA + recommendation ──
+    # ranking is already sorted A→C by score; primary = [0], backup = [1].
+    # Kept alongside legacy nearest_water/water_ranking (backward compatible).
+    ranked = ranking["ranked"]
+    primary = ranked[0] if ranked else None
+    backup = ranked[1] if len(ranked) > 1 else None
+    water_rec = None
+    for r in recs:
+        if r.startswith("Điều xe lấy nước tại"):
+            water_rec = r
+            break
+    if water_rec is None and recs:
+        water_rec = recs[0]
+    # MODULE 360 (M8) — viewer awareness for primary resources (no new live
+    # calls; photo proximity from existing PhotoEvidence locations).
+    viewer_notes = []
+    try:
+        from app.models.community import PhotoEvidence as _PE
+        _photos = db.query(_PE).filter(
+            _PE.location_lat.isnot(None),
+            _PE.location_lng.isnot(None)).all()
+
+        def _np(lo, la):
+            n = 0
+            for p in _photos:
+                try:
+                    if ops.haversine_km(lo, la, p.location_lng, p.location_lat) <= 1.0:
+                        n += 1
+                except Exception:
+                    continue
+            return n
+
+        if primary and primary.get("id"):
+            _wdb = db.get(WaterAsset, primary["id"])
+            if _wdb is not None:
+                _v = ops.viewer_fallback(
+                    _wdb.has_streetview, _wdb.google_maps_url,
+                    _np(_wdb.longitude, _wdb.latitude),
+                    _wdb.longitude, _wdb.latitude,
+                    getattr(_wdb, "capture_date", None),
+                    getattr(_wdb, "capture_source", None))
+                primary["viewer"] = _v
+                viewer_notes.append({"resource": primary["name"],
+                                     "viewer_type": _v["viewer_type"],
+                                     "note": ops.viewer_note_sentence(primary["name"], _v)})
+        if st_ranked:
+            _sdb = db.get(OperationalAsset, st_ranked[0]["id"])
+            if _sdb is not None and primary_station:
+                _v = ops.viewer_fallback(
+                    getattr(_sdb, "has_streetview", None), _sdb.viewer_url,
+                    _np(_sdb.longitude, _sdb.latitude),
+                    _sdb.longitude, _sdb.latitude,
+                    getattr(_sdb, "capture_date", None),
+                    getattr(_sdb, "capture_source", None))
+                primary_station["viewer"] = _v
+                viewer_notes.append({"resource": primary_station["station_name"],
+                                     "viewer_type": _v["viewer_type"],
+                                     "note": ops.viewer_note_sentence(
+                                         primary_station["station_name"], _v)})
+        if rt_ranked:
+            _rdb = db.get(OperationalAsset, rt_ranked[0]["id"])
+            if _rdb is not None and primary_route:
+                _v = ops.viewer_fallback(
+                    getattr(_rdb, "has_streetview", None), _rdb.viewer_url,
+                    _np(_rdb.longitude, _rdb.latitude),
+                    _rdb.longitude, _rdb.latitude,
+                    getattr(_rdb, "capture_date", None),
+                    getattr(_rdb, "capture_source", None))
+                primary_route["viewer"] = _v
+                viewer_notes.append({"resource": primary_route["route_name"],
+                                     "viewer_type": _v["viewer_type"],
+                                     "note": ops.viewer_note_sentence(
+                                         primary_route["route_name"], _v)})
+    except Exception:
+        pass
+    plan_out = {
         "fire": {"lon": lon, "lat": lat},
         "risk_summary": {"level": result["warning_level"], "score": result["risk_score"],
                          "confidence": result["confidence"], "missing": result.get("missing", []),
@@ -505,17 +655,34 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
                     "status": "LIVE" if temp is not None else "UNAVAILABLE"},
         "fwi": fwi,
         "spread": {**sim, "wind_source": "Open-Meteo live" if temp is not None else "default"},
+        "affected_area": affected_area,
         "nearest_station": {**station, "travel_minutes": station_travel} if station else None,
+        "primary_station": primary_station, "backup_station": backup_station,
         "nearest_water": ranking["ranked"][0] if ranking["ranked"] else None,
+        "primary_water": primary,
+        "backup_water": backup,
+        "eta_minutes": primary["eta_minutes"] if primary else None,
+        "recommendation": water_rec,
         "water_ranking": ranking,
         "nearest_route": route,
+        "primary_route": primary_route, "backup_route": backup_route,
         "travel_time": {"station_minutes": station_travel,
                        "assumption": f"đường chim bay @{ops.ASSUMED_RURAL_SPEED_KMH}km/h (chưa có mạng đường + pgRouting)"},
         "asset_threats": threats,
+        "water_threats": water_threats,
+        "threatened_assets": threatened_assets,
+        "viewer_notes": viewer_notes,
         "tactical_recommendations": recs,
+        "command_status": ops.command_status(primary_station, primary, result.get("missing", [])),
         "generated_at": utcnow().isoformat(),
         "origin": tag_data_origin(),
     }
+    # MODULE 6 — bulletin is a pure formatter over plan_out (no new live calls)
+    try:
+        plan_out["analyst_bulletin"] = ops.build_analyst_bulletin(plan_out)
+    except Exception:
+        plan_out["analyst_bulletin"] = None
+    return plan_out
 
 
 @router.post("/fire/simulation")

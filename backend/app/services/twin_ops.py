@@ -217,6 +217,11 @@ def score_water_spec(fire_lon: float, fire_lat: float, wind_toward_deg: float,
         to_w = bearing_deg(fire_lon, fire_lat, float(get("longitude")), float(get("latitude")))
         ang = abs((to_w - (wind_toward_deg % 360.0) + 180.0) % 360.0 - 180.0)
         downwind = ang < 45.0
+        # MODULE 4 — direction safety is ADVISORY (0=downwind … 100=upwind),
+        # deliberately NOT in the 40/30/20/10 total: no calibrated weight
+        # exists for wind-vs-access tradeoffs, so it is reported alongside
+        # the total instead of being silently folded in.
+        s_safety = round(ang / 180.0 * 100.0, 1)
         if not verified or total < 50:
             prio = "C"
         elif total >= 80:
@@ -229,7 +234,12 @@ def score_water_spec(fire_lon: float, fire_lat: float, wind_toward_deg: float,
             "capacity_m3": get("capacity_m3"), "road_access": bool(get("road_access")),
             "status": get("status"), "manager": get("manager"),
             "components": {"distance": round(s_dist, 1), "capacity": s_cap,
-                           "road_access": s_road, "infrastructure": s_infra},
+                           "road_access": s_road, "infrastructure": s_infra,
+                           "direction_safety": s_safety},
+            # spec aliases (M4 contract) — same numbers, no second formula
+            "breakdown": {"distance_score": round(s_dist, 1), "capacity_score": s_cap,
+                          "access_score": s_road, "infra_score": s_infra,
+                          "safety_score": s_safety, "total_score": total},
             "score": total, "priority": prio, "downwind": downwind,
         })
     scored.sort(key=lambda x: ({"A": 0, "B": 1, "C": 2}[x["priority"]], -x["score"]))
@@ -243,3 +253,256 @@ def score_water_spec(fire_lon: float, fire_lat: float, wind_toward_deg: float,
 def road_eta_minutes(distance_km: float, speed_kmh: float = ASSUMED_RURAL_SPEED_KMH) -> float:
     """ETA with winding-road factor (documented, not pgRouting)."""
     return round(distance_km * ROAD_FACTOR / speed_kmh * 60.0, 1)
+
+
+def _point_in_ring(lon: float, lat: float, ring) -> bool:
+    inside = False
+    n = len(ring)
+    for i in range(n):
+        x1, y1 = ring[i][0], ring[i][1]
+        x2, y2 = ring[(i + 1) % n][0], ring[(i + 1) % n][1]
+        if (y1 > lat) != (y2 > lat) and lon < (x2 - x1) * (lat - y1) / (y2 - y1 + 1e-12) + x1:
+            inside = not inside
+    return inside
+
+
+def assess_water_threat(fire_lon: float, fire_lat: float, ros_kmh: float,
+                        waters: list, steps: list | None = None) -> list:
+    """Threatened Water Assets: spread 1h/3h/6h ∩ water_assets.
+
+    Band = more severe of (polygon containment, ETA thresholds):
+    - inside 1h polygon OR eta<1h → CRITICAL
+    - inside 3h polygon OR eta<3h → THREATENED
+    - inside 6h polygon OR eta<6h → WATCH
+    - else SAFE
+    ETA = distance / ROS (same fire physics as asset threats).
+    steps: spread.simulate()["steps"] (each with hour + polygon.coordinates[0]).
+    Pure deterministic, no hidden model — polygon check + ETA cited per asset.
+    """
+    poly_by_hour: dict = {}
+    try:
+        for s in (steps or []):
+            h = float(s.get("hour"))
+            ring = (s.get("polygon") or {}).get("coordinates", [[]])[0]
+            if ring:
+                poly_by_hour[h] = ring
+    except Exception:
+        poly_by_hour = {}
+    order = {"CRITICAL": 0, "THREATENED": 1, "WATCH": 2, "SAFE": 3}
+
+    def poly_band(lon: float, lat: float) -> str | None:
+        for h, band in ((1.0, "CRITICAL"), (3.0, "THREATENED"), (6.0, "WATCH")):
+            ring = poly_by_hour.get(h)
+            if ring and _point_in_ring(lon, lat, ring):
+                return band
+        # tolerate float hour keys (e.g. 1 vs 1.0 already handled; fallback: nearest)
+        if not poly_by_hour:
+            return None
+        return None
+
+    out = []
+    for w in waters:
+        get = (lambda k, d=None: w.get(k, d)) if isinstance(w, dict) else (lambda k, d=None: getattr(w, k, d))
+        try:
+            lon = float(get("longitude"))
+            lat = float(get("latitude"))
+            d = haversine_km(fire_lon, fire_lat, lon, lat)
+        except Exception:
+            continue
+        eta = round(d / ros_kmh, 2) if ros_kmh and ros_kmh > 0 else None
+        eta_band = threat_band(eta)
+        p_band = poly_band(lon, lat)
+        if p_band is None:
+            band = eta_band
+            basis = f"ETA {eta}h @ROS {ros_kmh}km/h" if eta is not None else "no ROS — WATCH default"
+        else:
+            # more severe wins
+            band = p_band if order[p_band] <= order[eta_band] else eta_band
+            basis = f"polygon:{p_band} + ETA:{eta_band} ({eta}h)"
+            # containment flags for the map
+        try:
+            in1 = bool(poly_by_hour.get(1.0) and _point_in_ring(lon, lat, poly_by_hour[1.0]))
+            in3 = bool(poly_by_hour.get(3.0) and _point_in_ring(lon, lat, poly_by_hour[3.0]))
+            in6 = bool(poly_by_hour.get(6.0) and _point_in_ring(lon, lat, poly_by_hour[6.0]))
+        except Exception:
+            in1 = in3 = in6 = False
+        out.append({
+            "id": get("id"), "name": get("name"), "asset_type": get("asset_type", "water"),
+            "distance_km": round(d, 2), "eta_hours": eta, "band": band, "basis": basis,
+            "in_1h": in1, "in_3h": in3, "in_6h": in6,
+            "status": get("status"), "manager": get("manager"),
+            "capacity_m3": get("capacity_m3"),
+        })
+    out.sort(key=lambda x: (order.get(x["band"], 9), x["distance_km"]))
+    return out
+
+
+def command_status(primary_station, primary_water, missing: list) -> str:
+    """M5 command_status — honest readiness, never a fake %."""
+    if primary_station is None and primary_water is None:
+        return "NO_RESOURCES"
+    if primary_station is None:
+        return "NO_STATION"
+    if primary_water is None:
+        return "NO_WATER"
+    if missing:
+        return "DATA_GAP"
+    return "READY"
+
+
+def build_analyst_bulletin(plan: dict) -> dict:
+    """MODULE 6 — ban tin chuan 10 muc tu response-plan da tinh."""
+    rs = plan.get("risk_summary") or {}
+    wx = plan.get("weather") or {}
+    sp = plan.get("spread") or {}
+    steps = sp.get("steps") or []
+    pw = plan.get("primary_water")
+    bw = plan.get("backup_water")
+    ps = plan.get("primary_station") or plan.get("nearest_station")
+    pr = plan.get("primary_route") or plan.get("nearest_route")
+    fwi = plan.get("fwi")
+    threats = (plan.get("threatened_assets") or plan.get("asset_threats") or [])
+    hot = [t for t in threats if t.get("band") in ("CRITICAL", "THREATENED")][:5]
+    by_h = {s.get("hour"): s for s in steps}
+    s1 = by_h.get(1.0) or by_h.get(1) or {}
+    communes_1h = [c.get("name") for c in (s1.get("affected_communes") or [])][:5]
+
+    def _fmt(v, suffix=""):
+        return f"{v}{suffix}" if v is not None else "khong ro"
+
+    return {
+        "tinh_hinh_chay": f"CAP {rs.get('level', '?')} - diem {rs.get('score', '?')}/100 "
+                           f"- tin cay {rs.get('confidence', '?')}% - FIRMS {rs.get('firms_nearby', 0)} diem <25km",
+        "vi_tri": plan.get("fire"),
+        "cap_nguy_co": {"level": rs.get("level"), "score": rs.get("score"),
+                        "confidence": rs.get("confidence"), "missing": rs.get("missing", [])},
+        "dieu_kien_thoi_tiet": f"{_fmt(wx.get('temperature'), 'C')} - am {_fmt(wx.get('humidity'), '%')} "
+                                f"- gio {_fmt(wx.get('wind_speed_kmh'), ' km/h')} -> {_fmt(wx.get('wind_toward_deg'), 'do')}"
+                                + (f" - FFMC {fwi['ffmc']}/ISI {fwi['isi']} (Van Wagner cung ngay)" if fwi else " - FWI: thieu nhiet/am"),
+        "huong_lan_du_kien": f"1h dai {s1.get('length_km', '?')}km / {s1.get('area_ha', '?')}ha"
+                              + (f" -> {', '.join(communes_1h)}" if communes_1h else " -> chua ro xa anh huong"),
+        "tram_trien_khai": f"{(ps or {}).get('name', 'Chua co tram/to')}"
+                            + (f" ({(ps or {}).get('distance_km')}km)" if (ps or {}).get("distance_km") is not None else ""),
+        "nguon_nuoc_uu_tien": f"{(pw or {}).get('name', 'Chua co nguon nuoc')}"
+                               + (f" (hang {(pw or {}).get('priority')}, {(pw or {}).get('distance_km')}km, ETA ~{(pw or {}).get('eta_minutes')} phut)" if pw else "")
+                               + (f" - du phong: {(bw or {}).get('name')}" if bw else ""),
+        "tuyen_tiep_can": f"{(pr or {}).get('name') or (pr or {}).get('route_name') or 'Chua co tuyen'}"
+                           + (f" ({(pr or {}).get('distance_km')}km)" if (pr or {}).get("distance_km") is not None else ""),
+        "khuyen_nghi_dieu_dong": plan.get("tactical_recommendations") or [],
+        "tai_san_bi_de_doa": [f"{t.get('name')} ({t.get('band')}, ETA {t.get('eta_hours')}h)" for t in hot] or ["Khong co tai san CRITICAL/THREATENED"],
+        # Module 360 (M8) — imagery availability per primary resource
+        "hinh_anh_hien_truong": [n.get("note") for n in (plan.get("viewer_notes") or [])] or ["Chưa có dữ liệu hình ảnh xác minh."],
+    }
+
+
+def viewer_note_sentence(name: str, viewer: dict) -> str:
+    """M8 exact wording: panoee → 360 khả dụng; any imagery → có dữ liệu;
+    none → chưa có dữ liệu xác minh."""
+    t = (viewer or {}).get("viewer_type")
+    if t == "panoee":
+        return f"{name}: Quan sát hiện trường 360° khả dụng."
+    if t in ("streetview", "photos", "satellite"):
+        return f"{name}: Hiện trường có dữ liệu hình ảnh."
+    return f"{name}: Chưa có dữ liệu hình ảnh xác minh."
+
+
+# ── Module 360: viewer fallback chain (M2/M7/M9) ──────────────────────────
+# Priority: panoee > streetview > photos > satellite > none.
+# Panoee first: field-verified 360 outranks possibly-stale streetview.
+# Security (M5): only http(s) URLs are ever stored (API rejects the rest);
+# domain trust is LABELED, never silently assumed — unlisted domains stay
+# field_check_required. No URL is ever generated: streetview without a stored
+# URL reports existence only, never a fabricated link.
+PANOEE_DOMAINS = ("panoee.net", "panoee.com", "cloud.panoee.net", "app.panoee.com")
+STREETVIEW_DOMAINS = ("google.com", "maps.google.com", "goo.gl", "maps.app.goo.gl")
+VIEWER_WHITELIST = PANOEE_DOMAINS + STREETVIEW_DOMAINS
+
+
+def classify_viewer_url(url) -> dict:
+    """Domain trust for a stored viewer_url. Pure function, no network."""
+    if not url or not (str(url).startswith("http://") or str(url).startswith("https://")):
+        return {"kind": "invalid", "trusted": False, "domain": None}
+    try:
+        from urllib.parse import urlparse as _up
+        host = (_up(str(url)).hostname or "").lower()
+    except Exception:
+        return {"kind": "invalid", "trusted": False, "domain": None}
+    if any(host == d or host.endswith("." + d) for d in PANOEE_DOMAINS):
+        return {"kind": "panoee", "trusted": True, "domain": host}
+    if any(host == d or host.endswith("." + d) for d in STREETVIEW_DOMAINS):
+        return {"kind": "streetview", "trusted": True, "domain": host}
+    return {"kind": "generic", "trusted": False, "domain": host}
+
+
+def viewer_fallback(has_streetview, viewer_url, nearby_photos: int = 0,
+                    lon=None, lat=None, capture_date=None,
+                    capture_source=None) -> dict:
+    """Deterministic viewer tier for one asset. No DB access here.
+
+    verification_status: verified / estimated / field_check_required.
+    VERIFIED is never shown without verification (M9): unlisted-domain URLs
+    and photo proximity stay below verified; legacy `status` key mirrors
+    VERIFIED/ESTIMATED/MISSING for backward compatibility.
+    """
+    capture = None
+    if capture_date or capture_source:
+        capture = {"capture_date": str(capture_date) if capture_date else None,
+                   "capture_source": capture_source}
+    if viewer_url:
+        cls = classify_viewer_url(viewer_url)
+        if cls["kind"] == "panoee":
+            return {"viewer_type": "panoee", "viewer_url": viewer_url,
+                    "verification_status": "verified", "status": "VERIFIED",
+                    "detail": "tour 360 Panoee do kiểm lâm nhập", "capture": capture}
+        if cls["kind"] == "streetview":
+            return {"viewer_type": "streetview", "viewer_url": viewer_url,
+                    "verification_status": "verified", "status": "VERIFIED",
+                    "detail": "Street View URL đã xác minh", "capture": capture}
+        if cls["kind"] == "generic":
+            return {"viewer_type": "panoee", "viewer_url": viewer_url,
+                    "verification_status": "field_check_required", "status": "ESTIMATED",
+                    "detail": f"URL ngoài whitelist ({cls['domain']}) — cần kiểm tra thực địa",
+                    "capture": capture}
+    if has_streetview is True:
+        return {"viewer_type": "streetview", "viewer_url": None,
+                "verification_status": "verified", "status": "VERIFIED",
+                "detail": "đã kiểm chứng có streetview — chưa lưu URL, không tự sinh link",
+                "capture": capture}
+    if (nearby_photos or 0) > 0:
+        return {"viewer_type": "photos", "viewer_url": None,
+                "verification_status": "estimated", "status": "ESTIMATED",
+                "detail": f"{nearby_photos} ảnh thực địa trong 1km (đối chiếu vị trí, chưa gắn asset)",
+                "capture": capture}
+    if lon is not None and lat is not None:
+        return {"viewer_type": "satellite", "viewer_url": None,
+                "verification_status": "verified", "status": "VERIFIED",
+                "detail": "nền ảnh vệ tinh bản đồ (khi LIVE)", "capture": capture}
+    return {"viewer_type": "none", "viewer_url": None,
+            "verification_status": "field_check_required", "status": "MISSING",
+            "detail": "chưa có dữ liệu hình ảnh", "capture": capture}
+
+
+# ── Module D: contact status ────────────────────────────────────────────
+def contact_status(contact_person, contact_phone, organization, verification_date) -> str:
+    """VERIFIED = có ngày kiểm chứng; PARTIAL = có liên hệ, chưa kiểm chứng;
+    MISSING = trống hoàn toàn."""
+    if verification_date:
+        return "VERIFIED"
+    if contact_person or contact_phone or organization:
+        return "PARTIAL"
+    return "MISSING"
+
+
+# ── Module C: threatened-community band ────────────────────────────────
+# band = bước lan truyền SỚM NHẤT giao với xã (1h→CRITICAL, 3h→THREATENED,
+# 6h→WATCH, else SAFE). Không xác suất — thuần hình học + ETA.
+COMMUNITY_BAND_BY_HOUR = [(1.0, "CRITICAL"), (3.0, "THREATENED"), (6.0, "WATCH")]
+
+
+def community_band(first_hour) -> str:
+    if first_hour is None:
+        return "SAFE"
+    for limit, band in COMMUNITY_BAND_BY_HOUR:
+        if first_hour <= limit:
+            return band
+    return "SAFE"

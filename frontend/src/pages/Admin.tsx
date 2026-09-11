@@ -87,13 +87,16 @@ function AgentBoard(){
 }
 
 function AssetBoard(){
-  const TYPES = [['watchtower','🗼 Chòi canh'],['camera','📷 Camera'],['water','🌊 Bể/nước'],['firetruck','🚒 Xe chữa cháy'],['pump','🔧 Máy bơm'],['team','⛺ Tổ kiểm lâm'],['station','🏕️ Trạm'],['route','🛣️ Tuyến tiếp cận']]
+  const TYPES = [['watchtower','🗼 Chòi canh'],['camera','📷 Camera'],['water','🌊 Bể/nước'],['firetruck','🚒 Xe chữa cháy'],['pump','🔧 Máy bơm'],['team','⛺ Tổ kiểm lâm'],['station','🏕️ Trạm'],['route','🛣️ Tuyến tiếp cận'],['community_hall','🏡 Nhà rông'],['risk_point','🌲 Điểm nguy cơ cao']]
   const [items, setItems] = useState<any[]>([])
   const [msg, setMsg] = useState('')
-  const [f, setF] = useState({ asset_type:'watchtower', name:'', latitude:'', longitude:'', status:'active', capacity_liters:'', coverage_radius_m:'', note:'', viewer_url:'', geometry:'' })
+  const EMPTY = { asset_type:'watchtower', name:'', latitude:'', longitude:'', status:'active', capacity_liters:'', coverage_radius_m:'', note:'', viewer_url:'', geometry:'', contact:'', route_type:'', road_condition:'', district:'', commune:'', manager:'', source:'', contact_person:'', contact_phone:'', organization:'', verification_date:'', surface_type:'', max_vehicle_tons:'', seasonal_access:'', preview_image_url:'', capture_date:'', capture_source:'', has_streetview:'' }
+  const [f, setF] = useState({ ...EMPTY })
+  const [gaps, setGaps] = useState<any>(null)
   const token = (()=>{ try{ return sessionStorage.getItem('ecogl_admin_token') }catch{ return null } })()
   const load = async ()=>{
     try{ const d: any = await api.assetsList(); setItems(Array.isArray(d) ? d : []) }catch{}
+    try{ setGaps(await api.opsGaps()) }catch{ setGaps(null) }
   }
   useEffect(()=>{ load() },[])
   const create = async ()=>{
@@ -105,12 +108,30 @@ function AssetBoard(){
       if(f.capacity_liters) body.capacity_liters = Number(f.capacity_liters)
       if(f.coverage_radius_m) body.coverage_radius_m = Number(f.coverage_radius_m)
       if(f.viewer_url.trim()) body.viewer_url = f.viewer_url.trim()
+      if(f.contact.trim()) body.contact = f.contact.trim()
+      if(f.route_type.trim()) body.route_type = f.route_type.trim()
+      if(f.road_condition) body.road_condition = f.road_condition
+      if(f.district.trim()) body.district = f.district.trim()
+      if(f.commune.trim()) body.commune = f.commune.trim()
+      if(f.manager.trim()) body.manager = f.manager.trim()
+      if(f.source.trim()) body.source = f.source.trim()
+      if(f.contact_person.trim()) body.contact_person = f.contact_person.trim()
+      if(f.contact_phone.trim()) body.contact_phone = f.contact_phone.trim()
+      if(f.organization.trim()) body.organization = f.organization.trim()
+      if(f.verification_date.trim()) body.verification_date = f.verification_date.trim()
+      if(f.surface_type) body.surface_type = f.surface_type
+      if(f.max_vehicle_tons) body.max_vehicle_tons = Number(f.max_vehicle_tons)
+      if(f.seasonal_access.trim()) body.seasonal_access = f.seasonal_access.trim()
+      if(f.preview_image_url.trim()) body.preview_image_url = f.preview_image_url.trim()
+      if(f.capture_date.trim()) body.capture_date = f.capture_date.trim()
+      if(f.capture_source.trim()) body.capture_source = f.capture_source.trim()
+      if(f.has_streetview !== '') body.has_streetview = f.has_streetview === 'yes'
       if(f.geometry.trim()){
         try{ body.geometry = JSON.parse(f.geometry) }
         catch{ setMsg('geometry phải là GeoJSON LineString/Polygon hợp lệ.'); return }
       }
       await api.createAsset(body)
-      setF({ asset_type:'watchtower', name:'', latitude:'', longitude:'', status:'active', capacity_liters:'', coverage_radius_m:'', note:'', viewer_url:'', geometry:'' })
+      setF({ ...EMPTY })
       setMsg('Đã thêm tài sản — hiện ngay trên bản đồ.')
       load()
     }catch(e:any){ setMsg(String(e.message || e).slice(0, 200)) }
@@ -133,10 +154,47 @@ function AssetBoard(){
         <input value={f.capacity_liters} onChange={e=> setF({...f, capacity_liters: e.target.value})} placeholder="Dung tích (lít)" aria-label="Dung tích" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:110}} />
         <input value={f.coverage_radius_m} onChange={e=> setF({...f, coverage_radius_m: e.target.value})} placeholder="Phủ sóng (m)" aria-label="Bán kính phủ sóng" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:110}} />
         <input value={f.viewer_url} onChange={e=> setF({...f, viewer_url: e.target.value})} placeholder="URL xem 360° (Panoee, có thì điền)" aria-label="URL 360" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, flex:'1 1 200px'}} />
+        <input value={f.contact} onChange={e=> setF({...f, contact: e.target.value})} placeholder="Liên hệ trạm (SĐT/người, có thì điền)" aria-label="Liên hệ trạm" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, flex:'1 1 160px'}} />
+        <input value={f.route_type} onChange={e=> setF({...f, route_type: e.target.value})} placeholder="Loại tuyến (tự do)" aria-label="Loại tuyến" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:120}} />
+        <select value={f.road_condition} onChange={e=> setF({...f, road_condition: e.target.value})} aria-label="Tình trạng đường" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 8px', fontSize:12}}>
+          <option value="">— Tình trạng đường —</option>
+          {['GOOD','FAIR','POOR','BLOCKED'].map(v=> <option key={v} value={v}>{v}</option>)}
+        </select>
+        <select value={f.surface_type} onChange={e=> setF({...f, surface_type: e.target.value})} aria-label="Mặt đường" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 8px', fontSize:12}}>
+          <option value="">— Mặt đường —</option>
+          {['PAVED','GRAVEL','FOREST_ROAD','TRAIL'].map(v=> <option key={v} value={v}>{v}</option>)}
+        </select>
+        <input value={f.max_vehicle_tons} onChange={e=> setF({...f, max_vehicle_tons: e.target.value})} placeholder="Tải trọng tối đa (tấn)" aria-label="Tải trọng tối đa" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:140}} />
+        <input value={f.seasonal_access} onChange={e=> setF({...f, seasonal_access: e.target.value})} placeholder="Tiếp cận mùa (vd: dry-season-only)" aria-label="Tiếp cận theo mùa" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:170}} />
+        <input value={f.district} onChange={e=> setF({...f, district: e.target.value})} placeholder="Huyện" aria-label="Huyện" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:100}} />
+        <input value={f.commune} onChange={e=> setF({...f, commune: e.target.value})} placeholder="Xã" aria-label="Xã" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:120}} />
+        <input value={f.manager} onChange={e=> setF({...f, manager: e.target.value})} placeholder="Quản lý (vd: Hạt Kiểm lâm)" aria-label="Đơn vị quản lý" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, flex:'1 1 150px'}} />
+        <input value={f.organization} onChange={e=> setF({...f, organization: e.target.value})} placeholder="Tổ chức" aria-label="Tổ chức" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:120}} />
+        <input value={f.contact_person} onChange={e=> setF({...f, contact_person: e.target.value})} placeholder="Người liên hệ" aria-label="Người liên hệ" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:120}} />
+        <input value={f.contact_phone} onChange={e=> setF({...f, contact_phone: e.target.value})} placeholder="SĐT liên hệ" aria-label="SĐT liên hệ" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:110}} />
+        <input value={f.verification_date} onChange={e=> setF({...f, verification_date: e.target.value})} placeholder="Kiểm chứng (YYYY-MM-DD)" aria-label="Ngày kiểm chứng" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:160}} />
+        <input value={f.source} onChange={e=> setF({...f, source: e.target.value})} placeholder="Nguồn (vd: field-survey)" aria-label="Nguồn dữ liệu" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:140}} />
+        <input value={f.preview_image_url} onChange={e=> setF({...f, preview_image_url: e.target.value})} placeholder="Ảnh xem trước (URL, có thì điền)" aria-label="Ảnh xem trước" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, flex:'1 1 180px'}} />
+        <input value={f.capture_date} onChange={e=> setF({...f, capture_date: e.target.value})} placeholder="Ngày chụp (YYYY-MM-DD)" aria-label="Ngày chụp" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:150}} />
+        <input value={f.capture_source} onChange={e=> setF({...f, capture_source: e.target.value})} placeholder="Nguồn ảnh (vd: flycam-đội-1)" aria-label="Nguồn ảnh" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:150}} />
+        <select value={f.has_streetview} onChange={e=> setF({...f, has_streetview: e.target.value})} aria-label="Có Street View" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 8px', fontSize:12}}>
+          <option value="">— Street View? —</option>
+          <option value="yes">Có (đã kiểm chứng)</option>
+          <option value="no">Không có</option>
+        </select>
         <input value={f.geometry} onChange={e=> setF({...f, geometry: e.target.value})} placeholder='Tuyến: GeoJSON LineString (vd tuyến tiếp cận)' aria-label="Geometry tuyến" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, flex:'1 1 200px'}} />
         <button onClick={create} style={{fontSize:12, background:'#0F766E', color:'#fff', border:0, borderRadius:999, padding:'6px 14px', fontWeight:700}}>Thêm</button>
       </div>
       {msg && <div style={{marginTop:8, fontSize:12}}>{msg}</div>}
+      {gaps && (
+        <div style={{marginTop:8, fontSize:11, background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:8, padding:'8px 10px'}}>
+          <b>Khoảng trống dữ liệu</b> (từ /api/ops/gaps):
+          {' '}hồ {gaps.water?.total} · thiếu liên hệ {gaps.water?.missing_contact?.length ?? '?'} ·
+          {' '}trạm GPS {gaps.stations?.verified_gps ?? '?'} · thiếu GPS {gaps.stations?.missing_gps ?? '?'} · thiếu liên hệ {(gaps.stations?.missing_contact || []).length} ·
+          {' '}tuyến {gaps.routes?.total ?? '?'} · thiếu đường {(gaps.routes?.missing_geometry || []).length} · thiếu tình trạng {(gaps.routes?.missing_road_condition || []).length} ·
+          {' '}xem: {Object.entries(gaps.viewers || {}).map(([k, v])=> `${k}:${v}`).join(' ')}
+        </div>
+      )}
       {items.length === 0 && <div style={{marginTop:8, fontSize:12, color:'#64748B'}}>Chưa có tài sản nào — bản đồ và bản tin AI sẽ ghi rõ “chưa có” thay vì bịa.</div>}
       {items.map((a:any)=> (
         <div key={a.id} style={{marginTop:6, display:'flex', gap:8, alignItems:'center', fontSize:12, border:'1px solid #F1F5F9', borderRadius:8, padding:'6px 10px'}}>
@@ -144,6 +202,8 @@ function AssetBoard(){
           <b style={{flex:1}}>{a.name}</b>
           <span style={{color:'#64748B'}}>{a.latitude}, {a.longitude}</span>
           <span style={{fontSize:10, padding:'2px 8px', borderRadius:999, background: a.status==='active' ? '#DCFCE7' : '#FEE2E2'}}>{a.status}</span>
+          <span title={a.viewer?.detail || ''} style={{fontSize:10, padding:'2px 8px', borderRadius:999, background: a.viewer?.viewer_type === 'none' ? '#F1F5F9' : '#DCFCE7'}}>🌐 {a.viewer?.viewer_type || '?'} · {a.viewer?.verification_status || '?'}</span>
+          <a href={`/viewer/${a.id}`} style={{fontSize:11, color:'#0F766E', fontWeight:700}}>Xem</a>
           <button onClick={()=> remove(a.id)} title="Xóa (cần admin)" style={{fontSize:11, background:'#fff', border:'1px solid #E2E8E5', borderRadius:999, padding:'2px 8px'}}>Xóa</button>
         </div>
       ))}
