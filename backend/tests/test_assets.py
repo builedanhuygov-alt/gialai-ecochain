@@ -56,7 +56,8 @@ def test_nearest_water_and_station():
     assert "chưa có" in empty["note"].lower()
 
 
-def test_brief_includes_asset_keys():    c = setup()
+def test_brief_includes_asset_keys():
+    c = setup()
     h = auth_headers(c)
     c.post("/api/assets", json={"asset_type": "water", "name": "Be Brief",
                                 "latitude": 13.9, "longitude": 108.3}, headers=h)
