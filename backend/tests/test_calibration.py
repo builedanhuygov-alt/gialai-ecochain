@@ -173,3 +173,16 @@ def test_detect_change_real_uses_live_ndvi_not_mock():
     assert out["ndvi_before"] == 0.62 and out["ndvi_after"] == 0.30
     assert out["classification"] in ("HIGH", "CRITICAL"), out
     assert out["confidence"] >= 70, out  # 5+5 images, low cloud, stable std
+
+
+def test_current_summary_reads_real_open_meteo_keys():
+    """Open-Meteo uses temperature_2m/wind_speed_10m — never invent defaults."""
+    from app.services.weather_service import current_summary
+    live = {"current": {"temperature_2m": 36.5, "precipitation": 0.0,
+                        "wind_speed_10m": 18.0, "wind_direction_10m": 45},
+            "hourly": {"relative_humidity_2m": [28, 27, 26]}}
+    s = current_summary(live)
+    assert s == {"temperature": 36.5, "humidity": 28,
+                 "rainfall": 0.0, "wind_speed": 18.0, "wind_direction": 45}
+    empty = current_summary({"current": {}})
+    assert all(v is None for v in empty.values())

@@ -50,6 +50,30 @@ async def fetch_forecast(lat:float, lon:float, days:int=7)->Dict:
     return await fetch_current(lat,lon)
 
 
+def current_summary(data: Dict) -> Dict:
+    """Normalize Open-Meteo current (+hourly humidity) to engine keys.
+
+    Open-Meteo uses temperature_2m / precipitation / wind_speed_10m /
+    wind_direction_10m; humidity only exists in hourly. Returns None for
+    anything absent so callers flag it missing instead of inventing values.
+    """
+    cur = (data or {}).get("current", {}) or {}
+    hourly = (data or {}).get("hourly", {}) or {}
+    hum = cur.get("relative_humidity_2m", cur.get("humidity"))
+    if hum is None:
+        try:
+            hum = (hourly.get("relative_humidity_2m") or [None])[0]
+        except Exception:
+            hum = None
+    return {
+        "temperature": cur.get("temperature_2m", cur.get("temperature")),
+        "humidity": hum,
+        "rainfall": cur.get("precipitation"),
+        "wind_speed": cur.get("wind_speed_10m", cur.get("windspeed")),
+        "wind_direction": cur.get("wind_direction_10m", cur.get("winddirection")),
+    }
+
+
 async def fetch_history(lat:float, lon:float, past_days:int=14)->Dict:
     """Past daily rain/temp for drought reasoning (Open-Meteo, no key).
 

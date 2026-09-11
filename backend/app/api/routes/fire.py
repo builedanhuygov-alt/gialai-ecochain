@@ -57,9 +57,12 @@ async def fire_risk(administrative_unit_id: str = Query(...), lat: float = Query
     # weather real
     weather={}
     try:
-        from app.services.weather_service import fetch_current
+        from app.services.weather_service import fetch_current, current_summary
         w=await fetch_current(lat, lon)
-        weather={"temperature": w.get("current",{}).get("temperature",30), "humidity": w.get("humidity",60), "rainfall": w.get("current",{}).get("precipitation",2), "wind_speed": w.get("current",{}).get("windspeed",12)}
+        s=current_summary(w)
+        weather={k: v for k, v in {"temperature": s["temperature"], "humidity": s["humidity"],
+                                   "rainfall": s["rainfall"], "wind_speed": s["wind_speed"]}.items()
+                 if v is not None}
     except: weather={}  # flagged missing by analyze(), never fake values
     # terrain
     terrain={}
@@ -101,11 +104,11 @@ async def fire_risk(administrative_unit_id: str = Query(...), lat: float = Query
 @router.get("/fire/forecast")
 async def fire_forecast(administrative_unit_id: str = Query(...), lat: float = Query(default=13.9), lon: float = Query(default=108.3)):
     # Sec7 + Sec43 early warning 6h/24h/72h
-    from app.services.weather_service import fetch_current
+    from app.services.weather_service import fetch_current, current_summary
     try:
-        w=await fetch_current(lat, lon)
+        s=current_summary(await fetch_current(lat, lon))
         sat={"ndvi":0.5}
-        fc=fire_risk_engine.forecast(administrative_unit_id, sat, {"temperature": w.get("current",{}).get("temperature",30)})
+        fc=fire_risk_engine.forecast(administrative_unit_id, sat, {"temperature": s["temperature"] if s["temperature"] is not None else 30})
     except:
         fc={"forecast":{"6h":45,"12h":52,"24h":67,"48h":74,"72h":81}}
     return {"administrative_unit_id": administrative_unit_id, **fc, "status":"LIVE"}
@@ -141,14 +144,17 @@ async def commune_levels(body: dict):
     units = body.get("units") or []
     if not isinstance(units, list) or len(units) > 200:
         raise HTTPException(400, "units must be a list of at most 200 {name,lat,lon}")
-    # shared weather once (province center)
-    weather = {"temperature": 32, "humidity": 35, "rainfall": 1, "wind_speed": 18}
+    # shared weather once (province center) — real keys via current_summary.
+    # Missing stays missing (no invented 32°C): analyze() lowers confidence.
+    from app.services.weather_service import fetch_current, current_summary
+    weather: dict = {}
     try:
-        from app.services.weather_service import fetch_current
         w = await fetch_current(13.9, 108.3)
-        cur = w.get("current", {}) or {}
-        weather = {"temperature": cur.get("temperature", 32), "humidity": cur.get("humidity", 35),
-                   "rainfall": cur.get("precipitation", 1), "wind_speed": cur.get("windspeed", 18)}
+        s = current_summary(w)
+        weather = {k: v for k, v in
+                   {"temperature": s["temperature"], "humidity": s["humidity"],
+                    "rainfall": s["rainfall"], "wind_speed": s["wind_speed"]}.items()
+                   if v is not None}
     except Exception:
         pass
     # shared FIRMS hotspots once
@@ -235,7 +241,7 @@ async def fire_spread(body: dict):
 async def fire_brief(administrative_unit_id: str = Query(...), lat: float = Query(default=13.9), lon: float = Query(default=108.3)):
     """    Commune AI brief: 14-day rain + current weather + FIRMS + heuristic risk,
     assembled deterministically (reasons cited, no invented numbers)."""
-    from app.services.weather_service import fetch_current, fetch_history
+    from app.services.weather_service import fetch_current, fetch_history, current_summary
     from app.services.firms_service import fetch_firms, _haversine_km
     from app.services import spread as spread_svc
     from app.core.time import utcnow
@@ -245,13 +251,12 @@ async def fire_brief(administrative_unit_id: str = Query(...), lat: float = Quer
     last_rain = daily_rain[-1] if daily_rain else None
     cur = {}
     try:
-        w = await fetch_current(lat, lon)
-        cur = w.get("current", {}) or {}
+        cur = current_summary(await fetch_current(lat, lon))
     except Exception:
         pass
     temp = cur.get("temperature")
-    humidity = cur.get("relative_humidity_2m", cur.get("humidity"))
-    wind = cur.get("wind_speed_10m", cur.get("windspeed"))
+    humidity = cur.get("humidity")
+    wind = cur.get("wind_speed")
     try:
         firms = await fetch_firms(lat, lon)
         hotspots = [h for h in firms.get("fires", [])

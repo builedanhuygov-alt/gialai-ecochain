@@ -127,15 +127,14 @@ async def disaster_summary(administrative_unit_id: str = Query(default="Gia Lai"
     import random
     inputs: dict = {}
     try:
-        from app.services.weather_service import fetch_current
-        w = await fetch_current(lat, lon)
-        cur = w.get("current", {}) or {}
-        if cur.get("temperature") is not None:
-            inputs["temperature"] = cur.get("temperature")
-        if cur.get("precipitation") is not None:
-            inputs["rainfall"] = cur.get("precipitation")
-        if cur.get("relative_humidity") is not None:
-            inputs["humidity"] = cur.get("relative_humidity")
+        from app.services.weather_service import fetch_current, current_summary
+        s = current_summary(await fetch_current(lat, lon))
+        if s["temperature"] is not None:
+            inputs["temperature"] = s["temperature"]
+        if s["rainfall"] is not None:
+            inputs["rainfall"] = s["rainfall"]
+        if s["humidity"] is not None:
+            inputs["humidity"] = s["humidity"]
     except Exception:
         pass
     try:
