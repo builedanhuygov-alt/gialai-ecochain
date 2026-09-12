@@ -11,35 +11,9 @@ _COMMUNE_DEMO: dict | None = None
 
 
 def _commune_demographics() -> dict:
-    """Module C — population/area per commune from the REAL merged-Gia Lai
-    geojson (dan_so + dtich_km2, 134/134 present → VERIFIED). Cached."""
-    global _COMMUNE_DEMO
-    if _COMMUNE_DEMO is not None:
-        return _COMMUNE_DEMO
-    import json as _json
-    import os as _os
-    path = _os.path.join(_os.path.dirname(__file__), "..", "..", "data",
-                         "gialai_communes.geojson")
-    out: dict = {}
-    try:
-        with open(path, encoding="utf-8") as f:
-            fc = _json.load(f)
-        for feat in fc.get("features", []):
-            p = feat.get("properties", {}) or {}
-            code = f"GL-{p.get('ma_xa')}"
-            try:
-                pop = int(str(p.get("dan_so") or "").replace(".", "").replace(",", "").strip())
-            except Exception:
-                pop = None
-            try:
-                area = float(str(p.get("dtich_km2") or "").strip())
-            except Exception:
-                area = None
-            out[code] = {"population": pop, "area_km2": area, "name": p.get("ten_xa")}
-    except Exception:
-        pass
-    _COMMUNE_DEMO = out
-    return out
+    """Module F — delegates to CommuneService (single source of truth)."""
+    from app.services import communes as _cs
+    return _cs._demographics()
 
 
 def commune_centroids() -> dict:

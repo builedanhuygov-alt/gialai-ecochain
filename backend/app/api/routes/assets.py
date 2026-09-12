@@ -564,6 +564,58 @@ def ops_gaps(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/ops/consistency")
+def ops_consistency(db: Session = Depends(get_db)):
+    """Module G — do Map/API/Analyst/threats/plan share one commune source?
+
+    Every check resolves join keys against administrative_units (the single
+    source). Mismatches are listed explicitly, never papered over.
+    """
+    from app.core.time import utcnow
+    from app.models.administrative import AdministrativeUnit
+    from app.models.fire import OfficialFireWarning
+    from app.models.pipeline import DataProposal
+    from app.models.risk import Alert, Incident
+    from app.models.water import WaterAsset
+    from app.services.village_fire import VILLAGES
+
+    def _resolve(key):
+        return AdministrativeUnit.resolve_unit(db, key) is not None
+
+    checks = []
+    waters = db.query(WaterAsset).all()
+    bad_water = [w.name for w in waters
+                 if w.commune_code and not _resolve(w.commune_code)]
+    checks.append({"name": "water.commune_code → units",
+                   "ok": not bad_water, "mismatches": bad_water})
+    bad_vill = [v["id"] for v in VILLAGES if not _resolve(v.get("code"))]
+    checks.append({"name": "villages.code → units",
+                   "ok": not bad_vill, "mismatches": bad_vill})
+    bad_alerts = [a.id for a in db.query(Alert).all()
+                  if not _resolve(a.administrative_unit_id)]
+    checks.append({"name": "alerts.administrative_unit_id → units",
+                   "ok": not bad_alerts, "mismatches": bad_alerts})
+    bad_props = [p.id for p in db.query(DataProposal).all()
+                 if not _resolve(p.administrative_unit_id)]
+    checks.append({"name": "proposals.administrative_unit_id → units",
+                   "ok": not bad_props, "mismatches": bad_props})
+    bad_inc = [i.id for i in db.query(Incident).all()
+               if not _resolve(i.administrative_unit_id)]
+    checks.append({"name": "incidents.administrative_unit_id → units",
+                   "ok": not bad_inc, "mismatches": bad_inc})
+    bad_warn = [w.id for w in db.query(OfficialFireWarning).all()
+                if not _resolve(w.administrative_unit_id)]
+    checks.append({"name": "fire_warnings.administrative_unit_id → units",
+                   "ok": not bad_warn, "mismatches": bad_warn})
+    no_geom = [u.code or u.id for u in db.query(AdministrativeUnit).filter_by(
+        is_demo=False).all() if not u.geometry_geojson]
+    checks.append({"name": "communes with real boundaries",
+                   "ok": not no_geom, "mismatches": no_geom})
+    return {"generated_at": utcnow().isoformat(), "checks": checks,
+            "mismatches_total": sum(len(c["mismatches"]) for c in checks),
+            "all_consistent": all(c["ok"] for c in checks)}
+
+
 @router.post("/assets")
 def create_asset(body: dict, db: Session = Depends(get_db), user=Depends(get_current_user)):
     atype = str(body.get("asset_type") or "").lower()

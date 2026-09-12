@@ -104,8 +104,24 @@ def supply_twin(farms:int=Query(default=10), collections:int=Query(default=2), f
     return supply_chain_twin(farms, collections, factories, warehouses)
 
 @router.get("/supply-chain/risk")
-def supply_risk():
-    return {"farm":12,"forest":8,"road":21,"factory":10,"traceability":4,"eudr":7,"overall":"LOW"}
+def supply_risk(db:Session=Depends(get_db)):
+    """Module E — was a static dict. Now aggregated from real risk signals;
+    honest INSUFFICIENT_DATA when the pipeline never ran."""
+    from app.models.risk import RiskSignal
+    rows = db.query(RiskSignal).order_by(RiskSignal.timestamp.desc()).limit(200).all()
+    if not rows:
+        return {"status": "INSUFFICIENT_DATA",
+                "note": "No risk signals in DB — run ForestGuard/risk pipeline first",
+                "farm": None, "forest": None, "road": None, "factory": None,
+                "traceability": None, "eudr": None, "overall": None}
+    def _avg(rt: str):
+        vals = [r.score for r in rows if r.risk_type == rt]
+        return round(sum(vals) / len(vals)) if vals else None
+    return {"status": "OK", "n_signals": len(rows),
+            "farm": _avg("FARM"), "forest": _avg("FOREST"), "road": _avg("LOGISTICS"),
+            "factory": None, "traceability": None, "eudr": None,
+            "overall": _avg("OVERALL"),
+            "note": "factory/traceability/eudr have no signal pipeline — null, not zero"}
 
 # EUDR continuous Sec32-33 + Passport 2.0 Sec34 provenance
 @router.post("/eudr/continuous-monitor")
@@ -120,7 +136,22 @@ def passport2(lot_code:str, db:Session=Depends(get_db)):
     lot=db.query(__import__("app.models.farm", fromlist=["ProductionLot"]).ProductionLot).filter_by(lot_code=lot_code).first()
     if lot:
         base=eudr_guard.assess(db, lot.id)
-        base["environmental_history"]={"forest_monitoring":"STABLE","carbon_trend":"↑","logistics_emissions":"12kg"}
+        # Module E — was a static "STABLE/↑/12kg" history. Real carbon trend
+        # from carbon_records for the lot's farm unit, else MISSING.
+        from app.models.risk import CarbonRecord
+        _farm = db.query(__import__("app.models.farm", fromlist=["Farm"]).Farm).filter_by(
+            id=getattr(lot, "farm_id", None)).first()
+        _unit = getattr(_farm, "administrative_unit_id", None) if _farm else None
+        recs=db.query(CarbonRecord).filter_by(
+            administrative_unit_id=_unit).order_by(CarbonRecord.period).all() if _unit else []
+        if recs:
+            base["environmental_history"]={"carbon_records":[
+                {"period": r.period, "forest_area_ha": r.forest_area_ha,
+                 "carbon_stock_t": r.carbon_stock_t,
+                 "carbon_change_pct": r.carbon_change_pct} for r in recs]}
+        else:
+            base["environmental_history"]={"carbon_records": [],
+                "note": "MISSING — no carbon records for this unit"}
         base["risk_history"]=[]
         return base
     return {"lot_code": lot_code, "environmental_history": {}, "note": "Passport 2.0"}
@@ -134,44 +165,136 @@ def kg(area:str=Query(default="Gia Lai")):
     return knowledge_graph(area)
 
 # NL Analytics 2.0 Sec37-38
+# Module E — was canned "Commune A" answers. Now parses the question and
+# searches the REAL communes table; no match → honest empty evidence.
 @router.post("/ai/nl-analytics")
 def nl_analytics(body:dict, db:Session=Depends(get_db)):
-    q=body.get("question","").lower()
-    if "vừa có nguy cơ cháy tăng vừa có nhiều vùng cà phê" in q:
-        # complex query
-        return {"result": [{"commune":"Commune A","fire_risk_up":32,"coffee_area":1200}], "evidence": "View Evidence", "query": {"crop":"coffee","eudr":None}}
-    if "eudr readiness dưới 80" in q and "forest change" in q:
-        return {"structured": {"crop":"coffee","eudr_score_lt":80,"distance_forest_signal_lt":"threshold"}}
+    from app.services import communes as cs
+    q=body.get("question","")
+    ql=q.lower()
+    ql=q.lower()
+    if "vừa có nguy cơ cháy tăng vừa có nhiều vùng cà phê" in ql:
+        hits = cs.get_communes(db, q="Hoài", limit=5)
+        if not hits:
+            hits = cs.get_communes(db, limit=3)
+        return {"result": [{"commune": h["name"], "code": h["code"],
+                            "population": h["population"]} for h in hits],
+                "evidence": "communes table (DB)",
+                "note": "fire-trend join needs FIRMS history pipeline — names only, no invented scores"}
+    if "eudr readiness dưới 80" in ql and "forest change" in ql:
+        return {"structured": {"crop":"coffee","eudr_score_lt":80,"distance_forest_signal_lt":"threshold"},
+                "evidence": [],
+                "note": "No EUDR/forest-change join pipeline — structure parsed, no rows invented"}
     return {"answer": "Complex query parsed", "evidence": []}
 
 # Report Sec39, KPI Sec40-41
+# Module E — was static text/numbers. Now counted from DB tables.
 @router.post("/ai/report")
 def ai_report(body:dict, db:Session=Depends(get_db)):
-    return {"executive_summary":"Top 5 environmental changes from database","key_changes":[],"high_risk":[],"recommendations":["Monitor"],"links":["/evidence/1"]}
+    from app.models.pipeline import DataProposal
+    from app.models.risk import Alert
+    from app.models.community import PhotoEvidence
+    n_prop = db.query(DataProposal).count()
+    n_alert = db.query(Alert).filter_by(status="ACTIVE").count()
+    n_photo = db.query(PhotoEvidence).count()
+    crit = db.query(Alert).filter_by(status="ACTIVE", level="CRITICAL").count()
+    return {"executive_summary": f"{n_prop} proposals, {n_alert} active alerts ({crit} CRITICAL), {n_photo} field photos in DB",
+            "key_changes": [], "high_risk": [],
+            "recommendations": ["Verify CRITICAL alerts first"] if crit else ["No CRITICAL alerts — maintain patrol"],
+            "counts": {"proposals": n_prop, "active_alerts": n_alert,
+                       "critical_alerts": crit, "photos": n_photo}}
 
 @router.get("/kpi/provincial")
-def kpi_provincial():
-    return {"forest_protection":84,"disaster_resilience":78,"carbon":82,"agriculture":80,"traceability":85,"logistics":79,"community":81,"response_time":76}
+def kpi_provincial(db:Session=Depends(get_db)):
+    """Module E — was static 84/78/82... Now real counts + provenance."""
+    from app.models.pipeline import DataProposal
+    from app.models.risk import Alert
+    from app.models.community import PhotoEvidence, CommunityConfirmation
+    return {"proposals_total": db.query(DataProposal).count(),
+            "alerts_active": db.query(Alert).filter_by(status="ACTIVE").count(),
+            "photos_total": db.query(PhotoEvidence).count(),
+            "confirmations_total": db.query(CommunityConfirmation).count(),
+            "provenance": "counted live from DB tables",
+            "note": "Static 0-100 KPI dials removed — no KPI pipeline exists to compute them honestly"}
 
 @router.get("/kpi/trend")
-def kpi_trend():
-    return {"2024":72,"2025":78,"2026":84,"explanation":"Improvement primarily associated with community verification"}
+def kpi_trend(db:Session=Depends(get_db)):
+    """Module E — was a static 72/78/84 story. Now monthly alert counts."""
+    from app.models.risk import Alert
+    from sqlalchemy import func as _func
+    rows = db.query(_func.substr(Alert.created_at, 1, 7).label("month"),
+                    _func.count(Alert.id)).group_by("month").order_by("month").all()
+    return {"by_month": [{"month": m, "alerts": n} for m, n in rows],
+            "explanation": "Monthly alert counts from DB — no causal story invented"}
 
 # Profiles Sec42-43 community score Sec44
+# Module E — was static 80/75/70... Now CommuneService (Module F): real
+# identity + demographics + joined counts; unscored dimensions stay MISSING.
 @router.get("/profile/commune/{unit_id}")
 def commune_profile(unit_id:str, db:Session=Depends(get_db)):
-    return {"commune": unit_id, "forest":80,"agriculture":75,"carbon":70,"disaster":65,"logistics":78,"eudr":85,"community":80,"achievements":2}
+    from app.services import communes as cs
+    stats = cs.get_commune_stats(db, unit_id)
+    if not stats:
+        raise HTTPException(404, "Commune not found (id, GL-code, or exact name)")
+    assets = cs.get_commune_assets(db, unit_id)
+    return {"commune": stats["name"], "code": stats["code"],
+            "population": stats["population"],
+            "population_status": stats["population_status"],
+            "area_km2": stats["area_km2"], "area_ha": stats["area_ha"],
+            "alerts_active": stats["alerts_active"], "incidents": stats["incidents"],
+            "proposals": stats["proposals"], "monitored": stats["monitored"],
+            "asset_counts": assets["counts"] if assets else {},
+            "forest": None, "agriculture": None, "carbon": None, "note": "domain scores need pipelines — null, not 80"}
 
 @router.get("/profile/village/{unit_id}")
 def village_profile(unit_id:str, db:Session=Depends(get_db)):
-    return {"village": unit_id, "risk":60,"forest":70,"reports":5,"community_score":75}
+    from app.services.village_fire import VILLAGES
+    from app.services import communes as cs
+    v = next((x for x in VILLAGES if x["id"] == unit_id or x["village"] == unit_id), None)
+    if v:
+        return {"village": v["village"], "commune": v["commune"], "code": v["code"],
+                "population": v["population"], "population_status": "ESTIMATED",
+                "risk": None, "forest": None,
+                "note": "reference-sample point — scores need pipelines, null not 60/70"}
+    unit = cs.get_commune(db, unit_id)
+    if not unit:
+        raise HTTPException(404, "Village/unit not found")
+    return {"village": None, "commune": unit["name"], "code": unit["code"],
+            "population": unit["population"], "population_status": unit["population_status"],
+            "village_status": "MISSING — no reference point for this unit",
+            "risk": None, "forest": None,
+            "note": "scores need pipelines, null not 60/70"}
 
 # Citizen science Sec45 + reputation Sec46 trust Sec47
+# Module B — persisted via CitizenReport + EvidenceService (photos attach via
+# POST /api/evidence with source=citizen). evidence URLs stay null until a
+# real photo is attached — honestly empty, never fabricated.
 @router.post("/citizen/report")
 def citizen_report(body:dict, db:Session=Depends(get_db)):
     # types: 📷 📍 📝 🔥🌳🌊⛰️🚧
-    update_reputation(db, body.get("user_id","anon"), False)
-    return {"report_id": "rep-"+body.get("user_id","anon")[:4], "types": ["📷","📍","🔥"], "note":"Citizen Environmental Intelligence"}
+    from app.models.community import CitizenReport
+    try:
+        lat = float(body["lat"]) if body.get("lat") not in (None, "") else None
+        lng = float(body.get("lng") or body.get("lon")) if body.get("lng", body.get("lon")) not in (None, "") else None
+    except Exception:
+        raise HTTPException(400, "lat/lng must be numeric")
+    if lat is not None and not (-90 <= lat <= 90 and -180 <= (lng or 0) <= 180):
+        raise HTTPException(400, "coordinates out of range")
+    rep = CitizenReport(user_id=str(body.get("user_id", "anon"))[:100],
+                        report_type=str(body.get("type") or "")[:50] or None,
+                        latitude=lat, longitude=lng,
+                        note=str(body.get("note") or "")[:2000] or None,
+                        administrative_unit_id=body.get("administrative_unit_id"))
+    db.add(rep)
+    db.commit()
+    db.refresh(rep)
+    update_reputation(db, rep.user_id, False)
+    return {"report_id": rep.id, "status": rep.status,
+            "types": ["📷", "📍", "🔥"],
+            "evidence_url": None, "thumbnail_url": None,
+            "photo_upload": "POST /api/evidence (multipart: file, source=citizen, "
+                            f"source_id={rep.id}, uploader_id, lat, lng)",
+            "note": "Report persisted; attach a real photo to get evidence URLs"}
 
 @router.get("/contributor/{user_id}")
 def contributor_rep(user_id:str, db:Session=Depends(get_db)):
@@ -196,8 +319,18 @@ def ev_timeline(incident_id:str):
     return {"timeline": tl, "performance": perf}
 
 @router.get("/response-ranking")
-def resp_ranking():
-    return {"ranking": [{"commune":"A","response_time":12,"rank":1}], "early_action": early_action_score("commune", 5, 12)}
+def resp_ranking(db:Session=Depends(get_db)):
+    """Module E — was a sample {commune A, 12min}. Now ranked from real
+    ACTIVE alerts; empty ranking (not a fake one) when none exist."""
+    from app.models.risk import Alert
+    from app.services.evidence_timeline import early_action_score
+    rows = db.query(Alert).filter_by(status="ACTIVE").order_by(Alert.created_at.desc()).limit(20).all()
+    ranking = [{"commune": a.administrative_unit_id, "title": a.title,
+                "level": a.level, "rank": i + 1}
+               for i, a in enumerate(rows)]
+    return {"ranking": ranking,
+            "early_action": early_action_score("province", len(rows), 30) if rows else None,
+            "note": "ranked ACTIVE alerts only — empty when no active alerts" if not rows else None}
 
 # Lessons / post-event Sec54-56
 @router.post("/lessons/record")
@@ -205,8 +338,21 @@ def record_lesson(body:dict, db:Session=Depends(get_db)):
     return {"lesson": body, "pattern": "AI finds pattern after many incidents"}
 
 @router.get("/post-event/{incident_id}")
-def post_event(incident_id:str):
-    return {"incident": incident_id, "why_high_damage": {"rainfall":80,"terrain":"steep","response_time":30}, "after_action": {"summary":"Good","prediction_accuracy":0.82}}
+def post_event(incident_id:str, db:Session=Depends(get_db)):
+    """Module E — was static why_high_damage + invented 0.82 accuracy.
+    Now: incident + linked evidence counts from DB; causal factors MISSING
+    until a real after-action review is recorded."""
+    from app.models.risk import Incident, IncidentEvidence
+    inc = db.get(Incident, incident_id)
+    if not inc:
+        raise HTTPException(404, "Incident not found")
+    n_ev = db.query(IncidentEvidence).filter_by(incident_id=incident_id).count()
+    return {"incident": incident_id, "title": inc.title, "status": inc.status,
+            "evidence_count": n_ev,
+            "why_high_damage": None,
+            "after_action": None,
+            "prediction_accuracy": None,
+            "note": "MISSING — no after-action review recorded; factors and accuracy are not estimated"}
 
 # Model perf Sec57-59
 @router.post("/model/metric")
@@ -219,16 +365,17 @@ def drift_check(model:str, db:Session=Depends(get_db)):
     return check_drift(db, model)
 
 # Investment prioritization Sec67-68
+# Module E — was static Area A/B/C. No investment model exists in DB, so the
+# honest contract is NOT_CONFIGURED (not a plausible-looking ranking).
 @router.get("/investment/priorities")
 def invest_priorities():
-    return [
-        {"area":"Area A","risk":"HIGH","impact":"HIGH","cost":"LOW","priority":94},
-        {"area":"Area B","risk":"HIGH","impact":"MODERATE","cost":"HIGH","priority":71}
-    ]
+    return {"status": "NOT_CONFIGURED", "priorities": [],
+            "note": "No investment prioritization pipeline — static Area A/B/C removed"}
 
 @router.get("/investment/map")
 def invest_map():
-    return {"priorities": {"🔴 High": ["Area A"], "🟠 Medium": ["Area B"], "🟢 Low": ["Area C"]}}
+    return {"status": "NOT_CONFIGURED", "priorities": {},
+            "note": "No investment map pipeline — static zones removed"}
 
 # Open data Sec69 research Sec71 uncertainty Sec72 data states Sec73-74
 @router.get("/public/open-data")
@@ -242,5 +389,7 @@ def research_mode():
 @router.get("/uncertainty/{forecast_id}")
 def uncertainty(forecast_id:str, db:Session=Depends(get_db)):
     fc=db.get(Forecast, forecast_id)
-    if not fc: return {"prediction": None, "confidence": 70, "uncertainty":"Moderate","freshness":"2 hours"}
+    if not fc: return {"prediction": None, "confidence": None, "uncertainty": "INSUFFICIENT_DATA",
+                       "freshness": None, "data_state": "MISSING",
+                       "note": "Unknown forecast id — confidence is not defaulted to 70"}
     return {"prediction": json.loads(fc.forecast), "confidence": fc.confidence, "uncertainty": "Moderate" if fc.confidence>70 else "High", "freshness":"2 hours", "data_state": fc.data_state}

@@ -100,3 +100,23 @@ ALTER TABLE water_assets ADD COLUMN IF NOT EXISTS source TEXT;
 ALTER TABLE water_assets ADD COLUMN IF NOT EXISTS preview_image_url TEXT;
 ALTER TABLE water_assets ADD COLUMN IF NOT EXISTS capture_date TIMESTAMPTZ;
 ALTER TABLE water_assets ADD COLUMN IF NOT EXISTS capture_source TEXT;
+-- Unified evidence pipeline (Module A/H) + citizen reports (Module B).
+-- Fresh SQLite: create_all. Existing Postgres: run the ALTERs + new table.
+ALTER TABLE photo_evidences ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'proposal';
+ALTER TABLE photo_evidences ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT 'PENDING';
+ALTER TABLE photo_evidences ADD COLUMN IF NOT EXISTS capture_time TIMESTAMPTZ;
+ALTER TABLE photo_evidences ADD COLUMN IF NOT EXISTS meta TEXT;
+CREATE TABLE IF NOT EXISTS citizen_reports (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  report_type TEXT,
+  latitude DOUBLE PRECISION, longitude DOUBLE PRECISION,
+  note TEXT, administrative_unit_id TEXT,
+  status TEXT DEFAULT 'PENDING',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+-- Optional enum guards (app validates pre-insert; DB guard is defense in depth):
+-- ALTER TABLE photo_evidences ADD CONSTRAINT ck_ev_source
+--   CHECK (source IN ('proposal','citizen','incident','field'));
+-- ALTER TABLE photo_evidences ADD CONSTRAINT ck_ev_status
+--   CHECK (verification_status IN ('PENDING','VERIFIED','REJECTED'));
