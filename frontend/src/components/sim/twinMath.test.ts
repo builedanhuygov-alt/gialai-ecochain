@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aoiRadiusKm, BAND_COLORS_3D, isCanopyPixel, lonLatToTile, metersPerPixel, slopeAt, STEP_COLORS_3D, terrariumToHeight, tileToLonLat, toLocal } from './twinMath'
+import { aoiRadiusKm, BAND_COLORS_3D, isCanopyPixel, lonLatToTile, lonToTileX, latToTileY, metersPerPixel, slopeAt, STEP_COLORS_3D, terrariumToHeight, tileToLonLat, toLocal } from './twinMath'
 
 describe('twinMath (3D scene helpers)', () => {
   it('aoi radius clamps to 1–3km', () => {
@@ -13,6 +13,11 @@ describe('twinMath (3D scene helpers)', () => {
     const c = tileToLonLat(t.x + 0.5, t.y + 0.5, 13)
     expect(Math.abs(c.lon - 108.41)).toBeLessThan(0.05)
     expect(Math.abs(c.lat - 13.85)).toBeLessThan(0.05)
+  })
+  it('fractional tile coords invert lonLatToTile', () => {
+    const t = lonLatToTile(108.41, 13.85, 14)
+    expect(Math.abs(lonToTileX(108.41, 14) - (t.x + 0.5))).toBeLessThan(0.6)
+    expect(Math.abs(latToTileY(13.85, 14) - (t.y + 0.5))).toBeLessThan(0.6)
   })
   it('terrarium decodes sea level and Everest sane', () => {
     expect(terrariumToHeight(128, 0, 0)).toBe(0)

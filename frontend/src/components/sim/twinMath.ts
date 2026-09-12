@@ -28,8 +28,7 @@ export function lonLatToTile(lon: number, lat: number, z: number){
   return { x, y, z }
 }
 
-export function tileToLonLat(x: number, y: number, z: number){
-  const n = Math.pow(2, z)
+export function tileToLonLat(x: number, y: number, z: number){  const n = Math.pow(2, z)
   const lon = (x / n) * 360 - 180
   const latR = Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / n)))
   return { lon, lat: (latR * 180) / Math.PI }
@@ -38,6 +37,16 @@ export function tileToLonLat(x: number, y: number, z: number){
 // Mapzen Terrarium: height = R*256 + G + B/256 − 32768
 export function terrariumToHeight(r: number, g: number, b: number){
   return r * 256 + g + b / 256 - 32768
+}
+
+// Fractional tile coords (for cover ranges) + meters per pixel.
+export function lonToTileX(lon: number, z: number){
+  return (((lon + 180) / 360) * Math.pow(2, z))
+}
+
+export function latToTileY(lat: number, z: number){
+  const latR = (lat * Math.PI) / 180
+  return (((1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2) * Math.pow(2, z))
 }
 
 // Meters per pixel at lat/z (Web-Mercator).

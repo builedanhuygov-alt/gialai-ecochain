@@ -1,6 +1,6 @@
 import * as THREE from 'three'
-import { BAND_COLORS_3D, lonLatToTile, STEP_COLORS_3D, terrariumToHeight,
-  tileToLonLat, toLocal } from './twinMath'
+import { BAND_COLORS_3D, lonLatToTile, lonToTileX, latToTileY, STEP_COLORS_3D,
+  terrariumToHeight, tileToLonLat, toLocal } from './twinMath'
 import { isCanopyPixel } from './twinMath'
 
 // Part C — named Three.js layer builders. React owns lifecycle (TwinScene
@@ -66,52 +66,72 @@ function slopeAtGrid(H: Float32Array, n: number, i: number, j: number, cell: num
 // detail that is not in the source, so segment counts above are the honest cap.
 // M3 texture fallback: Esri z14 → Esri z13 → OSM z14 (all real tiles).
 export async function TerrainMesh(origin: { lon: number; lat: number }, quality: 'high' | 'low', aoiKm?: number | null){
-  const Z = 14
+  const aoi = aoiKm || 3
+  const Z = aoi <= 1.5 ? 16 : aoi <= 3.5 ? 15 : 14
   const t0 = lonLatToTile(origin.lon, origin.lat, Z)
-  const bx = t0.x % 2 === 0 ? t0.x : t0.x - 1
-  const by = t0.y % 2 === 0 ? t0.y : t0.y - 1
+  void t0 // block origin comes from the DEM loop below (zoom may differ)
   const OSM = (z: number, x: number, y: number)=> `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
-  let demImgs: HTMLImageElement[][]
-  let texImgs: HTMLImageElement[][]
-  let texStatus = 'esri-z14'
-  try{
-    demImgs = [[await loadImage(TERRA(Z, bx, by)), await loadImage(TERRA(Z, bx + 1, by))],
-               [await loadImage(TERRA(Z, bx, by + 1)), await loadImage(TERRA(Z, bx + 1, by + 1))]]
-    texImgs = [[await loadImage(ESRI(Z, bx, by)), await loadImage(ESRI(Z, bx + 1, by))],
-               [await loadImage(ESRI(Z, bx, by + 1)), await loadImage(ESRI(Z, bx + 1, by + 1))]]
-  }catch{
+  // DEM: try target zoom, then coarser (same 2x2 footprint logic per zoom).
+  let demImgs: HTMLImageElement[][] | null = null
+  let demZ = Z, demBX = 0, demBY = 0
+  for(const z of [Z, Z - 1, Z - 2, 13]){
+    if(z < 13 || demImgs) break
     try{
-      const s13 = lonLatToTile(origin.lon, origin.lat, 13)
-      demImgs = [[await loadImage(TERRA(13, s13.x, s13.y))]]
-      texImgs = [[await loadImage(ESRI(13, s13.x, s13.y))]]
-      texStatus = 'esri-z13-fallback'
-    }catch{
-      demImgs = [[await loadImage(TERRA(Z, bx, by)), await loadImage(TERRA(Z, bx + 1, by))],
-                 [await loadImage(TERRA(Z, bx, by + 1)), await loadImage(TERRA(Z, bx + 1, by + 1))]]
-      texImgs = [[await loadImage(OSM(Z, bx, by)), await loadImage(OSM(Z, bx + 1, by))],
-                 [await loadImage(OSM(Z, bx, by + 1)), await loadImage(OSM(Z, bx + 1, by + 1))]]
-      texStatus = 'osm-fallback'
+      const t = lonLatToTile(origin.lon, origin.lat, z)
+      const ex = t.x % 2 === 0 ? t.x : t.x - 1, ey = t.y % 2 === 0 ? t.y : t.y - 1
+      demImgs = [[await loadImage(TERRA(z, ex, ey)), await loadImage(TERRA(z, ex + 1, ey))],
+                 [await loadImage(TERRA(z, ex, ey + 1)), await loadImage(TERRA(z, ex + 1, ey + 1))]]
+      demZ = z; demBX = ex; demBY = ey
+    }catch{ /* try coarser */ }
+  }
+  if(!demImgs) throw new Error('DEM unreachable — không dựng địa hình giả')
+  const tl = tileToLonLat(demBX!, demBY!, demZ)
+  const br = tileToLonLat(demBX! + 2, demBY! + 2, demZ)
+  const block = { w: tl.lon, n: tl.lat, e: br.lon, s: br.lat }
+  // Texture: cover the SAME block at the best zoom that loads.
+  const S = 512
+  const texCanvas = document.createElement('canvas')
+  texCanvas.width = texCanvas.height = S
+  const tctx = texCanvas.getContext('2d', { willReadFrequently: true })!
+  let texStatus = ''
+  let texDone = false
+  for(const z of [Z, Z - 1, Math.max(13, Z - 2)]){
+    if(texDone) break
+    for(const tag of [`esri-z${z}`, `osm-z${z}`]){
+      try{
+        const fn = tag.startsWith('esri') ? ESRI : OSM
+        const x0 = Math.floor(lonToTileX(block.w, z)), x1 = Math.floor(lonToTileX(block.e, z))
+        const y0 = Math.floor(latToTileY(block.n, z)), y1 = Math.floor(latToTileY(block.s, z))
+        if(x1 - x0 > 5 || y1 - y0 > 5) continue // cap tile count (perf)
+        for(let ty = y0; ty <= y1; ty++) for(let tx = x0; tx <= x1; tx++){
+          const img = await loadImage(fn(z, tx, ty))
+          const fx0 = Math.max(0, ((tx - lonToTileX(block.w, z)) / (lonToTileX(block.e, z) - lonToTileX(block.w, z))) * S)
+          const fx1 = Math.min(S, ((tx + 1 - lonToTileX(block.w, z)) / (lonToTileX(block.e, z) - lonToTileX(block.w, z))) * S)
+          const fy0 = Math.max(0, ((ty - latToTileY(block.n, z)) / (latToTileY(block.s, z) - latToTileY(block.n, z))) * S)
+          const fy1 = Math.min(S, ((ty + 1 - latToTileY(block.n, z)) / (latToTileY(block.s, z) - latToTileY(block.n, z))) * S)
+          const sx = ((fx0 / S) * img.width), sy = ((fy0 / S) * img.height)
+          // draw full tile cropped to the visible fraction
+          const dx0 = Math.max(0, fx0), dy0 = Math.max(0, fy0)
+          tctx.drawImage(img, (dx0 - fx0) / (fx1 - fx0 || 1) * img.width, (dy0 - fy0) / (fy1 - fy0 || 1) * img.height,
+            img.width * (Math.min(S, fx1) - dx0) / (fx1 - fx0 || 1), img.height * (Math.min(S, fy1) - dy0) / (fy1 - fy0 || 1),
+            dx0, dy0, Math.min(S, fx1) - dx0, Math.min(S, fy1) - dy0)
+          void sx; void sy
+        }
+        texStatus = tag
+        texDone = true
+        break
+      }catch{ /* next source/zoom */ }
     }
   }
-  const S = 512
+  if(!texDone) throw new Error('Imagery unreachable — không dựng texture giả')
   const dem = drawTiles(demImgs, S)
-  const tex = drawTiles(texImgs, S)
   const demPx = dem.ctx.getImageData(0, 0, S, S).data
-  const n2 = demImgs.length
-  let block: { w: number; n: number; e: number; s: number }
-  if(n2 === 2){
-    const tl = tileToLonLat(bx, by, Z), br = tileToLonLat(bx + 2, by + 2, Z)
-    block = { w: tl.lon, n: tl.lat, e: br.lon, s: br.lat }
-  } else {
-    const s13 = lonLatToTile(origin.lon, origin.lat, 13)
-    const tl = tileToLonLat(s13.x, s13.y, 13), br = tileToLonLat(s13.x + 1, s13.y + 1, 13)
-    block = { w: tl.lon, n: tl.lat, e: br.lon, s: br.lat }
-  }
+  // DEM canvas covers the DEM 2x2 block == `block`; texture canvas covers the
+  // same block (cover-crop math above) — sampling stays aligned.
   const sizeM = Math.max(
     (block.e - block.w) * 111320 * Math.cos(origin.lat * Math.PI / 180),
     (block.n - block.s) * 110540)
   // M1/M2/M12: mesh segments by AOI size × device class (dynamic resolution).
-  const aoi = aoiKm || 3
   const N = quality === 'high'
     ? (aoi <= 1.5 ? 257 : aoi <= 3.5 ? 193 : 161)
     : (aoi <= 1.5 ? 129 : aoi <= 3.5 ? 97 : 81)
@@ -145,32 +165,69 @@ export async function TerrainMesh(origin: { lon: number; lat: number }, quality:
   tg.rotateX(-Math.PI / 2)
   const pos = tg.attributes.position
   const colors = new Float32Array(pos.count * 3)
-  const cA = new THREE.Color(0x7a8a4f), cB = new THREE.Color(0x445239), cC = new THREE.Color(0xb08d57)
   const tmpC = new THREE.Color()
   let maxSlope = 0.001
   const slopes = new Float32Array(pos.count)
+  const heights = new Float32Array(pos.count)
+  let maxH = -Infinity
+  const gridXY = new Int32Array(pos.count * 2)
   for(let k = 0; k < pos.count; k++){
     const x = pos.getX(k), z = pos.getZ(k)
     pos.setY(k, sampler(x, z))
     const gx = Math.min(N - 1, Math.max(0, Math.round((x / sizeM + 0.5) * (N - 1))))
     const gz = Math.min(N - 1, Math.max(0, Math.round((z / sizeM + 0.5) * (N - 1))))
+    gridXY[k * 2] = gx; gridXY[k * 2 + 1] = gz
     const sl = slopeAtGrid(Hgrid, N, gx, gz, cell)
     slopes[k] = sl
     if(sl > maxSlope) maxSlope = sl
+    const h = Hgrid[gz * N + gx]
+    heights[k] = h
+    if(h > maxH) maxH = h
+  }
+  // M7 micro-landcover (derived from REAL pixel + slope + elevation, labeled)
+  // + M11 baked AO (concavity darkening). Multiplies the satellite texture.
+  const texData = tctx.getImageData(0, 0, S, S).data
+  const aoAt = (gx: number, gz: number)=>{
+    const h0 = Hgrid[gz * N + gx]
+    let s = 0, n = 0
+    for(const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){
+      const ii = Math.min(N - 1, Math.max(0, gx + di)), jj = Math.min(N - 1, Math.max(0, gz + dj))
+      s += Hgrid[jj * N + ii]; n++
+    }
+    const conc = h0 - s / n // >0 ridge, <0 crevice
+    return Math.min(1.04, Math.max(0.7, 1 + conc * 0.02))
   }
   for(let k = 0; k < pos.count; k++){
+    const gx = gridXY[k * 2], gz = gridXY[k * 2 + 1]
     const t = Math.min(1, slopes[k] / maxSlope)
-    tmpC.copy(cA).lerp(t > 0.5 ? cC : cB, t > 0.5 ? (t - 0.5) * 2 : t * 2)
+    const slopeShade = 1 - t * 0.35
+    const ao = aoAt(gx, gz)
+    const px = Math.min(S - 1, Math.max(0, Math.round((gx / (N - 1)) * (S - 1))))
+    const py = Math.min(S - 1, Math.max(0, Math.round((gz / (N - 1)) * (S - 1))))
+    const o = (py * S + px) * 4
+    const pr = texData[o], pg = texData[o + 1], pb = texData[o + 2]
+    const normH = (heights[k] - minH) / Math.max(1, maxH - minH)
+    // class tints (multipliers, subtle — imagery stays dominant)
+    let tr = 1, tgC = 1, tb = 1
+    const steep = slopes[k] > 0.55
+    const green = pg > pr + 12 && pg > pb + 8 && pg > 70
+    if(steep){ tr = 0.88; tgC = 0.88; tb = 0.92 } // rock
+    else if(green && normH < 0.75){ tr = 0.72; tgC = 0.92; tb = 0.72 } // dense forest
+    else if(green){ tr = 0.9; tgC = 0.97; tb = 0.86 } // sparse forest
+    else if(pr > pg && pr > pb){ tr = 1.0; tgC = 0.94; tb = 0.84 } // bare soil
+    else { tr = 0.95; tgC = 1.0; tb = 0.82 } // grass
+    const m = slopeShade * ao
+    tmpC.setRGB(tr * m, tgC * m, tb * m)
     colors[k * 3] = tmpC.r; colors[k * 3 + 1] = tmpC.g; colors[k * 3 + 2] = tmpC.b
   }
   tg.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   tg.computeVertexNormals()
-  const tex3 = new THREE.CanvasTexture(tex.canvas)
+  const tex3 = new THREE.CanvasTexture(texCanvas)
   tex3.colorSpace = THREE.SRGBColorSpace
   tex3.anisotropy = 4 // crisper ground at grazing angles (no extra downloads)
   const mesh = new THREE.Mesh(tg, new THREE.MeshStandardMaterial({ map: tex3, vertexColors: true, roughness: 1 }))
   mesh.receiveShadow = quality === 'high'
-  return { mesh, sampler, origin, sizeM, texCanvas: tex.canvas, block, texStatus, meshSegs: N - 1,
+  return { mesh, sampler, origin, sizeM, texCanvas, block, texStatus, meshSegs: N - 1,
            grid: { H: Hgrid, n: N, cell, sizeM } }
 }
 
@@ -459,17 +516,24 @@ export function WindFieldLayer(g: THREE.Group, c: Ctx, sim: any){
   const dir = (sim.wind_layer.direction_deg * Math.PI) / 180
   const sp = sim.wind_layer.speed_kmh || 0
   // M6 density by AOI: 1km dense (7x7), 3km medium (5x5), 5km sparse (3x3)
+  // + terrain modulation (VISUAL ONLY): arrows shorten over steep upslope
+  // faces (sheltered) and lengthen downslope — schematic, not CFD.
   const aoiKm = (c as any).aoiKm || 3
   const half = aoiKm <= 1.5 ? 3 : aoiKm <= 3.5 ? 2 : 1
   const R = c.sizeM / 2 * 0.7
   const arrows: THREE.ArrowHelper[] = []
   for(let gx = -half; gx <= half; gx++) for(let gz = -half; gz <= half; gz++){
     const x = gx * R / 2.5, z = gz * R / 2.5
-    const len = 60 + sp * 5
+    const ahead = 120
+    const h0 = H(x, z)
+    const hx = x + Math.sin(dir) * ahead, hz = z - Math.cos(dir) * ahead
+    const dh = (H(hx, hz) - h0) / Math.max(1, ahead) // rise/run along wind
+    const shelter = Math.max(0.55, Math.min(1.25, 1 - dh * 1.4))
+    const len = (60 + sp * 5) * shelter
     const ah = new THREE.ArrowHelper(
       new THREE.Vector3(Math.sin(dir), 0, -Math.cos(dir)),
       new THREE.Vector3(x, H(x, z) + 260, z),
-      len, 0x0EA5E9, len * 0.25, len * 0.12)
+      len, shelter < 0.85 ? 0x64748B : 0x0EA5E9, len * 0.25, len * 0.12)
     arrows.push(ah)
     g.add(ah)
   }
@@ -695,4 +759,5 @@ export async function buildCanopy(c: Ctx, sim: any, texCanvas: HTMLCanvasElement
   if(im.instanceColor) im.instanceColor.needsUpdate = true
   im.name = 'twin-canopy'
   c.scene.add(im)
+  ;(c as any)._canopyCount = patches.length
 }

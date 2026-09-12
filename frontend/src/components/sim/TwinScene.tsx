@@ -68,7 +68,8 @@ export default function TwinScene({ sim, waters, opsAssets, communeFc, show, pla
     const d = (divRef.current as any)?._twin as Ctx | undefined
     if(d && sim){
       updateDynamic(d, sim, waters, opsAssets, communeFc, showRef.current, planRef.current)
-      try{ onTerrainRef.current?.({ ...((d as any)._terrainStats || null), ...(d as any)._texInfo || null }) }catch{}
+      try{ onTerrainRef.current?.({ ...((d as any)._terrainStats || null), ...(d as any)._texInfo || null,
+        lod: (d as any).quality || null, canopyPatches: (d as any)._canopyCount ?? null }) }catch{}
     }
   }, [sim, waters, opsAssets, communeFc, show, plan])
   // Focus Fire/Water/Community/Route + orbit modes (M10) without rebuild
