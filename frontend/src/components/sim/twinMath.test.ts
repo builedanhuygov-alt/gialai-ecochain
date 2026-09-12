@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aoiRadiusKm, BAND_COLORS_3D, isCanopyPixel, lonLatToTile, lonToTileX, latToTileY, metersPerPixel, slopeAt, STEP_COLORS_3D, terrariumToHeight, tileToLonLat, toLocal } from './twinMath'
+import { aoiRadiusKm, BAND_COLORS_3D, exaggerationFor, hash2, isCanopyPixel, lonLatToTile, lonToTileX, latToTileY, metersPerPixel, slopeAt, STEP_COLORS_3D, terrariumToHeight, tileToLonLat, toLocal, valueNoise } from './twinMath'
 
 describe('twinMath (3D scene helpers)', () => {
   it('aoi radius clamps to 1–3km', () => {
@@ -46,5 +46,20 @@ describe('twinMath (3D scene helpers)', () => {
   it('band/step colors cover every status', () => {
     for(const b of ['SAFE', 'WATCH', 'THREATENED', 'CRITICAL']) expect(BAND_COLORS_3D[b]).toMatch(/^#/)
     for(const h of [0, 1, 3, 6]) expect(STEP_COLORS_3D[h]).toMatch(/^#/)
+  })
+  it('noise is deterministic in [0,1]', () => {
+    expect(hash2(3, 7)).toBe(hash2(3, 7))
+    expect(hash2(3, 7)).toBeGreaterThanOrEqual(0)
+    expect(hash2(3, 7)).toBeLessThanOrEqual(1)
+    expect(valueNoise(1.5, 2.5)).toBe(valueNoise(1.5, 2.5))
+    expect(valueNoise(0, 0)).toBe(hash2(0, 0))
+  })
+  it('exaggeration follows AOI spec ranges', () => {
+    expect(exaggerationFor(1)).toBeGreaterThanOrEqual(3)
+    expect(exaggerationFor(1)).toBeLessThanOrEqual(5)
+    expect(exaggerationFor(3)).toBeGreaterThanOrEqual(2)
+    expect(exaggerationFor(3)).toBeLessThanOrEqual(3)
+    expect(exaggerationFor(5)).toBeGreaterThanOrEqual(1.5)
+    expect(exaggerationFor(5)).toBeLessThanOrEqual(2)
   })
 })

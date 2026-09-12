@@ -64,3 +64,16 @@ Không đổi mô phỏng / plan / analyst / engine. Chỉ pixels + ánh sáng.
 
 Deploy frontend → /firesim 3D đọc legend (lưới/ảnh/LOD/patch/FPS) →
 so AOI 1km vs 5km → nếu trắng: texStatus + console tile errors.
+
+## Đợt 2 — Tactical Earth (visual-only, không động logic)
+
+- Exag theo AOI (1km ×4, 3km ×2.5, 5km ×1.75) + legend động.
+- Landcover blend mượt 5 lớp (smoothstep weights, không màu đồng nhất).
+- Contours marching-squares 6 mức từ DEM + ridge/valley đậm hơn.
+- Canopy: noise-gate clearings + patch ellipse xoay + alphaMap viền mềm.
+- Fire: noise distortion theo gió/dốc (visual-only) + forecast outline-dominant.
+- Wind shelter tint + mật độ theo AOI. Route tube trắng viền. Water ripple
+  màu priority. Community fill mờ 0.25 (terrain là lớp chính).
+- Camera mặc định 200–400m AGL pitch ~64° + focus presets cùng framing +
+  orbit modes. Fog theo AOI. Legend thêm cam height.
+- Debug panel: resolution/texture/mesh/forest/FPS/LOD/AOI/cam.

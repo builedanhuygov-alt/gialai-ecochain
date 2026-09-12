@@ -66,6 +66,30 @@ export function isCanopyPixel(r: number, g: number, b: number){
   return g > r + 12 && g > b + 8 && g > 70
 }
 
+// Deterministic value noise (visual-only distortion; NOT simulation).
+// Integer-lattice hash → smooth interpolation. Same input, same output.
+export function hash2(x: number, y: number){
+  let h = (x * 374761393 + y * 668265263) | 0
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295
+}
+
+export function valueNoise(x: number, y: number){
+  const xi = Math.floor(x), yi = Math.floor(y)
+  const xf = x - xi, yf = y - yi
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf)
+  const a = hash2(xi, yi), b = hash2(xi + 1, yi)
+  const c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1)
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v
+}
+
+// M2 vertical exaggeration by AOI (readability, labeled in UI).
+export function exaggerationFor(aoiKm: number){
+  if(aoiKm <= 1.5) return 4
+  if(aoiKm <= 3.5) return 2.5
+  return 1.75
+}
+
 // Slope (rise/run) from a height grid for shading.
 export function slopeAt(H: Float32Array, n: number, i: number, j: number, cell: number){
   const xm = H[j * n + Math.max(0, i - 1)], xp = H[j * n + Math.min(n - 1, i + 1)]

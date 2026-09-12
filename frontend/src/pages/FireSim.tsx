@@ -70,6 +70,7 @@ export default function FireSim(){
   const [opsAssets, setOpsAssets] = useState<any[]>([])
   const [demError, setDemError] = useState('')
   const [fps, setFps] = useState<number | null>(null)
+  const [camH, setCamH] = useState<number | null>(null)
   const [terrain3d, setTerrain3d] = useState(false)
   const [particles, setParticles] = useState(frontSupported())
   const [communeFc, setCommuneFc] = useState<any>(null)
@@ -376,7 +377,7 @@ export default function FireSim(){
           {mode === '3d' && data && !demError && (
             <TwinScene sim={simView} waters={waters} opsAssets={opsAssets} communeFc={communeFc}
               show={show3d as TwinShow} plan={plan} aoiKm={aoiKm} focusKey={focusKey} focusReq={focusReq} orbitMode={orbitMode}
-              onError={(m)=> setDemError(m)} onFps={setFps} onTerrain={setTerrainStats} />
+              onError={(m)=> setDemError(m)} onFps={setFps} onTerrain={setTerrainStats} onCam={setCamH} />
           )}
           {mode === '3d' && demError && (
             <div style={{position:'absolute', inset:0, display:'grid', placeItems:'center', background:'#0B1412', color:'#fff', padding:24, textAlign:'center', zIndex:6}}>
@@ -390,7 +391,7 @@ export default function FireSim(){
           <div style={{position:'absolute', top:8, left:8, marginTop:34, background:'rgba(255,255,255,0.95)', borderRadius:8, padding:'6px 10px', fontSize:11, zIndex:6}}>
             <b>🔴 hiện tại</b> · <b style={{color:'#F97316'}}>🟠 +1h</b> · <b style={{color:'#B45309'}}>🟡 +3h</b> · <b style={{color:'#525252'}}>⚫ +6h</b>
             {ext12 && <><b style={{color:'#1E293B'}}> · ⬛ +12h</b></>}
-            {mode === '3d' && <span style={{color:'#64748B'}}> · địa hình DEM thật ×1.5{terrainStats?.meshSegs ? <> · lưới {terrainStats.meshSegs}²</> : null}{terrainStats?.texStatus ? <> · ảnh {terrainStats.texStatus}</> : null}{terrainStats?.lod ? <> · LOD {terrainStats.lod}</> : null}{terrainStats?.canopyPatches != null ? <> · rừng {terrainStats.canopyPatches} patch</> : null}{fps !== null && <> · {fps} FPS</>}</span>}
+            {mode === '3d' && <span style={{color:'#64748B'}}> · địa hình DEM thật{terrainStats?.exag ? <> ×{terrainStats.exag}</> : null}{terrainStats?.meshSegs ? <> · lưới {terrainStats.meshSegs}²</> : null}{terrainStats?.texStatus ? <> · ảnh {terrainStats.texStatus}</> : null}{terrainStats?.lod ? <> · LOD {terrainStats.lod}</> : null}{terrainStats?.canopyPatches != null ? <> · rừng {terrainStats.canopyPatches} patch</> : null}{camH != null ? <> · cam {camH}m</> : null}{fps !== null && <> · {fps} FPS</>}</span>}
           </div>
           {/* Module 10 timeline: T+0 → steps + playback (lọc ellipse/xã/story) */}
           {data?.spread?.steps && (

@@ -1,7 +1,7 @@
 import * as THREE from 'three'
-import { BAND_COLORS_3D, lonLatToTile, lonToTileX, latToTileY, STEP_COLORS_3D,
+import { BAND_COLORS_3D, exaggerationFor, lonLatToTile, lonToTileX, latToTileY, STEP_COLORS_3D,
   terrariumToHeight, tileToLonLat, toLocal } from './twinMath'
-import { isCanopyPixel } from './twinMath'
+import { isCanopyPixel, valueNoise } from './twinMath'
 
 // Part C — named Three.js layer builders. React owns lifecycle (TwinScene
 // mounts/disposes); these functions own pixels. updateDynamic orchestrates.
@@ -135,7 +135,7 @@ export async function TerrainMesh(origin: { lon: number; lat: number }, quality:
   const N = quality === 'high'
     ? (aoi <= 1.5 ? 257 : aoi <= 3.5 ? 193 : 161)
     : (aoi <= 1.5 ? 129 : aoi <= 3.5 ? 97 : 81)
-  const EXAG = 1.5 // labeled in UI
+  const EXAG = exaggerationFor(aoi) // M2 auto-scale readability (labeled in UI)
   const Hgrid = new Float32Array(N * N)
   let minH = Infinity
   const pxOf = (lon: number, lat: number)=> ({
@@ -205,17 +205,24 @@ export async function TerrainMesh(origin: { lon: number; lat: number }, quality:
     const px = Math.min(S - 1, Math.max(0, Math.round((gx / (N - 1)) * (S - 1))))
     const py = Math.min(S - 1, Math.max(0, Math.round((gz / (N - 1)) * (S - 1))))
     const o = (py * S + px) * 4
-    const pr = texData[o], pg = texData[o + 1], pb = texData[o + 2]
+    const pr = texData[o], pg = texData[o + 1]
+    void texData[o + 2]
     const normH = (heights[k] - minH) / Math.max(1, maxH - minH)
-    // class tints (multipliers, subtle — imagery stays dominant)
-    let tr = 1, tgC = 1, tb = 1
-    const steep = slopes[k] > 0.55
-    const green = pg > pr + 12 && pg > pb + 8 && pg > 70
-    if(steep){ tr = 0.88; tgC = 0.88; tb = 0.92 } // rock
-    else if(green && normH < 0.75){ tr = 0.72; tgC = 0.92; tb = 0.72 } // dense forest
-    else if(green){ tr = 0.9; tgC = 0.97; tb = 0.86 } // sparse forest
-    else if(pr > pg && pr > pb){ tr = 1.0; tgC = 0.94; tb = 0.84 } // bare soil
-    else { tr = 0.95; tgC = 1.0; tb = 0.82 } // grass
+    // M5 smooth class blending (no uniform colors): soft weights over
+    // rock/dense/sparse/bare/grass driven by slope + pixel + elevation.
+    const sstep = (e0: number, e1: number, x: number)=>{
+      const t = Math.min(1, Math.max(0, (x - e0) / Math.max(1e-6, e1 - e0)))
+      return t * t * (3 - 2 * t)
+    }
+    const greenAmt = Math.min(1, Math.max(0, (pg - pr - 6) / 24)) * (pg > 60 ? 1 : 0)
+    const wRock = sstep(0.45, 0.75, slopes[k])
+    const wDense = (1 - wRock) * greenAmt * (1 - sstep(0.7, 0.9, normH))
+    const wSparse = (1 - wRock) * greenAmt * sstep(0.7, 0.9, normH)
+    const wBare = (1 - wRock) * (1 - greenAmt) * sstep(0.02, 0.2, (pr - pg) / 255)
+    const wGrass = Math.max(0, 1 - wRock - wDense - wSparse - wBare)
+    const tr = wRock * 0.88 + wDense * 0.72 + wSparse * 0.9 + wBare * 1.0 + wGrass * 0.95
+    const tgC = wRock * 0.88 + wDense * 0.92 + wSparse * 0.97 + wBare * 0.94 + wGrass * 1.0
+    const tb = wRock * 0.92 + wDense * 0.72 + wSparse * 0.86 + wBare * 0.84 + wGrass * 0.82
     const m = slopeShade * ao
     tmpC.setRGB(tr * m, tgC * m, tb * m)
     colors[k * 3] = tmpC.r; colors[k * 3 + 1] = tmpC.g; colors[k * 3 + 2] = tmpC.b
@@ -227,7 +234,7 @@ export async function TerrainMesh(origin: { lon: number; lat: number }, quality:
   tex3.anisotropy = 4 // crisper ground at grazing angles (no extra downloads)
   const mesh = new THREE.Mesh(tg, new THREE.MeshStandardMaterial({ map: tex3, vertexColors: true, roughness: 1 }))
   mesh.receiveShadow = quality === 'high'
-  return { mesh, sampler, origin, sizeM, texCanvas, block, texStatus, meshSegs: N - 1,
+  return { mesh, sampler, origin, sizeM, texCanvas, block, texStatus, meshSegs: N - 1, exag: EXAG,
            grid: { H: Hgrid, n: N, cell, sizeM } }
 }
 
@@ -243,6 +250,13 @@ function smoothRing(pts: Array<{ x: number; y: number }>, n: number){
 
 export function FireEllipseMesh(g: THREE.Group, c: Ctx, sim: any){
   const H = c.sampler
+  // M6 visual distortion inputs (rendering only — spread math untouched):
+  // wind stretch along the downwind axis + noise perturbation scaled by
+  // local slope. Deterministic (seeded by vertex index), labeled visual.
+  const wdir = ((sim.wind_layer?.direction_deg ?? sim.scenario?.wind_direction_deg ?? 90) * Math.PI) / 180
+  const wspd = sim.wind_layer?.speed_kmh ?? sim.scenario?.wind_speed_kmh ?? 0
+  // shape space: +x east, +y north → downwind unit (sin, cos)
+  const wx = Math.sin(wdir), wy = Math.cos(wdir)
   const steps = [{ hour: 0, polygon: null }, ...(sim.spread?.steps || [])]
   const NPTS = c.quality === 'high' ? 200 : 128
   steps.forEach((s: any, idx: number)=>{
@@ -261,8 +275,20 @@ export function FireEllipseMesh(g: THREE.Group, c: Ctx, sim: any){
       })
     }
     const smooth = smoothRing(pts2d, NPTS)
+    // distort radially: noise × (wind alignment + slope), forecast only
+    const distorted = smooth.map((p, i)=>{
+      if(s.hour === 0) return p
+      const r = Math.hypot(p.x, p.y) || 1
+      const ux = p.x / r, uy = p.y / r
+      const align = Math.max(0, ux * wx + uy * wy) // 0 upwind .. 1 downwind
+      const n = valueNoise(i * 0.35 + idx * 13.7, idx * 7.1) - 0.5
+      const n2 = valueNoise(i * 0.11 + idx * 3.3, idx * 1.7 + 5) - 0.5
+      const sl = Math.min(1, Math.abs(H(p.x, -p.y + 1) - H(p.x, -p.y - 1)) / 40)
+      const amp = r * (0.03 + 0.05 * align * Math.min(1, wspd / 30) + 0.04 * sl)
+      return { x: p.x + ux * (n + n2) * amp * 2, y: p.y + uy * (n + n2) * amp * 2 }
+    })
     const shape = new THREE.Shape()
-    smooth.forEach((p, i)=> { if(i === 0) shape.moveTo(p.x, p.y); else shape.lineTo(p.x, p.y) })
+    distorted.forEach((p, i)=> { if(i === 0) shape.moveTo(p.x, p.y); else shape.lineTo(p.x, p.y) })
     shape.closePath()
     const lift = 10 + idx * 4
     const drape = (geo: THREE.BufferGeometry, extra: number)=>{
@@ -275,18 +301,19 @@ export function FireEllipseMesh(g: THREE.Group, c: Ctx, sim: any){
       return geo
     }
     const color = STEP_COLORS_3D[s.hour] || '#F97316'
+    // M6 forecast = outline-dominant (fill giảm mạnh), current = fill nổi bật
     const core = new THREE.Mesh(drape(new THREE.ShapeGeometry(shape), 0),
       new THREE.MeshBasicMaterial({ color, transparent: true,
-        opacity: s.hour === 0 ? 0.8 : 0.45,
+        opacity: s.hour === 0 ? 0.8 : 0.2,
         side: THREE.DoubleSide, depthWrite: false }))
     g.add(core)
     // soft outer glow: same shape, slightly higher + lower opacity
     const glow = new THREE.Mesh(drape(new THREE.ShapeGeometry(shape), 6),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16,
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.1,
         side: THREE.DoubleSide, depthWrite: false }))
     g.add(glow)
-    // crisp edge
-    const edge = smooth.map(p=> new THREE.Vector3(p.x, 0, -p.y))
+    // crisp edge (distorted ring, not the perfect ellipse)
+    const edge = distorted.map(p=> new THREE.Vector3(p.x, 0, -p.y))
     const edgeGeo = new THREE.BufferGeometry().setFromPoints(
       edge.map(v=> new THREE.Vector3(v.x, H(v.x, v.z) + lift + 2, v.z)))
     g.add(new THREE.LineLoop(edgeGeo, new THREE.LineBasicMaterial({ color })))
@@ -392,7 +419,7 @@ export function CommunityImpactLayer(g: THREE.Group, c: Ctx, sim: any, communeFc
         pp.setXYZ(k, x, H(x, z) + 6, z)
       }
       g.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-        color, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false })))
+        color, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false })))
     }
   }
 }
@@ -430,23 +457,58 @@ export function TerrainAnalysisLayer(g: THREE.Group, c: Ctx){
   }
   const mean = sum / Math.max(1, cnt)
   const rugged = Math.sqrt(Math.max(0, sum2 / Math.max(1, cnt) - mean * mean))
-  const mk = (arr: number[], color: number)=>{
+  const mk = (arr: number[], color: number, size: number)=>{
     if(!arr.length) return
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3))
     const pts = new THREE.Points(geo, new THREE.PointsMaterial({
-      color, size: 22, sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false }))
+      color, size, sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false }))
     g.add(pts)
   }
-  mk(ridge, 0xB45309)
-  mk(valley, 0x2563EB)
+  mk(ridge, 0x7C2D12, 26)
+  mk(valley, 0x1D4ED8, 26)
+  // M1 contours: marching squares at 6 evenly spaced levels from the REAL
+  // DEM grid (derived lines, labeled) — the single biggest readability win.
+  let mn = Infinity
+  for(let j = 0; j < n; j += 2) for(let i = 0; i < n; i += 2) mn = Math.min(mn, at(i, j))
+  let mxH = -Infinity
+  for(let j = 0; j < n; j += 2) for(let i = 0; i < n; i += 2) mxH = Math.max(mxH, at(i, j))
+  const segs: number[] = []
+  const X = (i: number)=> (i / (n - 1) - 0.5) * sizeM
+  const Z = (j: number)=> (j / (n - 1) - 0.5) * sizeM
+  if(mxH > mn){
+    for(let L = 1; L <= 6; L++){
+      const lv = mn + ((mxH - mn) * L) / 7
+      for(let j = 0; j < n - 1; j += 2) for(let i = 0; i < n - 1; i += 2){
+        const h00 = at(i, j) - lv, h10 = at(i + 1, j) - lv
+        const h01 = at(i, j + 1) - lv, h11 = at(i + 1, j + 1) - lv
+        const P: Array<[number, number]> = []
+        if(h00 * h10 < 0){ const t = h00 / (h00 - h10); P.push([X(i + t), Z(j)]) }
+        if(h01 * h11 < 0){ const t = h01 / (h01 - h11); P.push([X(i + t), Z(j + 1)]) }
+        if(h00 * h01 < 0){ const t = h00 / (h00 - h01); P.push([X(i), Z(j + t)]) }
+        if(h10 * h11 < 0){ const t = h10 / (h10 - h11); P.push([X(i + 1), Z(j + t)]) }
+        if(P.length >= 2){
+          const [ax, az] = P[0], [bx2, bz2] = P[1]
+          segs.push(ax, Hh(ax, az) + 5, az, bx2, Hh(bx2, bz2) + 5, bz2)
+        }
+      }
+    }
+  }
+  if(segs.length){
+    const cg = new THREE.BufferGeometry()
+    cg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(segs), 3))
+    g.add(new THREE.LineSegments(cg, new THREE.LineBasicMaterial({
+      color: '#5b4a2f', transparent: true, opacity: 0.45, depthWrite: false })))
+  }
   return {
     mean_slope_deg: Math.round(mean * 10) / 10,
     max_slope_deg: Math.round(mx * 10) / 10,
     ruggedness: Math.round(rugged * 10) / 10,
     steep_share: cnt ? Math.round((steep / cnt) * 100) : 0,
     ridge_points: ridge.length / 3, valley_points: valley.length / 3,
-    method: 'DEM ước tính (cực trị cục bộ + prominence 0.5m) — không phải đường đồng mức khảo sát',
+    contour_segments: segs.length / 6,
+    relief_m: Math.round((mxH === -Infinity ? 0 : mxH - mn)),
+    method: 'DEM ước tính (đồng mức marching-squares + cực trị, prominence 0.5m) — không phải khảo sát',
   }
 }
 
@@ -721,19 +783,25 @@ export async function buildCanopy(c: Ctx, sim: any, texCanvas: HTMLCanvasElement
       if(isCanopyPixel(px[o], px[o + 1], px[o + 2])) dens[cj * CELLN + ci]++
     }
   }
-  type Patch = { x: number; z: number; r: number; d: number }
+  type Patch = { x: number; z: number; r: number; d: number; rot: number; sq: number }
   const patches: Patch[] = []
   const cellM = c.sizeM / CELLN
   for(let cj = 0; cj < CELLN; cj++) for(let ci = 0; ci < CELLN; ci++){
     const n = samp[cj * CELLN + ci]
     if(!n) continue
-    const d = dens[cj * CELLN + ci] / n
-    if(d < 0.25) continue // only real vegetated cells become patches
+    // M4 noise-driven clusters: large-scale noise gates clearings, density
+    // sets canopy strength → dense areas / sparse areas / clearings / edges.
+    const nz = valueNoise(ci * 0.22 + 3.1, cj * 0.22 + 7.7)
+    if(nz < 0.32) continue // natural clearing (noise, not data gap)
+    const d = Math.min(1, (dens[cj * CELLN + ci] / n) * (0.55 + 0.9 * nz))
+    if(d < 0.22) continue // only real vegetated cells become patches
     const lon = block.w + (((ci + 0.5) / CELLN) * (block.e - block.w))
     const lat = block.n - (((cj + 0.5) / CELLN) * (block.n - block.s))
     const q = toLocal(lon, lat, c.origin)
     if(Math.abs(q.x) > c.sizeM / 2 || Math.abs(q.z) > c.sizeM / 2) continue
-    patches.push({ x: q.x, z: q.z, r: cellM * (0.35 + d * 0.3), d })
+    patches.push({ x: q.x, z: q.z, r: cellM * (0.35 + d * 0.3), d,
+      rot: valueNoise(ci * 0.9, cj * 0.9 + 40) * Math.PI * 2,
+      sq: 0.65 + valueNoise(ci * 0.7 + 11, cj * 0.7) * 0.7 })
     if(patches.length >= 1200) break
   }
   if(!patches.length) return
@@ -742,16 +810,31 @@ export async function buildCanopy(c: Ctx, sim: any, texCanvas: HTMLCanvasElement
     c.scene.remove(old)
     try{ (old as any).geometry?.dispose?.(); (old as any).material?.dispose?.() }catch{}
   }
-  const geo = new THREE.CircleGeometry(1, 10)
+  // soft radial edge (shared alphaMap) so patches read as vegetation masses
+  const acv = document.createElement('canvas')
+  acv.width = acv.height = 64
+  const actx = acv.getContext('2d')!
+  const grad = actx.createRadialGradient(32, 32, 6, 32, 32, 32)
+  grad.addColorStop(0, 'rgba(255,255,255,1)')
+  grad.addColorStop(0.7, 'rgba(255,255,255,0.85)')
+  grad.addColorStop(1, 'rgba(255,255,255,0)')
+  actx.fillStyle = grad
+  actx.fillRect(0, 0, 64, 64)
+  const alphaTex = new THREE.CanvasTexture(acv)
+  const geo = new THREE.CircleGeometry(1, 12)
   geo.rotateX(-Math.PI / 2)
-  const mat = new THREE.MeshStandardMaterial({ roughness: 1, transparent: true, opacity: 0.75, depthWrite: false })
+  const mat = new THREE.MeshStandardMaterial({ roughness: 1, transparent: true, opacity: 0.6,
+    alphaMap: alphaTex, depthWrite: false })
   const im = new THREE.InstancedMesh(geo, mat, patches.length)
   const m4 = new THREE.Matrix4()
   const col = new THREE.Color()
   const sc = new THREE.Vector3()
+  const quat = new THREE.Quaternion()
+  const up = new THREE.Vector3(0, 1, 0)
   patches.forEach((p, i)=>{
+    quat.setFromAxisAngle(up, p.rot)
     m4.compose(new THREE.Vector3(p.x, c.sampler(p.x, p.z) + 6, p.z),
-      new THREE.Quaternion(), sc.set(p.r, 1, p.r))
+      quat, sc.set(p.r, 1, p.r * p.sq))
     im.setMatrixAt(i, m4)
     im.setColorAt(i, col.setHSL(0.26 + p.d * 0.08, 0.5, 0.24 + p.d * 0.12))
   })

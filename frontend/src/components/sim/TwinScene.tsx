@@ -26,13 +26,14 @@ type Ctx = {
   setFps: (fps: number)=>void;
 }
 
-export default function TwinScene({ sim, waters, opsAssets, communeFc, show, plan, aoiKm, focusKey, focusReq, orbitMode, onError, onFps, onTerrain }: {
+export default function TwinScene({ sim, waters, opsAssets, communeFc, show, plan, aoiKm, focusKey, focusReq, orbitMode, onError, onFps, onTerrain, onCam }: {
   sim: any; waters: any[]; opsAssets: any[];
   communeFc: any | null;
   show: TwinShow; plan?: any; aoiKm?: number | null; focusKey?: number;
   focusReq?: { key: number; lon: number; lat: number; label: string } | null;
   orbitMode?: 'tactical' | 'cinematic';
   onError: (msg: string)=>void; onFps: (fps: number)=>void; onTerrain?: (stats: any)=>void;
+  onCam?: (aglM: number)=>void;
 }){
   const divRef = useRef<HTMLDivElement>(null)
   const [note, setNote] = useState('')
@@ -72,25 +73,25 @@ export default function TwinScene({ sim, waters, opsAssets, communeFc, show, pla
         lod: (d as any).quality || null, canopyPatches: (d as any)._canopyCount ?? null }) }catch{}
     }
   }, [sim, waters, opsAssets, communeFc, show, plan])
-  // Focus Fire/Water/Community/Route + orbit modes (M10) without rebuild
+  // Focus Fire/Water/Community/Route + orbit modes (M10) without rebuild.
+  // M3 tactical framing: 200–400m AGL, pitch ~60–67° (not satellite view).
   useEffect(()=>{
     const d = (divRef.current as any)?._twin as any
     if(!d || !focusKey) return
+    const frame = (tx: number, ty: number, tz: number)=>{
+      const agl = Math.min(400, Math.max(200, (aoiKmRef.current || d.aoiKm || 2) * 130))
+      const horiz = agl / Math.tan((64 * Math.PI) / 180)
+      d.controls.target.set(tx, ty, tz)
+      d.camera.position.set(tx + horiz * 0.7, ty + agl, tz + horiz * 0.7)
+      d.controls.update()
+    }
     const fr = focusReqRef.current
     if(fr && typeof fr.lon === 'number'){
       import('./twinMath').then(m=>{
         const p = m.toLocal(fr.lon, fr.lat, d.origin)
-        d.controls.target.set(p.x, d.sampler(p.x, p.z), p.z)
-        const dist = (aoiKmRef.current || d.aoiKm || 2) * 1000
-        d.camera.position.set(p.x + dist * 0.7, dist * 0.8, p.z + dist * 0.7)
-        d.controls.update()
+        frame(p.x, d.sampler(p.x, p.z), p.z)
       })
-    } else {
-      const rKm = aoiKmRef.current || d.aoiKm || 2
-      d.controls.target.set(0, 0, 0)
-      d.camera.position.set(rKm * 1000 * 1.1, rKm * 1000 * 0.9, rKm * 1000 * 1.1)
-      d.controls.update()
-    }
+    } else frame(0, 0, 0)
   }, [focusKey])
   useEffect(()=>{
     const d = (divRef.current as any)?._twin as any
@@ -98,7 +99,25 @@ export default function TwinScene({ sim, waters, opsAssets, communeFc, show, pla
     d.controls.autoRotate = orbitMode === 'cinematic'
     d.controls.autoRotateSpeed = 0.7
   }, [orbitMode])
-  // canopy rebuilds only on ignition move (imagery sampling is expensive)
+  const onCamRef = useRef(onCam)
+  onCamRef.current = onCam
+  useEffect(()=>{
+    const d = (divRef.current as any)?._twin as any
+    if(!d) return
+    let last = 0
+    const h = ()=>{
+      const now = performance.now()
+      if(now - last < 600) return
+      last = now
+      try{
+        const agl = Math.max(0, Math.round(d.camera.position.y - d.controls.target.y))
+        onCamRef.current?.(agl)
+      }catch{}
+    }
+    d.controls.addEventListener('change', h)
+    h()
+    return ()=>{ try{ d.controls.removeEventListener('change', h) }catch{} }
+  }, [sim?.ignition?.lon, sim?.ignition?.lat])
   useEffect(()=>{
     const d = (divRef.current as any)?._twin as any
     if(!d || !sim) return
@@ -157,7 +176,9 @@ async function buildScene(div: HTMLDivElement, sim: any, waters: any[], opsAsset
 
   const scene = new THREE.Scene()
   scene.background = new THREE.Color(0xdfe9f0)
-  scene.fog = new THREE.Fog(0xdfe9f0, 5000, 14000)
+  // M9 aerial perspective scaled to AOI (subtle depth cue, not cinematic)
+  const aoiKmB = aoiKmProp || 3
+  scene.fog = new THREE.Fog(0xdfe9f0, aoiKmB * 1000 * 1.4, aoiKmB * 1000 * 3.5)
   const camera = new THREE.PerspectiveCamera(55, W / H, 10, 60000)
   const controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true
@@ -191,7 +212,10 @@ async function buildScene(div: HTMLDivElement, sim: any, waters: any[], opsAsset
   world.position.y = -oy // ignition ground ≈ y0
   const Hrel = (x: number, z: number)=> sampler(x, z) - oy
 
-  camera.position.set(radiusKm * 1000 * 1.1, radiusKm * 1000 * 0.9, radiusKm * 1000 * 1.1)
+  // M3 default tactical framing: 200–400m AGL, pitch ~64° (never satellite)
+  const agl0 = Math.min(400, Math.max(200, (aoiKmProp || radiusKm) * 130))
+  const hz0 = agl0 / Math.tan((64 * Math.PI) / 180)
+  camera.position.set(hz0 * 0.7, agl0, hz0 * 0.7)
   controls.target.set(0, 0, 0)
   controls.update()
 
@@ -243,7 +267,7 @@ async function buildScene(div: HTMLDivElement, sim: any, waters: any[], opsAsset
   updateDynamic(c, sim, waters, opsAssets, communeFc, show, plan)
   ;(c as any)._texCanvas = terr.texCanvas
   ;(c as any)._block = terr.block
-  ;(c as any)._texInfo = { texStatus: (terr as any).texStatus, meshSegs: (terr as any).meshSegs }
+  ;(c as any)._texInfo = { texStatus: (terr as any).texStatus, meshSegs: (terr as any).meshSegs, exag: (terr as any).exag }
   ;(c as any)._canopyKey = null
   return c
 }
