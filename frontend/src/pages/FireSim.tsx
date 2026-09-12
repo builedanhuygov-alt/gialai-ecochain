@@ -43,6 +43,11 @@ export default function FireSim(){
   const [rain, setRain] = useState(0)
   const [fuel, setFuel] = useState(500)
   const [slope, setSlope] = useState(12)
+  // Module M scenario levers: road closure + water capacity threshold
+  const [closedRoute, setClosedRoute] = useState('')
+  const [minCapM, setMinCapM] = useState(0) // triệu m³, 0 = all sources
+  const minCap = minCapM * 1_000_000
+  const [planStale, setPlanStale] = useState(false)
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -115,30 +120,52 @@ export default function FireSim(){
 
   const runSim = async (withPlan: boolean)=>{
     if(timer.current) clearTimeout(timer.current)
+    if(planTimer.current) clearTimeout(planTimer.current)
     setLoading(true); setError('')
     const body = { lon, lat, wind_speed_kmh: wind, wind_direction_deg: wdir, slope_deg: slope,
-      temperature_c: temp, rain_mm: rain, forest_loss_ha: fuel }
+      temperature_c: temp, rain_mm: rain, forest_loss_ha: fuel,
+      closed_route_ids: closedRoute ? [closedRoute] : [],
+      min_water_capacity_m3: minCap > 0 ? minCap : null }
     try{
       const d: any = await api.firesim(body)
       setData(d)
       try{ map?.flyTo({ center:[lon, lat], zoom:10.5, duration:1200 }) }catch{}
-      if(withPlan){
-        setPlanLoading(true)
-        try{
-          const p: any = await api.responsePlan({ lat, lon, wind_speed_kmh: wind, wind_direction_deg: wdir, slope_deg: slope })
-          setPlan(p)
-        }catch(e:any){ setPlan({ error: String(e.message || e).slice(0, 200) }) }
-        finally{ setPlanLoading(false) }
-      }
+      if(withPlan) await regenPlan(body)
+      else setPlanStale(true)
     }catch(e:any){ setError(String(e.message || e).slice(0, 200)) }
     finally{ setLoading(false) }
   }
-  // B3 realtime: sliders re-run the SIM (debounced); plan regenerates on RUN (B8)
+  const regenPlan = async (body: any)=>{
+    setPlanLoading(true)
+    try{
+      const p: any = await api.responsePlan({ lat: body.lat, lon: body.lon,
+        wind_speed_kmh: body.wind_speed_kmh, wind_direction_deg: body.wind_direction_deg,
+        slope_deg: body.slope_deg, exclude_route_ids: body.closed_route_ids,
+        min_water_capacity_m3: body.min_water_capacity_m3 })
+      setPlan(p); setPlanStale(false)
+    }catch(e:any){ setPlan({ error: String(e.message || e).slice(0, 200) }) }
+    finally{ setPlanLoading(false) }
+  }
+  // B3 realtime: sliders re-run the SIM (debounced 500ms); plan + analyst
+  // auto-regenerate debounced 1500ms after sim settles (Module M).
+  const planTimer = useRef<any>(null)
   const auto = ()=>{
     if(timer.current) clearTimeout(timer.current)
+    if(planTimer.current) clearTimeout(planTimer.current)
     timer.current = setTimeout(()=> runSim(false), 500)
+    planTimer.current = setTimeout(async ()=>{
+      const body = { lon, lat, wind_speed_kmh: wind, wind_direction_deg: wdir, slope_deg: slope,
+        temperature_c: temp, rain_mm: rain, forest_loss_ha: fuel,
+        closed_route_ids: closedRoute ? [closedRoute] : [],
+        min_water_capacity_m3: minCap > 0 ? minCap : null }
+      try{
+        const d: any = await api.firesim(body)
+        setData(d)
+        await regenPlan(body)
+      }catch(e:any){ setError(String(e.message || e).slice(0, 200)) }
+    }, 1500)
   }
-  useEffect(()=>{ runSim(true); return ()=>{ if(timer.current) clearTimeout(timer.current) } },[]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{ runSim(true); return ()=>{ if(timer.current) clearTimeout(timer.current); if(planTimer.current) clearTimeout(planTimer.current) } },[]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const imp = data?.impact
   return (
@@ -159,9 +186,18 @@ export default function FireSim(){
           <Slider label="🧭 Hướng gió (tới)" value={wdir} min={0} max={359} step={5} unit="°" onChange={v=> { setWdir(v); auto() }} />
           <Slider label="🌧️ Mưa" value={rain} min={0} max={50} step={1} unit=" mm" onChange={v=> { setRain(v); auto() }} />
           <Slider label="⛰️ Dốc" value={slope} min={0} max={40} step={1} unit="°" onChange={v=> { setSlope(v); auto() }} />
+          <label style={{display:'block', fontSize:12}}>
+            <div style={{display:'flex', justifyContent:'space-between'}}><span>🚧 Đóng tuyến (kịch bản)</span></div>
+            <select value={closedRoute} onChange={e=> { setClosedRoute(e.target.value); auto() }} style={{width:'100%', border:'1px solid #E2E8E5', borderRadius:8, padding:'4px 8px', fontSize:12}}>
+              <option value="">— Không đóng —</option>
+              {opsAssets.filter((a: any)=> a.asset_type === 'route').map((a: any)=> <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </label>
+          <Slider label="💧 Ngưỡng dung tích hồ" value={minCapM} min={0} max={1000} step={10} unit=" tr.m³" onChange={v=> { setMinCapM(v); auto() }} />
           <button onClick={()=> runSim(true)} disabled={loading} style={{background:'#DC2626', color:'#fff', border:0, borderRadius:999, padding:'10px', fontWeight:800, cursor:'pointer'}}>
             {loading ? 'ĐANG CHẠY…' : '▶ RUN SIMULATION + PLAN'}
           </button>
+          {planStale && !planLoading && <div style={{fontSize:11, color:'#B45309'}}>Plan đang cũ hơn kịch bản — sẽ tự tái sinh…</div>}
           {error && <div style={{fontSize:12, color:'#B91C1C'}}>⚠ {error}</div>}
           <div style={{display:'flex', flexDirection:'column', gap:4, borderTop:'1px solid #F1F5F9', paddingTop:8}}>
             <b style={{fontSize:12}}>Lớp hiển thị {mode === '3d' ? '(3D)' : '(2D)'}</b>
@@ -269,6 +305,10 @@ export default function FireSim(){
             <div style={{fontSize:12, display:'flex', flexDirection:'column', gap:4, marginTop:6}}>
               <div>CẤP <b>{plan.risk_summary?.level}</b> · {plan.command_status} · Nước: <b>{plan.primary_water?.name}</b> ({plan.primary_water?.priority}) · Trạm: <b>{plan.primary_station?.station_name || '—'}</b> · Tuyến: <b>{plan.primary_route?.route_name || '—'}</b></div>
               <div>🌐 {(plan.analyst_bulletin?.hinh_anh_hien_truong || []).join(' · ')}</div>
+              {plan.earth_intelligence && <div>🧠 {plan.earth_intelligence.recommended_action}</div>}
+              {(plan.deployment_plan || []).length > 0 && (
+                <ol style={{margin:'4px 0 4px 16px', padding:0, fontSize:12}}>{plan.deployment_plan.map((d: any, i: number)=> <li key={i}>{d.detail}{d.eta_minutes != null && <> (ETA ~{d.eta_minutes}′)</>}</li>)}</ol>
+              )}
               <ul style={{margin:'4px 0 4px 16px', padding:0}}>{(plan.tactical_recommendations || []).slice(0, 6).map((r: string, i: number)=> <li key={i}>{r}</li>)}</ul>
               <Link to="/command" style={{fontSize:12, color:'#0F766E', fontWeight:700}}>Mở Command Center →</Link>
             </div>

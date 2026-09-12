@@ -502,11 +502,28 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
     threats = ops.assess_asset_threat(lon, lat, ros, assets)
     from app.models.water import WaterAsset
     speed = float(body.get("avg_speed_kmh") or 30.0)
+    # Module M road-closure/water-availability scenario params (honest filters)
+    exclude_route_ids = set(body.get("exclude_route_ids") or [])
+    try:
+        min_cap = body.get("min_water_capacity_m3")
+        min_cap = float(min_cap) if min_cap not in (None, "") else None
+    except Exception:
+        min_cap = None
     spec_rows = [{"id": w.id, "name": w.name, "asset_type": w.asset_type,
                   "longitude": w.longitude, "latitude": w.latitude,
                   "capacity_m3": w.capacity_m3, "road_access": w.road_access,
                   "status": w.status, "manager": w.manager}
                  for w in db.query(WaterAsset).all()]
+    excluded_waters = []
+    if min_cap is not None:
+        kept, excluded_waters = [], []
+        for w in spec_rows:
+            try:
+                ok = float(w.get("capacity_m3") or 0) >= min_cap
+            except Exception:
+                ok = False
+            (kept if ok else excluded_waters).append(w)
+        spec_rows = kept
     ranking = ops.score_water_spec(lon, lat, wind_toward, spec_rows)
     for s in ranking["ranked"]:
         s["eta_minutes"] = ops.road_eta_minutes(s["distance_km"], speed)
@@ -530,7 +547,10 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
         backup_station = {"station_name": s1["name"], "station_type": s1["asset_type"],
                           "distance_km": s1["distance_km"], "eta_minutes": s1["eta_minutes"],
                           "contact": s1.get("contact"), "operational_status": s1.get("status")}
-    rt_ranked = _rank_routes(db, lon, lat, top=2)
+    _rt_all = _rank_routes(db, lon, lat, top=50)
+    rt_ranked = [r for r in _rt_all if r.get("id") not in exclude_route_ids][:2]
+    closed_routes = [r.get("route_name") for r in _rt_all
+                     if r.get("id") in exclude_route_ids]
     route = {"name": rt_ranked[0]["route_name"], "distance_km": rt_ranked[0]["distance_km"]} if rt_ranked else None
     primary_route = rt_ranked[0] if rt_ranked else None
     backup_route = rt_ranked[1] if len(rt_ranked) > 1 else None
@@ -576,6 +596,11 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
         recs.append("Chưa có trạm/tổ trong hệ thống — nhập GPS trên trang Quản trị")
     if route:
         recs.append(f"Tiếp cận theo {route['name']} (cách điểm cháy {route['distance_km']} km)")
+    if closed_routes:
+        recs.append(f"Tuyến đóng theo kịch bản: {', '.join(closed_routes)} — dùng tuyến dự phòng còn lại")
+    if min_cap is not None:
+        recs.append(f"Lọc nước theo kịch bản: chỉ nguồn ≥ {min_cap:,.0f} m³ "
+                    f"({len(excluded_waters)} nguồn nhỏ bị loại)".replace(",", "."))
     if wind_speed and wind_speed >= 20:
         recs.append(f"Gió mạnh {wind_speed} km/h — mở rộng cảnh báo các xã phía hướng gió {int(wind_toward)}°")
     downwind = sorted({c["name"] for s in sim["steps"] for c in s["affected_communes"]})
@@ -660,6 +685,36 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
                                          primary_route["route_name"], _v)})
     except Exception:
         pass
+    # Module K — threatened communities (shared centroid helper) + deployment
+    # plan + Module A earth intelligence. All derived from computed sections.
+    from app.api.routes.villages import _commune_demographics, commune_centroids
+    _demo = _commune_demographics()
+    _cent = commune_centroids()
+    _first_hr: dict = {}
+    for _s in sim["steps"]:
+        for _c in (_s.get("affected_communes") or []):
+            if _c.get("code") and _c["code"] not in _first_hr:
+                _first_hr[_c["code"]] = _s.get("hour")
+    threatened_communities = []
+    for _code, _hr in sorted(_first_hr.items(), key=lambda kv: kv[1]):
+        _dd = _demo.get(_code, {})
+        _cx, _cy = _cent.get(_code, (None, None))
+        _dist = round(ops.haversine_km(lon, lat, _cx, _cy), 2) if _cx is not None else None
+        threatened_communities.append({
+            "code": _code, "commune": _dd.get("name"), "population": _dd.get("population"),
+            "population_status": "VERIFIED" if _dd.get("population") is not None else "MISSING",
+            "first_hour": _hr, "band": ops.community_band(_hr),
+            "distance_km": _dist,
+            "eta_hours": round(_dist / ros, 2) if _dist is not None and ros else None,
+        })
+    deployment = ops.deployment_plan(primary_station, backup_station, primary,
+                                     backup, primary_route, threatened_assets)
+    earth_intel = ops.earth_intelligence(
+        {"lon": lon, "lat": lat},
+        {"temperature": temp, "humidity": humidity, "wind_speed_kmh": wind_speed},
+        float(body.get("slope_deg", 12.0)), ros, ranking, _rt_all,
+        sum(1 for t in threatened_assets if t.get("band") in ("CRITICAL", "THREATENED")),
+        len(threatened_communities), result.get("missing", []))
     plan_out = {
         "fire": {"lon": lon, "lat": lat},
         "risk_summary": {"level": result["warning_level"], "score": result["risk_score"],
@@ -686,6 +741,13 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
         "asset_threats": threats,
         "water_threats": water_threats,
         "threatened_assets": threatened_assets,
+        "threatened_communities": threatened_communities,
+        "deployment_plan": deployment,
+        "earth_intelligence": earth_intel,
+        "scenario": {"exclude_route_ids": sorted(exclude_route_ids),
+                     "closed_routes": closed_routes,
+                     "min_water_capacity_m3": min_cap,
+                     "excluded_waters": [w.get("name") for w in excluded_waters]},
         "viewer_notes": viewer_notes,
         "tactical_recommendations": recs,
         "command_status": ops.command_status(primary_station, primary, result.get("missing", [])),

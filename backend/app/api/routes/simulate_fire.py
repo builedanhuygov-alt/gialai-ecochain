@@ -44,7 +44,8 @@ def simulate_fire(body: dict, db: Session = Depends(get_db)):
     """Scenario sliders → ellipses 1/3/6h + full tactical impact.
 
     Required: lon, lat. Optional: wind_speed_kmh (15), wind_direction_deg (45),
-    slope_deg (12), temperature_c, rain_mm, forest_loss_ha, hours ([1,3,6]).
+    slope_deg (12), temperature_c, rain_mm, forest_loss_ha, hours ([1,3,6]),
+    closed_route_ids (list — scenario road closure), min_water_capacity_m3.
     """
     from app.models.ops import OperationalAsset
     from app.models.water import WaterAsset
@@ -67,6 +68,12 @@ def simulate_fire(body: dict, db: Session = Depends(get_db)):
         hours = sorted({float(h) for h in hours})[:4] or [1.0, 3.0, 6.0]
     except Exception:
         hours = [1.0, 3.0, 6.0]
+    closed_ids = set(body.get("closed_route_ids") or [])
+    try:
+        min_cap = body.get("min_water_capacity_m3")
+        min_cap = float(min_cap) if min_cap not in (None, "") else None
+    except Exception:
+        min_cap = None
 
     # B1: scenario ROS with published factors (heuristic, labeled).
     base_ros = spread_svc.head_ros_kmh(wind, slope)
@@ -117,6 +124,8 @@ def simulate_fire(body: dict, db: Session = Depends(get_db)):
         t["color"] = BAND_COLORS.get(t["band"], "#3B82F6")
 
     # B4 route impacts: earliest containing step per vertex.
+    # Closed scenario routes keep their spread band but are flagged CLOSED —
+    # closure affects dispatch choice, never the physics.
     rings = {s["hour"]: s["polygon"]["coordinates"][0] for s in sim["steps"]}
     routes = []
     for r in db.query(OperationalAsset).filter(
@@ -132,20 +141,32 @@ def simulate_fire(body: dict, db: Session = Depends(get_db)):
                 earliest = hr
                 break
         band = ops.community_band(earliest)
+        closed = r.id in closed_ids
         routes.append({
             "id": r.id, "route_name": r.name,
             "road_condition": getattr(r, "road_condition", None),
             "surface_type": getattr(r, "surface_type", None),
             "impacted_in_hours": earliest,
-            "band": band, "color": BAND_COLORS[band],
-            "panel": (f"Route expected impacted in {earliest} hours"
-                      if earliest is not None else "Route outside simulated spread"),
+            "band": band, "color": "#6B7280" if closed else BAND_COLORS[band],
+            "closed": closed,
+            "panel": ("Đóng theo kịch bản — dùng tuyến dự phòng" if closed
+                      else (f"Route expected impacted in {earliest} hours"
+                            if earliest is not None else "Route outside simulated spread")),
         })
 
-    # B5 water access: current vs simulated.
+    # B5 water access: current vs simulated. min_water_capacity_m3 excludes
+    # small sources from dispatch consideration (labeled, not deleted).
     speed = 30.0
     waters = []
+    excluded_waters = []
     for w in db.query(WaterAsset).all():
+        try:
+            too_small = min_cap is not None and float(w.capacity_m3 or 0) < min_cap
+        except Exception:
+            too_small = False
+        if too_small:
+            excluded_waters.append(w.name)
+            continue
         d = ops.haversine_km(lon, lat, w.longitude, w.latitude)
         eta = ops.road_eta_minutes(d, speed)
         verified = (w.status == "verified")
@@ -181,7 +202,10 @@ def simulate_fire(body: dict, db: Session = Depends(get_db)):
         "ignition": {"lon": lon, "lat": lat},
         "scenario": {"wind_speed_kmh": wind, "wind_direction_deg": wdir % 360,
                      "slope_deg": slope, "temperature_c": body.get("temperature_c"),
-                     "rain_mm": body.get("rain_mm"), "forest_loss_ha": body.get("forest_loss_ha")},
+                     "rain_mm": body.get("rain_mm"), "forest_loss_ha": body.get("forest_loss_ha"),
+                     "closed_route_ids": sorted(closed_ids),
+                     "min_water_capacity_m3": min_cap,
+                     "excluded_waters": excluded_waters},
         "ros": scen,
         "spread": sim,
         "wind_layer": {"direction_deg": wdir % 360, "speed_kmh": wind},

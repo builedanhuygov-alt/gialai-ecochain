@@ -366,6 +366,9 @@ def build_analyst_bulletin(plan: dict) -> dict:
     by_h = {s.get("hour"): s for s in steps}
     s1 = by_h.get(1.0) or by_h.get(1) or {}
     communes_1h = [c.get("name") for c in (s1.get("affected_communes") or [])][:5]
+    ei = plan.get("earth_intelligence") or {}
+    tcomm = plan.get("threatened_communities") or []
+    depl = plan.get("deployment_plan") or []
 
     def _fmt(v, suffix=""):
         return f"{v}{suffix}" if v is not None else "khong ro"
@@ -392,6 +395,16 @@ def build_analyst_bulletin(plan: dict) -> dict:
         "tai_san_bi_de_doa": [f"{t.get('name')} ({t.get('band')}, ETA {t.get('eta_hours')}h)" for t in hot] or ["Khong co tai san CRITICAL/THREATENED"],
         # Module 360 (M8) — imagery availability per primary resource
         "hinh_anh_hien_truong": [n.get("note") for n in (plan.get("viewer_notes") or [])] or ["Chưa có dữ liệu hình ảnh xác minh."],
+        # Module L — terrain / community / deployment / risks sections
+        "phan_tich_dia_hinh": (ei.get("terrain_constraints")
+                               or "Chưa có dữ liệu địa hình — cần DEM/số liệu thực địa."),
+        "tac_dong_cong_dong": ([f"{t.get('commune')} ({t.get('band')}, dân số {t.get('population') or '?'}, "
+                                 f"ETA ~{t.get('eta_hours')}h)" for t in tcomm[:5]]
+                               or ["Chưa rõ xã ảnh hưởng."]),
+        "ke_hoach_trieu_dong": ([f"B{((d.get('order') or 0) + 1)}: {d.get('detail')}" for d in depl]
+                                or ["Chưa lập được kế hoạch — thiếu trạm/nước/tuyến."]),
+        "rui_ro_van_hanh": ([ei.get("access_constraints"), ei.get("water_constraints")]
+                            + (rs.get("missing") or [])),
     }
 
 
@@ -506,3 +519,132 @@ def community_band(first_hour) -> str:
         if first_hour <= limit:
             return band
     return "SAFE"
+
+
+# ── Module A: Earth Intelligence Layer (abstraction, NOT a new model) ─────
+# Fuses existing inputs (fire point, weather, terrain slope, water ranking,
+# routes, assets, communities) into named risk drivers + actions.
+# Every driver cites its source numbers. Missing inputs → MISSING /
+# NOT_CONFIGURED / FIELD_VERIFICATION_REQUIRED, never invented.
+def earth_intelligence(fire: dict, weather: dict, slope_deg: float | None,
+                       ros_kmh: float | None, water_ranking: dict,
+                       routes: list, n_threatened: int,
+                       n_communes: int, missing: list) -> dict:
+    """Drivers + constraints + recommended action + operational insights."""
+    ranked = (water_ranking or {}).get("ranked", [])
+    top_water = ranked[0] if ranked else None
+    wind = (weather or {}).get("wind_speed_kmh")
+    temp = (weather or {}).get("temperature")
+    humidity = (weather or {}).get("humidity")
+
+    # terrain driver: slope multiplier on ROS (same formula as spread model)
+    if slope_deg is None:
+        terrain_driver = {"level": "MISSING", "detail": "chưa có độ dốc — cần DEM/số liệu thực địa"}
+    else:
+        mult = 1.0 + max(0.0, float(slope_deg)) / 35.0
+        terrain_driver = {"level": "HIGH" if mult >= 1.5 else ("MODERATE" if mult >= 1.2 else "LOW"),
+                          "slope_deg": slope_deg, "ros_multiplier": round(mult, 2),
+                          "detail": f"dốc {slope_deg}° nhân ROS ×{round(mult, 2)} (công thức spread)"}
+    # fuel driver: from top water? No — fuel from temperature/humidity dryness
+    if temp is None or humidity is None:
+        fuel_driver = {"level": "MISSING", "detail": "thiếu nhiệt/ẩm live — không suy đoán độ khô nhiên liệu"}
+    else:
+        dry = (float(temp) - 28) * 4 + (60 - float(humidity)) * 0.8
+        fuel_driver = {"level": "HIGH" if dry > 60 else ("MODERATE" if dry > 30 else "LOW"),
+                       "dryness_index": round(max(0.0, dry), 1),
+                       "detail": f"nhiệt {temp}°C + ẩm {humidity}% → chỉ số khô {round(max(0.0, dry), 1)}"}
+    # weather driver: wind dominates spread direction/speed
+    if wind is None:
+        weather_driver = {"level": "MISSING", "detail": "thiếu gió live — dùng mặc định, tin cậy đã hạ"}
+    else:
+        weather_driver = {"level": "HIGH" if wind >= 20 else ("MODERATE" if wind >= 10 else "LOW"),
+                          "wind_speed_kmh": wind,
+                          "detail": f"gió {wind} km/h quyết định hướng/tốc lan"}
+    # access driver: routes surveyed + road condition known?
+    routes = routes or []
+    known = [r for r in routes if r.get("road_condition")]
+    if not routes:
+        access_driver = {"level": "FIELD_VERIFICATION_REQUIRED",
+                         "detail": "chưa có tuyến nào trong DB — khảo sát trước khi điều xe"}
+    elif not known:
+        access_driver = {"level": "FIELD_VERIFICATION_REQUIRED",
+                         "detail": f"{len(routes)} tuyến nhưng chưa rõ tình trạng mặt đường"}
+    else:
+        blocked = [r for r in known if r.get("road_condition") == "BLOCKED"]
+        access_driver = {"level": "HIGH" if blocked else "MODERATE",
+                         "routes_known": len(known), "routes_total": len(routes),
+                         "detail": f"{len(known)}/{len(routes)} tuyến rõ tình trạng"
+                                   + (f", {len(blocked)} BLOCKED" if blocked else "")}
+    # water constraint: strategic source available?
+    if not ranked:
+        water_constraint = {"level": "MISSING", "detail": "chưa có dữ liệu hồ chứa — chạy seed water_assets"}
+    elif (top_water or {}).get("priority") == "A":
+        water_constraint = {"level": "LOW", "detail": f"nguồn chiến lược {top_water['name']} (hạng A) khả dụng"}
+    else:
+        water_constraint = {"level": "MODERATE",
+                            "detail": f"nguồn tốt nhất {top_water['name']} hạng {top_water.get('priority')} — cân nhắc dự phòng"}
+    # recommended action: deterministic priority rules
+    if n_threatened and n_threatened > 0:
+        recommended_action = f"Ưu tiên bảo vệ {n_threatened} tài sản CRITICAL/THREATENED trước khi mở rộng dập"
+    elif not ranked:
+        recommended_action = "Xác minh nguồn nước gần nhất trước khi điều động (chưa có dữ liệu hồ)"
+    elif not routes:
+        recommended_action = "Điều động theo đường chim bay + cử trinh sát dẫn đường (chưa có tuyến)"
+    else:
+        recommended_action = f"Đánh nhanh diện hẹp: {top_water['name']} + tuyến gần nhất, mở rộng theo gió"
+    insights = [
+        f"ROS {ros_kmh} km/h — mọi ETA tài sản/xã chia từ số này" if ros_kmh else "ROS chưa tính (thiếu gió/dốc)",
+        f"{n_communes} xã trong vùng lan 6h" if n_communes else "Chưa rõ xã ảnh hưởng",
+        f"Thiếu: {', '.join(missing)} — các driver liên quan đã hạ mức" if missing else "Đầu vào đủ cho suy luận hiện tại",
+    ]
+    return {
+        "terrain_driver": terrain_driver, "fuel_driver": fuel_driver,
+        "weather_driver": weather_driver, "access_driver": access_driver,
+        "water_constraint": water_constraint,
+        "terrain_constraints": terrain_driver["detail"],
+        "water_constraints": water_constraint["detail"],
+        "access_constraints": access_driver["detail"],
+        "recommended_action": recommended_action,
+        "operational_insights": insights,
+    }
+
+
+# ── Module K: deployment plan (ordered dispatch steps, all ETAs cited) ────
+def deployment_plan(primary_station, backup_station, primary_water,
+                    backup_water, primary_route, threatened: list) -> list:
+    """Dispatch steps in execution order. Skips missing legs honestly."""
+    steps = []
+    if primary_station:
+        steps.append({"order": 1, "action": "dispatch_station",
+                      "unit": primary_station.get("station_name"),
+                      "eta_minutes": primary_station.get("eta_minutes"),
+                      "detail": f"Xuất phát {primary_station.get('station_name')} "
+                                f"({primary_station.get('distance_km')} km)"})
+    if primary_water:
+        steps.append({"order": 2, "action": "secure_water",
+                      "unit": primary_water.get("name"),
+                      "eta_minutes": primary_water.get("eta_minutes"),
+                      "detail": f"Lấy nước {primary_water.get('name')} hạng "
+                                f"{primary_water.get('priority')} (ETA ~{primary_water.get('eta_minutes')}′)"})
+    if primary_route:
+        steps.append({"order": 3, "action": "take_route",
+                      "unit": primary_route.get("route_name") or primary_route.get("name"),
+                      "eta_minutes": None,
+                      "detail": f"Tiếp cận theo {primary_route.get('route_name') or primary_route.get('name')}"})
+    hot = [t for t in (threatened or []) if t.get("band") in ("CRITICAL", "THREATENED")][:3]
+    for t in hot:
+        steps.append({"order": 4, "action": "protect_asset", "unit": t.get("name"),
+                      "eta_minutes": None,
+                      "detail": f"Bảo vệ {t.get('name')} ({t.get('band')}, ETA cháy ~{t.get('eta_hours')}h)"})
+    if backup_station or backup_water:
+        bu = backup_station.get("station_name") if backup_station else None
+        bw = backup_water.get("name") if backup_water else None
+        steps.append({"order": 5, "action": "stage_backup",
+                      "unit": " + ".join(x for x in [bu, bw] if x) or None,
+                      "eta_minutes": None,
+                      "detail": "Dự phòng sẵn sàng khi hướng gió đổi"})
+    if not steps:
+        steps.append({"order": 0, "action": "verify_first", "unit": None,
+                      "eta_minutes": None,
+                      "detail": "Chưa có trạm/nước/tuyến — xác minh thực địa trước khi điều động"})
+    return steps

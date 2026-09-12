@@ -81,3 +81,68 @@ def test_b8_plan_wind_override_regenerates():
     assert a["spread"]["wind_source"] != "scenario override (simulator)"
     assert b["spread"]["wind_source"] == "scenario override (simulator)"
     assert b["spread"]["steps"][0]["length_km"] > a["spread"]["steps"][0]["length_km"]
+
+
+def test_k_plan_contract_threatened_deployment_intel():
+    c = setup()
+    d = c.post("/api/v1/fires/response-plan", json={"lon": 109.02, "lat": 14.06}).json()
+    for key in ("threatened_communities", "deployment_plan", "earth_intelligence",
+                "primary_station", "backup_station", "primary_water", "backup_water",
+                "primary_route", "backup_route", "threatened_assets",
+                "eta_minutes", "command_status"):
+        assert key in d, key
+    assert len(d["threatened_communities"]) >= 1
+    tc = d["threatened_communities"][0]
+    assert tc["band"] in ("CRITICAL", "THREATENED", "WATCH", "SAFE")
+    assert tc["distance_km"] is not None and tc["eta_hours"] is not None
+    assert tc["population_status"] in ("VERIFIED", "MISSING")
+    orders = [s["order"] for s in d["deployment_plan"]]
+    assert orders == sorted(orders) and len(orders) >= 1
+    ei = d["earth_intelligence"]
+    for key in ("terrain_driver", "fuel_driver", "weather_driver", "access_driver",
+                "recommended_action", "operational_insights"):
+        assert key in ei, key
+    assert "probability" not in str(d).lower()
+    b = d["analyst_bulletin"]
+    for key in ("phan_tich_dia_hinh", "tac_dong_cong_dong", "ke_hoach_trieu_dong",
+                "rui_ro_van_hanh"):
+        assert key in b, key
+
+
+def test_m_scenario_filters_road_closure_and_water_capacity():
+    c = setup()
+    h = auth_headers(c)
+    line = {"type": "LineString", "coordinates": [[109.0, 14.05], [109.05, 14.07]]}
+    r1 = c.post("/api/assets", json={"asset_type": "route", "name": "R1",
+                                     "latitude": 14.05, "longitude": 109.0,
+                                     "geometry": line}, headers=h).json()
+    r2 = c.post("/api/assets", json={"asset_type": "route", "name": "R2",
+                                     "latitude": 14.1, "longitude": 109.1,
+                                     "geometry": line}, headers=h).json()
+    base = {"lon": 109.02, "lat": 14.06}
+    d0 = c.post("/api/v1/fires/response-plan", json=base).json()
+    assert d0["primary_route"]["route_name"] == "R1"
+    d1 = c.post("/api/v1/fires/response-plan",
+                json={**base, "exclude_route_ids": [r1["id"]]}).json()
+    assert d1["primary_route"]["route_name"] == "R2"
+    assert d1["scenario"]["closed_routes"] == ["R1"]
+    # water capacity filter promotes big reservoirs only
+    big = c.post("/api/v1/fires/response-plan",
+                 json={**base, "min_water_capacity_m3": 100_000_000}).json()
+    assert all((w.get("capacity_m3") or 0) >= 100_000_000
+               for w in big["water_ranking"]["ranked"])
+    assert len(big["scenario"]["excluded_waters"]) > 0
+    # simulate endpoint honors the same scenario params
+    s = c.post("/api/simulate/fire", json={**base, "closed_route_ids": [r1["id"]],
+                                           "min_water_capacity_m3": 100_000_000}).json()
+    assert s["routes"] and all(x["id"] != r1["id"] or x["closed"] for x in s["routes"])
+    assert s["scenario"]["excluded_waters"]
+
+
+def test_h_communities_distance_eta():
+    c = setup()
+    d = c.get("/api/communities/threatened?lat=14.062&lon=109.02").json()
+    assert "ros_kmh" in d and d["ros_kmh"] > 0
+    assert len(d["communes"]) >= 1
+    for t in d["communes"]:
+        assert t["distance_km"] is not None and t["eta_hours"] is not None

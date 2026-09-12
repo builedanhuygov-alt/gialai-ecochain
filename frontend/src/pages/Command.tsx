@@ -171,6 +171,8 @@ export default function Command(){
               </div>
             )}
             <div><b>🚒 Khuyến nghị:</b><ul style={{margin:'4px 0 4px 16px', padding:0}}>{(plan.tactical_recommendations || []).map((r:string, i:number)=> <li key={i}>{r}</li>)}</ul></div>
+            {plan.earth_intelligence && <div>🧠 <b>Earth Intel:</b> {plan.earth_intelligence.recommended_action} <span style={{color:'#64748B'}}>(địa hình {plan.earth_intelligence.terrain_driver?.level} · nhiên liệu {plan.earth_intelligence.fuel_driver?.level} · thời tiết {plan.earth_intelligence.weather_driver?.level} · tiếp cận {plan.earth_intelligence.access_driver?.level})</span></div>}
+            {(plan.deployment_plan || []).length > 0 && <div><b>📋 Triển khai:</b><ol style={{margin:'4px 0 4px 16px', padding:0}}>{plan.deployment_plan.map((d:any, i:number)=> <li key={i}>{d.detail}</li>)}</ol></div>}
             <div style={{fontSize:10, color:'#64748B'}}>Di chuyển: {plan.travel_time?.assumption} · Mô hình: {plan.spread?.model}</div>
           </div>
         )}
@@ -192,6 +194,29 @@ export default function Command(){
             const n = assets.filter(a=> a.status === s).length
             return n > 0 ? <div key={s} style={{fontSize:12, display:'flex', justifyContent:'space-between'}}><span>{s}</span><b>{n}</b></div> : null
           })}
+        </Card>
+        <Card>
+          <b>🔥 Vùng rủi ro cao nhất</b>
+          {(plan?.threatened_communities || []).length === 0 && <div style={{fontSize:12, color:'#64748B'}}>Chạy Response Plan ở trên để xếp hạng xã theo band.</div>}
+          {(plan?.threatened_communities || []).slice(0,5).map((t:any)=> (
+            <div key={t.code} style={{fontSize:12, display:'flex', justifyContent:'space-between', borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>
+              <span>{t.commune}</span><b>{t.band}{t.eta_hours != null && <> · ~{t.eta_hours}h</>}</b>
+            </div>
+          ))}
+        </Card>
+        <Card>
+          <b>🚨 Cảnh báo điều hành</b>
+          {((): any=> {
+            const rows: string[] = []
+            ;(alerts || []).filter((a:any)=> ['CRITICAL','V','IV'].includes(a.level)).slice(0,3)
+              .forEach((a:any)=> rows.push(`${a.level} · ${a.title || a.risk_type}`))
+            ;(plan?.threatened_assets || []).filter((t:any)=> t.band === 'CRITICAL').slice(0,3)
+              .forEach((t:any)=> rows.push(`CRITICAL · ${t.name}`))
+            if((plan?.risk_summary?.missing || []).length > 0)
+              rows.push(`Thiếu dữ liệu: ${plan.risk_summary.missing.join(', ')}`)
+            if(!rows.length) return <div style={{fontSize:12, color:'#64748B'}}>Không có cảnh báo mức cao.</div>
+            return rows.map((r, i)=> <div key={i} style={{fontSize:12, borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>{r}</div>)
+          })()}
         </Card>
       </div>
       <style>{`.card{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:12px}`}</style>

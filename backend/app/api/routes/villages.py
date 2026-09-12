@@ -39,6 +39,24 @@ def _commune_demographics() -> dict:
     _COMMUNE_DEMO = out
     return out
 
+
+def commune_centroids() -> dict:
+    """Shared helper: bbox-center centroid per commune code from real
+    boundaries. Used by threatened-communities + response-plan."""
+    from app.services import spread as spread_svc
+    out: dict = {}
+    for c in spread_svc.load_commune_shapes():
+        try:
+            g = c.get("geometry") or {}
+            polys = [g["coordinates"]] if g.get("type") == "Polygon" else g.get("coordinates", [])
+            xs = [p[0] for poly in polys for ring in [poly[0] if poly else []] for p in ring]
+            ys = [p[1] for poly in polys for ring in [poly[0] if poly else []] for p in ring]
+            if xs:
+                out[c["code"]] = ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
+        except Exception:
+            continue
+    return out
+
 @router.get("/villages")
 def list_villages(commune: Optional[str] = Query(default=None)):
     if commune:
@@ -88,7 +106,9 @@ def threatened_communities(lat: float = Query(...), lon: float = Query(...),
     sim = spread_svc.simulate(lon, lat, float(wind_speed_kmh),
                               float(wind_direction_deg), float(slope_deg),
                               [1.0, 3.0, 6.0])
+    ros = spread_svc.head_ros_kmh(float(wind_speed_kmh), float(slope_deg))
     communes = spread_svc.load_commune_shapes()
+    centroids = commune_centroids()
     demo = _commune_demographics()
     first_hour: dict = {}
     per_step = []
@@ -103,6 +123,9 @@ def threatened_communities(lat: float = Query(...), lon: float = Query(...),
     threatened = []
     for code, hour in sorted(first_hour.items(), key=lambda kv: kv[1]):
         d = demo.get(code, {})
+        cx, cy = centroids.get(code, (None, None))
+        dist = round(ops.haversine_km(lon, lat, cx, cy), 2) if cx is not None else None
+        eta = round(dist / ros, 2) if dist is not None and ros else None
         threatened.append({
             "code": code,
             "commune": d.get("name"),
@@ -112,15 +135,27 @@ def threatened_communities(lat: float = Query(...), lon: float = Query(...),
             "area_km2": d.get("area_km2"),
             "first_hour": hour,
             "band": ops.community_band(hour),
+            "distance_km": dist,
+            "eta_hours": eta,
         })
     aff_codes = set(first_hour)
-    villages = [{**v, "population_status": "ESTIMATED", "band": ops.community_band(
-        first_hour.get(v.get("code")))}
-        for v in VILLAGES if v.get("code") in aff_codes]
+    villages = []
+    for v in VILLAGES:
+        if v.get("code") not in aff_codes:
+            continue
+        try:
+            vd = round(ops.haversine_km(lon, lat, v["coords"][0], v["coords"][1]), 2)
+            veta = round(vd / ros, 2) if ros else None
+        except Exception:
+            vd, veta = None, None
+        villages.append({**v, "population_status": "ESTIMATED",
+                         "band": ops.community_band(first_hour.get(v.get("code"))),
+                         "distance_km": vd, "eta_hours": veta})
     summary = {b: sum(1 for t in threatened if t["band"] == b)
                for b in ("CRITICAL", "THREATENED", "WATCH", "SAFE")}
     return {
         "fire": {"lon": lon, "lat": lat},
+        "ros_kmh": ros,
         "spread_model": spread_svc.MODEL,
         "communes": threatened,
         "n_communes": len(threatened),
