@@ -26,10 +26,12 @@ type Ctx = {
   setFps: (fps: number)=>void;
 }
 
-export default function TwinScene({ sim, waters, opsAssets, communeFc, show, plan, aoiKm, focusKey, onError, onFps, onTerrain }: {
+export default function TwinScene({ sim, waters, opsAssets, communeFc, show, plan, aoiKm, focusKey, focusReq, orbitMode, onError, onFps, onTerrain }: {
   sim: any; waters: any[]; opsAssets: any[];
   communeFc: any | null;
   show: TwinShow; plan?: any; aoiKm?: number | null; focusKey?: number;
+  focusReq?: { key: number; lon: number; lat: number; label: string } | null;
+  orbitMode?: 'tactical' | 'cinematic';
   onError: (msg: string)=>void; onFps: (fps: number)=>void; onTerrain?: (stats: any)=>void;
 }){
   const divRef = useRef<HTMLDivElement>(null)
@@ -38,6 +40,10 @@ export default function TwinScene({ sim, waters, opsAssets, communeFc, show, pla
   showRef.current = show
   const planRef = useRef(plan)
   planRef.current = plan
+  const focusReqRef = useRef(focusReq)
+  focusReqRef.current = focusReq
+  const aoiKmRef = useRef(aoiKm)
+  aoiKmRef.current = aoiKm
   const onTerrainRef = useRef(onTerrain)
   onTerrainRef.current = onTerrain
   useEffect(()=>{
@@ -47,7 +53,7 @@ export default function TwinScene({ sim, waters, opsAssets, communeFc, show, pla
     let cancelled = false
     ;(async ()=>{
       try{
-        ctx = await buildScene(div, sim, waters, opsAssets, communeFc, showRef.current, planRef.current, onFps, setNote)
+        ctx = await buildScene(div, sim, waters, opsAssets, communeFc, showRef.current, planRef.current, aoiKm ?? null, onFps, setNote, (s)=>{ try{ onTerrainRef.current?.(s) }catch{} })
         if(cancelled){ destroyScene(ctx); ctx = null }
       }catch(e: any){
         if(!cancelled) onError(String(e?.message || e))
@@ -62,18 +68,35 @@ export default function TwinScene({ sim, waters, opsAssets, communeFc, show, pla
     const d = (divRef.current as any)?._twin as Ctx | undefined
     if(d && sim){
       updateDynamic(d, sim, waters, opsAssets, communeFc, showRef.current, planRef.current)
-      try{ onTerrainRef.current?.((d as any)._terrainStats || null) }catch{}
+      try{ onTerrainRef.current?.({ ...((d as any)._terrainStats || null), ...(d as any)._texInfo || null }) }catch{}
     }
   }, [sim, waters, opsAssets, communeFc, show, plan])
-  // Focus Fire + AOI framing without rebuilding the scene
+  // Focus Fire/Water/Community/Route + orbit modes (M10) without rebuild
   useEffect(()=>{
     const d = (divRef.current as any)?._twin as any
     if(!d || !focusKey) return
-    const rKm = aoiKm || d.aoiKm || 2
-    d.controls.target.set(0, 0, 0)
-    d.camera.position.set(rKm * 1000 * 1.1, rKm * 1000 * 0.9, rKm * 1000 * 1.1)
-    d.controls.update()
-  }, [focusKey, aoiKm])
+    const fr = focusReqRef.current
+    if(fr && typeof fr.lon === 'number'){
+      import('./twinMath').then(m=>{
+        const p = m.toLocal(fr.lon, fr.lat, d.origin)
+        d.controls.target.set(p.x, d.sampler(p.x, p.z), p.z)
+        const dist = (aoiKmRef.current || d.aoiKm || 2) * 1000
+        d.camera.position.set(p.x + dist * 0.7, dist * 0.8, p.z + dist * 0.7)
+        d.controls.update()
+      })
+    } else {
+      const rKm = aoiKmRef.current || d.aoiKm || 2
+      d.controls.target.set(0, 0, 0)
+      d.camera.position.set(rKm * 1000 * 1.1, rKm * 1000 * 0.9, rKm * 1000 * 1.1)
+      d.controls.update()
+    }
+  }, [focusKey])
+  useEffect(()=>{
+    const d = (divRef.current as any)?._twin as any
+    if(!d) return
+    d.controls.autoRotate = orbitMode === 'cinematic'
+    d.controls.autoRotateSpeed = 0.7
+  }, [orbitMode])
   // canopy rebuilds only on ignition move (imagery sampling is expensive)
   useEffect(()=>{
     const d = (divRef.current as any)?._twin as any
@@ -115,8 +138,9 @@ function destroyScene(c: Ctx){
 }
 
 async function buildScene(div: HTMLDivElement, sim: any, waters: any[], opsAssets: any[],
-  communeFc: any, show: TwinShow, plan: any, onFps: (fps: number)=>void,
-  setNote: (s: string)=>void): Promise<Ctx>{
+  communeFc: any, show: TwinShow, plan: any, aoiKmProp: number | null | undefined,
+  onFps: (fps: number)=>void, setNote: (s: string)=>void,
+  onTerrainCb?: (s: any)=>void): Promise<Ctx>{
   const W = div.clientWidth || 800, H = div.clientHeight || 500
   const weak = (navigator as any).hardwareConcurrency <= 4 || W < 640 ||
     (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
@@ -141,8 +165,8 @@ async function buildScene(div: HTMLDivElement, sim: any, waters: any[], opsAsset
   controls.maxDistance = 12000
 
   // M11 — sun + sky + fog (readability, not cinematic)
-  scene.add(new THREE.HemisphereLight(0xcfe5ff, 0x3d4a35, 0.9))
-  const sun = new THREE.DirectionalLight(0xfff2dd, 1.6)
+  scene.add(new THREE.HemisphereLight(0xcfe5ff, 0x3d4a35, 0.6))
+  const sun = new THREE.DirectionalLight(0xfff2dd, 1.2)
   sun.position.set(-3000, 4000, 1500)
   if(quality === 'high'){
     sun.castShadow = true
@@ -154,7 +178,8 @@ async function buildScene(div: HTMLDivElement, sim: any, waters: any[], opsAsset
   const origin = { lon: sim.ignition.lon, lat: sim.ignition.lat }
   const radiusKm = aoiRadiusKm(sim.spread?.steps)
   // <TerrainMesh /> — real DEM mesh (M2/C), never a flat plane
-  const terr = await TerrainMesh(origin, quality)
+  const terr = await TerrainMesh(origin, quality, aoiKmProp ?? undefined)
+  try{ onTerrainCb?.({ texStatus: (terr as any).texStatus, meshSegs: (terr as any).meshSegs }) }catch{}
   const { sampler, sizeM } = terr
   const world = new THREE.Group()
   const terrain = terr.mesh
@@ -171,7 +196,7 @@ async function buildScene(div: HTMLDivElement, sim: any, waters: any[], opsAsset
 
   const c: Ctx = { renderer, scene, camera, controls, sampler: Hrel, origin,
     sizeM, raf: 0, dead: false, updaters: [], quality, weak,
-    lowFpsSince: null, degraded: false, setFps: onFps, aoiKm: radiusKm }
+    lowFpsSince: null, degraded: false, setFps: onFps, aoiKm: aoiKmProp ?? radiusKm }
   ;(div as any)._twin = c
 
   // resize
@@ -217,7 +242,7 @@ async function buildScene(div: HTMLDivElement, sim: any, waters: any[], opsAsset
   updateDynamic(c, sim, waters, opsAssets, communeFc, show, plan)
   ;(c as any)._texCanvas = terr.texCanvas
   ;(c as any)._block = terr.block
-  ;(c as any)._grid = (terr as any).grid
+  ;(c as any)._texInfo = { texStatus: (terr as any).texStatus, meshSegs: (terr as any).meshSegs }
   ;(c as any)._canopyKey = null
   return c
 }

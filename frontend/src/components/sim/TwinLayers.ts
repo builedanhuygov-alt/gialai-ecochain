@@ -59,24 +59,39 @@ function slopeAtGrid(H: Float32Array, n: number, i: number, j: number, cell: num
   return Math.sqrt(dx * dx + dy * dy)
 }
 
-// <TerrainMesh /> — real DEM mesh (M2), never a flat plane. Throws honestly
+// <TerrainMesh /> — real DEM mesh (M1/M2), never a flat plane. Throws honestly
 // when tiles are unreachable so the UI can fall back to 2D.
-export async function TerrainMesh(origin: { lon: number; lat: number }, quality: 'high' | 'low'){
+// M1 grid: mesh segments scale with AOI (256/192/160 high, 128/96/80 low).
+// Sampling stays native to the 256px DEM tile — denser grids would invent
+// detail that is not in the source, so segment counts above are the honest cap.
+// M3 texture fallback: Esri z14 → Esri z13 → OSM z14 (all real tiles).
+export async function TerrainMesh(origin: { lon: number; lat: number }, quality: 'high' | 'low', aoiKm?: number | null){
   const Z = 14
   const t0 = lonLatToTile(origin.lon, origin.lat, Z)
   const bx = t0.x % 2 === 0 ? t0.x : t0.x - 1
   const by = t0.y % 2 === 0 ? t0.y : t0.y - 1
+  const OSM = (z: number, x: number, y: number)=> `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
   let demImgs: HTMLImageElement[][]
   let texImgs: HTMLImageElement[][]
+  let texStatus = 'esri-z14'
   try{
     demImgs = [[await loadImage(TERRA(Z, bx, by)), await loadImage(TERRA(Z, bx + 1, by))],
                [await loadImage(TERRA(Z, bx, by + 1)), await loadImage(TERRA(Z, bx + 1, by + 1))]]
     texImgs = [[await loadImage(ESRI(Z, bx, by)), await loadImage(ESRI(Z, bx + 1, by))],
                [await loadImage(ESRI(Z, bx, by + 1)), await loadImage(ESRI(Z, bx + 1, by + 1))]]
   }catch{
-    const s13 = lonLatToTile(origin.lon, origin.lat, 13)
-    demImgs = [[await loadImage(TERRA(13, s13.x, s13.y))]]
-    texImgs = [[await loadImage(ESRI(13, s13.x, s13.y))]]
+    try{
+      const s13 = lonLatToTile(origin.lon, origin.lat, 13)
+      demImgs = [[await loadImage(TERRA(13, s13.x, s13.y))]]
+      texImgs = [[await loadImage(ESRI(13, s13.x, s13.y))]]
+      texStatus = 'esri-z13-fallback'
+    }catch{
+      demImgs = [[await loadImage(TERRA(Z, bx, by)), await loadImage(TERRA(Z, bx + 1, by))],
+                 [await loadImage(TERRA(Z, bx, by + 1)), await loadImage(TERRA(Z, bx + 1, by + 1))]]
+      texImgs = [[await loadImage(OSM(Z, bx, by)), await loadImage(OSM(Z, bx + 1, by))],
+                 [await loadImage(OSM(Z, bx, by + 1)), await loadImage(OSM(Z, bx + 1, by + 1))]]
+      texStatus = 'osm-fallback'
+    }
   }
   const S = 512
   const dem = drawTiles(demImgs, S)
@@ -95,7 +110,11 @@ export async function TerrainMesh(origin: { lon: number; lat: number }, quality:
   const sizeM = Math.max(
     (block.e - block.w) * 111320 * Math.cos(origin.lat * Math.PI / 180),
     (block.n - block.s) * 110540)
-  const N = quality === 'high' ? 129 : 65
+  // M1/M2/M12: mesh segments by AOI size × device class (dynamic resolution).
+  const aoi = aoiKm || 3
+  const N = quality === 'high'
+    ? (aoi <= 1.5 ? 257 : aoi <= 3.5 ? 193 : 161)
+    : (aoi <= 1.5 ? 129 : aoi <= 3.5 ? 97 : 81)
   const EXAG = 1.5 // labeled in UI
   const Hgrid = new Float32Array(N * N)
   let minH = Infinity
@@ -126,7 +145,7 @@ export async function TerrainMesh(origin: { lon: number; lat: number }, quality:
   tg.rotateX(-Math.PI / 2)
   const pos = tg.attributes.position
   const colors = new Float32Array(pos.count * 3)
-  const cA = new THREE.Color(0x8a9a5b), cB = new THREE.Color(0x5b6e46), cC = new THREE.Color(0x9c8a6d)
+  const cA = new THREE.Color(0x7a8a4f), cB = new THREE.Color(0x445239), cC = new THREE.Color(0xb08d57)
   const tmpC = new THREE.Color()
   let maxSlope = 0.001
   const slopes = new Float32Array(pos.count)
@@ -148,39 +167,76 @@ export async function TerrainMesh(origin: { lon: number; lat: number }, quality:
   tg.computeVertexNormals()
   const tex3 = new THREE.CanvasTexture(tex.canvas)
   tex3.colorSpace = THREE.SRGBColorSpace
+  tex3.anisotropy = 4 // crisper ground at grazing angles (no extra downloads)
   const mesh = new THREE.Mesh(tg, new THREE.MeshStandardMaterial({ map: tex3, vertexColors: true, roughness: 1 }))
   mesh.receiveShadow = quality === 'high'
-  return { mesh, sampler, origin, sizeM, texCanvas: tex.canvas, block,
+  return { mesh, sampler, origin, sizeM, texCanvas: tex.canvas, block, texStatus, meshSegs: N - 1,
            grid: { H: Hgrid, n: N, cell, sizeM } }
 }
 
-// <FireEllipseMesh /> — M4 server ellipses draped on terrain.
+// <FireEllipseMesh /> — M4/M5 server ellipses draped on terrain.
+// 128–256 vertices via closed Catmull-Rom resampling of the server ring
+// (same polygon, smooth edges — no new geometry invented). Soft gradient =
+// core fill + outer glow ring. Current fire pulses (opacity) to stand out.
+function smoothRing(pts: Array<{ x: number; y: number }>, n: number){
+  const v3 = pts.map(p=> new THREE.Vector2(p.x, p.y))
+  const curve = new THREE.SplineCurve(v3)
+  return curve.getPoints(n)
+}
+
 export function FireEllipseMesh(g: THREE.Group, c: Ctx, sim: any){
   const H = c.sampler
   const steps = [{ hour: 0, polygon: null }, ...(sim.spread?.steps || [])]
+  const NPTS = c.quality === 'high' ? 200 : 128
   steps.forEach((s: any, idx: number)=>{
-    const shape = new THREE.Shape()
+    let pts2d: Array<{ x: number; y: number }>
     if(!s.polygon){
-      shape.absarc(0, 0, 60, 0, Math.PI * 2)
+      pts2d = []
+      for(let i = 0; i < 24; i++){
+        const a = (i / 24) * Math.PI * 2
+        pts2d.push({ x: Math.cos(a) * 60, y: Math.sin(a) * 60 })
+      }
     } else {
       const ring = s.polygon.coordinates[0]
-      ring.forEach((p: number[], i: number)=>{
+      pts2d = ring.map((p: number[])=>{
         const q = toLocal(p[0], p[1], c.origin)
-        if(i === 0) shape.moveTo(q.x, -q.z)
-        else shape.lineTo(q.x, -q.z)
+        return { x: q.x, y: -q.z }
       })
     }
-    const geo = new THREE.ShapeGeometry(shape)
-    const pp = geo.attributes.position
-    for(let k = 0; k < pp.count; k++){
-      const x = pp.getX(k), z = -pp.getY(k)
-      pp.setXYZ(k, x, H(x, z) + 10 + idx * 4, z)
+    const smooth = smoothRing(pts2d, NPTS)
+    const shape = new THREE.Shape()
+    smooth.forEach((p, i)=> { if(i === 0) shape.moveTo(p.x, p.y); else shape.lineTo(p.x, p.y) })
+    shape.closePath()
+    const lift = 10 + idx * 4
+    const drape = (geo: THREE.BufferGeometry, extra: number)=>{
+      const pp = geo.attributes.position
+      for(let k = 0; k < pp.count; k++){
+        const x = pp.getX(k), z = -pp.getY(k)
+        pp.setXYZ(k, x, H(x, z) + lift + extra, z)
+      }
+      geo.computeVertexNormals()
+      return geo
     }
-    geo.computeVertexNormals()
     const color = STEP_COLORS_3D[s.hour] || '#F97316'
-    g.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: s.hour === 0 ? 0.75 : 0.42,
-      side: THREE.DoubleSide, depthWrite: false })))
+    const core = new THREE.Mesh(drape(new THREE.ShapeGeometry(shape), 0),
+      new THREE.MeshBasicMaterial({ color, transparent: true,
+        opacity: s.hour === 0 ? 0.8 : 0.45,
+        side: THREE.DoubleSide, depthWrite: false }))
+    g.add(core)
+    // soft outer glow: same shape, slightly higher + lower opacity
+    const glow = new THREE.Mesh(drape(new THREE.ShapeGeometry(shape), 6),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16,
+        side: THREE.DoubleSide, depthWrite: false }))
+    g.add(glow)
+    // crisp edge
+    const edge = smooth.map(p=> new THREE.Vector3(p.x, 0, -p.y))
+    const edgeGeo = new THREE.BufferGeometry().setFromPoints(
+      edge.map(v=> new THREE.Vector3(v.x, H(v.x, v.z) + lift + 2, v.z)))
+    g.add(new THREE.LineLoop(edgeGeo, new THREE.LineBasicMaterial({ color })))
+    if(s.hour === 0){
+      const m = core.material as THREE.MeshBasicMaterial
+      c.updaters.push((t: number)=>{ m.opacity = 0.62 + 0.22 * Math.sin(t * 3) })
+    }
   })
 }
 
@@ -225,7 +281,10 @@ export function ThreatenedAssetLayer(g: THREE.Group, c: Ctx, sim: any,
   mk(new THREE.CylinderGeometry(10, 14, 90, 8), items.filter(i=> i.kind === 'watchtower'))
 }
 
-// <RouteImpactLayer /> — M8 band-colored draped lines.
+// <RouteImpactLayer /> — M7 routes raised on terrain with outline.
+// TubeGeometry casing (white) + band-colored core: real outline visible at
+// any zoom (LineBasicMaterial is 1px everywhere). Primary route gets a
+// brighter core via plan highlight passed in show? No — band color rules.
 export function RouteImpactLayer(g: THREE.Group, c: Ctx, sim: any, opsAssets: any[]){
   const H = c.sampler
   for(const r of (sim.routes || [])){
@@ -236,10 +295,14 @@ export function RouteImpactLayer(g: THREE.Group, c: Ctx, sim: any, opsAssets: an
     for(const line of lines){
       const v3 = line.map((p: number[])=>{
         const q = toLocal(p[0], p[1], c.origin)
-        return new THREE.Vector3(q.x, H(q.x, q.z) + 8, q.z)
+        return new THREE.Vector3(q.x, H(q.x, q.z) + 12, q.z)
       })
-      const lg = new THREE.BufferGeometry().setFromPoints(v3)
-      g.add(new THREE.Line(lg, new THREE.LineBasicMaterial({ color: r.color || '#3B82F6' })))
+      if(v3.length < 2) continue
+      const curve = new THREE.CatmullRomCurve3(v3)
+      const tube = new THREE.TubeGeometry(curve, 48, 9, 5, false)
+      g.add(new THREE.Mesh(tube, new THREE.MeshBasicMaterial({ color: '#FFFFFF' })))
+      const core = new THREE.TubeGeometry(curve, 48, 4.5, 5, false)
+      g.add(new THREE.Mesh(core, new THREE.MeshBasicMaterial({ color: r.color || '#3B82F6' })))
     }
   }
 }
@@ -395,9 +458,12 @@ export function WindFieldLayer(g: THREE.Group, c: Ctx, sim: any){
   }
   const dir = (sim.wind_layer.direction_deg * Math.PI) / 180
   const sp = sim.wind_layer.speed_kmh || 0
+  // M6 density by AOI: 1km dense (7x7), 3km medium (5x5), 5km sparse (3x3)
+  const aoiKm = (c as any).aoiKm || 3
+  const half = aoiKm <= 1.5 ? 3 : aoiKm <= 3.5 ? 2 : 1
   const R = c.sizeM / 2 * 0.7
   const arrows: THREE.ArrowHelper[] = []
-  for(let gx = -2; gx <= 2; gx++) for(let gz = -2; gz <= 2; gz++){
+  for(let gx = -half; gx <= half; gx++) for(let gz = -half; gz <= half; gz++){
     const x = gx * R / 2.5, z = gz * R / 2.5
     const len = 60 + sp * 5
     const ah = new THREE.ArrowHelper(
@@ -509,12 +575,27 @@ export function ResponsePlanLayer(g: THREE.Group, c: Ctx, sim: any, plan: any,
   const wFull = waters.find((x: any)=> x.name === wName)
   if(wFull && typeof wFull.longitude === 'number'){
     const wp = P(wFull.longitude, wFull.latitude, 12)
+    // M8 shoreline: static priority-color ring + expanding ripple (no water
+    // body polygon exists in data — rings mark the asset, honestly labeled).
+    const prio = plan.primary_water?.priority
+    const wcol = prio === 'A' ? '#2563EB' : prio === 'B' ? '#0EA5E9' : '#94A3B8'
     const ring = new THREE.Mesh(new THREE.RingGeometry(45, 75, 24),
-      new THREE.MeshBasicMaterial({ color: '#2563EB', transparent: true,
+      new THREE.MeshBasicMaterial({ color: wcol, transparent: true,
         opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }))
     ring.rotation.x = -Math.PI / 2
     ring.position.copy(wp)
     g.add(ring)
+    const rip = new THREE.Mesh(new THREE.RingGeometry(75, 82, 32),
+      new THREE.MeshBasicMaterial({ color: wcol, transparent: true,
+        opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }))
+    rip.rotation.x = -Math.PI / 2
+    rip.position.copy(wp)
+    g.add(rip)
+    c.updaters.push((t: number)=>{
+      const k = (t % 2.4) / 2.4
+      rip.scale.setScalar(1 + k * 1.6)
+      ;(rip.material as THREE.MeshBasicMaterial).opacity = 0.5 * (1 - k)
+    })
   }
   const sName = plan.primary_station?.station_name
   const st = opsAssets.find((a: any)=> a.name === sName &&
@@ -557,42 +638,61 @@ export async function buildCanopy(c: Ctx, sim: any, texCanvas: HTMLCanvasElement
   block: { w: number; n: number; e: number; s: number } | null, show: boolean){
   void sim
   if(!show || !texCanvas || !block) return
+  // M4 canopy PATCHES (not individual trees): aggregate green pixels into
+  // coarse density cells → one instanced disc per vegetated cell, radius and
+  // shade by local density. Labeled ESTIMATED canopy proxy everywhere.
   const S = texCanvas.width
   const tctx = texCanvas.getContext('2d', { willReadFrequently: true })!
   const px = tctx.getImageData(0, 0, S, S).data
-  const cap = c.quality === 'high' ? 2500 : 800
-  const step = Math.max(1, Math.floor(S / 160))
-  const mats: number[] = []
-  for(let py = 0; py < S && mats.length / 3 < cap; py += step){
-    for(let pxI = 0; pxI < S && mats.length / 3 < cap; pxI += step){
+  const CELLN = 40
+  const dens = new Float32Array(CELLN * CELLN)
+  const samp = new Int32Array(CELLN * CELLN)
+  const step = Math.max(1, Math.floor(S / 200))
+  for(let py = 0; py < S; py += step){
+    for(let pxI = 0; pxI < S; pxI += step){
       const o = (py * S + pxI) * 4
-      if(!isCanopyPixel(px[o], px[o + 1], px[o + 2])) continue
-      const lon = block.w + ((pxI / (S - 1)) * (block.e - block.w))
-      const lat = block.n - ((py / (S - 1)) * (block.n - block.s))
-      const q = toLocal(lon, lat, c.origin)
-      if(Math.abs(q.x) > c.sizeM / 2 || Math.abs(q.z) > c.sizeM / 2) continue
-      mats.push(q.x, c.sampler(q.x, q.z), q.z)
+      const ci = Math.min(CELLN - 1, Math.floor((pxI / S) * CELLN))
+      const cj = Math.min(CELLN - 1, Math.floor((py / S) * CELLN))
+      samp[cj * CELLN + ci]++
+      if(isCanopyPixel(px[o], px[o + 1], px[o + 2])) dens[cj * CELLN + ci]++
     }
   }
-  if(!mats.length) return
+  type Patch = { x: number; z: number; r: number; d: number }
+  const patches: Patch[] = []
+  const cellM = c.sizeM / CELLN
+  for(let cj = 0; cj < CELLN; cj++) for(let ci = 0; ci < CELLN; ci++){
+    const n = samp[cj * CELLN + ci]
+    if(!n) continue
+    const d = dens[cj * CELLN + ci] / n
+    if(d < 0.25) continue // only real vegetated cells become patches
+    const lon = block.w + (((ci + 0.5) / CELLN) * (block.e - block.w))
+    const lat = block.n - (((cj + 0.5) / CELLN) * (block.n - block.s))
+    const q = toLocal(lon, lat, c.origin)
+    if(Math.abs(q.x) > c.sizeM / 2 || Math.abs(q.z) > c.sizeM / 2) continue
+    patches.push({ x: q.x, z: q.z, r: cellM * (0.35 + d * 0.3), d })
+    if(patches.length >= 1200) break
+  }
+  if(!patches.length) return
   const old = c.scene.getObjectByName('twin-canopy')
   if(old){
     c.scene.remove(old)
     try{ (old as any).geometry?.dispose?.(); (old as any).material?.dispose?.() }catch{}
   }
-  const geo = new THREE.ConeGeometry(9, 26, 5)
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.9 })
-  const im = new THREE.InstancedMesh(geo, mat, mats.length / 3)
+  const geo = new THREE.CircleGeometry(1, 10)
+  geo.rotateX(-Math.PI / 2)
+  const mat = new THREE.MeshStandardMaterial({ roughness: 1, transparent: true, opacity: 0.75, depthWrite: false })
+  const im = new THREE.InstancedMesh(geo, mat, patches.length)
   const m4 = new THREE.Matrix4()
   const col = new THREE.Color()
-  for(let i = 0; i < mats.length / 3; i++){
-    m4.makeTranslation(mats[i * 3], mats[i * 3 + 1] + 13, mats[i * 3 + 2])
+  const sc = new THREE.Vector3()
+  patches.forEach((p, i)=>{
+    m4.compose(new THREE.Vector3(p.x, c.sampler(p.x, p.z) + 6, p.z),
+      new THREE.Quaternion(), sc.set(p.r, 1, p.r))
     im.setMatrixAt(i, m4)
-    im.setColorAt(i, col.setHSL(0.29 + Math.random() * 0.06, 0.45, 0.28 + Math.random() * 0.12))
-  }
+    im.setColorAt(i, col.setHSL(0.26 + p.d * 0.08, 0.5, 0.24 + p.d * 0.12))
+  })
   im.instanceMatrix.needsUpdate = true
   if(im.instanceColor) im.instanceColor.needsUpdate = true
-  im.castShadow = c.quality === 'high'
   im.name = 'twin-canopy'
   c.scene.add(im)
 }

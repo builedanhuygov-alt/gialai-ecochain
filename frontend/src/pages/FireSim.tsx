@@ -223,6 +223,38 @@ export default function FireSim(){
       try{ map?.flyTo({ center:[lon, lat], zoom: z, duration:1200 }) }catch{}
     } else setFocusKey(k=> k + 1)
   }
+  // M10 focus targets (coords resolved from loaded data, never guessed)
+  const [focusReq, setFocusReq] = useState<any>(null)
+  const [orbitMode, setOrbitMode] = useState<'tactical'|'cinematic'>('tactical')
+  const focusTarget = (kind: 'fire' | 'water' | 'community' | 'route')=>{
+    if(mode === '2d'){
+      const targets: Record<string, [number, number] | null> = { fire: [lon, lat],
+        water: null, community: null, route: null }
+      const w = waters.find((x: any)=> x.name === plan?.primary_water?.name || x.name === data?.waters?.[0]?.name)
+      if(w && typeof w.longitude === 'number') targets.water = [w.longitude, w.latitude]
+      const v = (data?.villages || [])[0]
+      if(v?.coords) targets.community = [v.coords[0], v.coords[1]]
+      const rt = opsAssets.find((a: any)=> a.id === plan?.primary_route?.id)
+      const rc = rt?.geometry?.type === 'LineString' ? rt.geometry.coordinates[0]
+        : rt?.geometry?.coordinates?.[0]?.[0]
+      if(rc) targets.route = [rc[0], rc[1]]
+      const t = targets[kind]
+      if(t){ try{ map?.flyTo({ center: t, zoom: 12, duration: 1200 }) }catch{} }
+      return
+    }
+    const base = { fire: { lon, lat }, water: null as any, community: null as any, route: null as any }
+    const w = waters.find((x: any)=> x.name === plan?.primary_water?.name || x.name === data?.waters?.[0]?.name)
+    if(w && typeof w.longitude === 'number') base.water = { lon: w.longitude, lat: w.latitude }
+    const v = (data?.villages || [])[0]
+    if(v?.coords) base.community = { lon: v.coords[0], lat: v.coords[1] }
+    const rt = opsAssets.find((a: any)=> a.id === plan?.primary_route?.id)
+    const rc = rt?.geometry?.type === 'LineString' ? rt.geometry.coordinates[0]
+      : rt?.geometry?.coordinates?.[0]?.[0]
+    if(rc) base.route = { lon: rc[0], lat: rc[1] }
+    const pick = (base as any)[kind] || { lon, lat }
+    setFocusReq({ key: Date.now(), lon: pick.lon, lat: pick.lat, label: kind })
+    setFocusKey(k=> k + 1)
+  }
   // Module 7 compare: second scenario (gió khác), overlay nét đứt trên 2D
   const runCompare = async ()=>{
     setLoading(true); setError('')
@@ -343,7 +375,7 @@ export default function FireSim(){
           )}
           {mode === '3d' && data && !demError && (
             <TwinScene sim={simView} waters={waters} opsAssets={opsAssets} communeFc={communeFc}
-              show={show3d as TwinShow} plan={plan} aoiKm={aoiKm} focusKey={focusKey}
+              show={show3d as TwinShow} plan={plan} aoiKm={aoiKm} focusKey={focusKey} focusReq={focusReq} orbitMode={orbitMode}
               onError={(m)=> setDemError(m)} onFps={setFps} onTerrain={setTerrainStats} />
           )}
           {mode === '3d' && demError && (
@@ -358,7 +390,7 @@ export default function FireSim(){
           <div style={{position:'absolute', top:8, left:8, marginTop:34, background:'rgba(255,255,255,0.95)', borderRadius:8, padding:'6px 10px', fontSize:11, zIndex:6}}>
             <b>🔴 hiện tại</b> · <b style={{color:'#F97316'}}>🟠 +1h</b> · <b style={{color:'#B45309'}}>🟡 +3h</b> · <b style={{color:'#525252'}}>⚫ +6h</b>
             {ext12 && <><b style={{color:'#1E293B'}}> · ⬛ +12h</b></>}
-            {mode === '3d' && <span style={{color:'#64748B'}}> · địa hình DEM thật ×1.5{fps !== null && <> · {fps} FPS</>}</span>}
+            {mode === '3d' && <span style={{color:'#64748B'}}> · địa hình DEM thật ×1.5{terrainStats?.meshSegs ? <> · lưới {terrainStats.meshSegs}²</> : null}{terrainStats?.texStatus ? <> · ảnh {terrainStats.texStatus}</> : null}{fps !== null && <> · {fps} FPS</>}</span>}
           </div>
           {/* Module 10 timeline: T+0 → steps + playback (lọc ellipse/xã/story) */}
           {data?.spread?.steps && (
@@ -374,6 +406,16 @@ export default function FireSim(){
           {mode === '3d' && (
             <div style={{position:'absolute', bottom:8, left:8, background:'rgba(255,255,255,0.92)', borderRadius:8, padding:'4px 10px', fontSize:10, color:'#64748B', zIndex:6}}>
               Cây = proxy tán từ ảnh vệ tinh (ESTIMATED) · kéo xoay / lăn zoom / chuột phải nghiêng
+            </div>
+          )}
+          {mode === '3d' && (
+            <div style={{position:'absolute', top:8, right:8, zIndex:7, display:'flex', gap:4, flexWrap:'wrap', maxWidth:220, justifyContent:'flex-end'}}>
+              {[['fire','🔥 Cháy'],['water','💧 Nước'],['community','🏘 Xã'],['route','🛣 Tuyến']].map(([k, label])=> (
+                <button key={k} onClick={()=> focusTarget(k as any)} style={{fontSize:10, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', background:'#fff', padding:'3px 10px', cursor:'pointer'}}>{label}</button>
+              ))}
+              <button onClick={()=> setOrbitMode(m=> m === 'tactical' ? 'cinematic' : 'tactical')} title="Cinematic: tự xoay chậm / Tactical: điều khiển tay" style={{fontSize:10, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', background: orbitMode === 'cinematic' ? '#0B1412' : '#fff', color: orbitMode === 'cinematic' ? '#fff' : '#0B1412', padding:'3px 10px', cursor:'pointer'}}>
+                {orbitMode === 'cinematic' ? '🎥 Cinematic' : '🎯 Tactical'}
+              </button>
             </div>
           )}
         </div>

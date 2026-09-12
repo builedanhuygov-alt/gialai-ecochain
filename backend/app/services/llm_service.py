@@ -124,7 +124,7 @@ async def what_if_advisor(district: str, temp_delta: float, ndvi: float) -> Dict
         return {"status": "LIVE", "provider": "Gemini", "answer": resp.text[:800]}
     except Exception as e:
         return {"status": "UNAVAILABLE",
-                "answer": f"Chưa tư vấn được kịch bản {district} (thiếu key/lỗi LLM: {str(e)[:80]}) — không suy đoán số % nguy cơ khi chưa phân tích.",
+                "answer": f"Chưa tư vấn được kịch bản {district} (thiếu key/lỗi LLM: {str(e)[:80]}) — không suy đoán mức nguy cơ khi chưa phân tích.",
                 "reason": "LLM what-if chưa khả dụng"}
 
 async def generate_pccc_scenario(prompt: str = "Simulate forest fire spread in Gia Lai with wind 20km/h") -> Dict:
