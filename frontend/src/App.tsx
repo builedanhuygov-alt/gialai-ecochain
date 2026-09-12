@@ -12,6 +12,7 @@ const MapPage = lazy(()=> import('./pages/MapPage'))
 const EventIntelligence = lazy(()=> import('./pages/EventIntelligence'))
 const EventsList = lazy(()=> import('./pages/EventIntelligence').then(m=> ({ default: m.EventsList })))
 const WhatIfLab = lazy(()=> import('./pages/WhatIfLab'))
+const FireSim = lazy(()=> import('./pages/FireSim'))
 const Missions = lazy(()=> import('./pages/Missions'))
 const Forest = lazy(()=> import('./pages/Forest'))
 const Disaster = lazy(()=> import('./pages/Disaster'))
@@ -33,7 +34,7 @@ const Viewer = lazy(()=> import('./pages/Viewer'))
 
 const TITLES: Record<string,string> = {
   '/': 'Bản đồ cháy rừng Gia Lai',
-  '/events': 'Sự kiện', '/what-if': 'What-if Lab', '/missions': 'Nhiệm vụ',
+  '/events': 'Sự kiện', '/what-if': 'What-if Lab', '/firesim': 'Mô phỏng cháy 3D', '/missions': 'Nhiệm vụ',
   '/map': 'Bản đồ', '/forest': 'Rừng', '/disaster': 'Thiên tai',
   '/agriculture': 'Nông nghiệp', '/carbon': 'Carbon', '/eudr': 'EUDR',
   '/logistics': 'Logistics', '/twin': 'Bản sao số', '/community': 'Cộng đồng',
@@ -281,6 +282,7 @@ function AnimatedRoutes(){
           <Route path="/events" element={<PageTransition><EventsList/></PageTransition>} />
           <Route path="/events/:id" element={<PageTransition><EventIntelligence/></PageTransition>} />
           <Route path="/what-if" element={<PageTransition><WhatIfLab/></PageTransition>} />
+          <Route path="/firesim" element={<PageTransition><FireSim/></PageTransition>} />
           <Route path="/missions" element={<PageTransition><Missions/></PageTransition>} />
           {/* Legacy intelligence kept as hidden capabilities, not primary nav */}
           <Route path="/map" element={<PageTransition><MapPage/></PageTransition>} />

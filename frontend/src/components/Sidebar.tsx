@@ -11,6 +11,7 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
       { to:'/command', label: t('nav.command'), icon: Radio },
       { to:'/events', label: t('nav.events'), icon: Flame },
       { to:'/what-if', label: t('nav.whatif'), icon: Layers },
+      { to:'/firesim', label: t('nav.firesim'), icon: Flame },
       { to:'/missions', label: t('nav.missions'), icon: FileCheck },
     ]},
     { label:'', items:[

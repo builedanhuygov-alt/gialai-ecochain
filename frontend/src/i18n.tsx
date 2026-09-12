@@ -14,6 +14,7 @@ const dict: Record<Lang, Record<string, string>> = {
     'nav.command': 'Chỉ huy',
     'nav.events': 'Event Intelligence',
     'nav.whatif': 'What-if Lab',
+    'nav.firesim': 'Mô phỏng cháy 3D',
     'nav.missions': 'Missions',
     'nav.community': 'Cộng đồng',
     'nav.twin': 'Bản sao số',

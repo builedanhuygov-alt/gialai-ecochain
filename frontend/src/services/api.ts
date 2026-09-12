@@ -45,6 +45,7 @@ export const api = {
   firmsLive: (lat = 13.9, lon = 108.3)=> req(`/api/fire/hotspots?lat=${lat}&lon=${lon}`).catch(()=> null),
   fireBrief: (name:string, lat:number, lon:number)=> req(`/api/fire/brief?administrative_unit_id=${encodeURIComponent(name)}&lat=${lat}&lon=${lon}`).catch(()=> null),
   responsePlan: (body:Record<string, unknown>)=> req('/api/v1/fires/response-plan', { method:'POST', body: JSON.stringify(body) }),
+  firesim: (body:Record<string, unknown>)=> req('/api/simulate/fire', { method:'POST', body: JSON.stringify(body) }),
   stationsNearest: (lat:number, lon:number)=> req(`/api/stations/nearest?lat=${lat}&lon=${lon}`).catch(()=> null),
   routesNearest: (lat:number, lon:number)=> req(`/api/routes/nearest?lat=${lat}&lon=${lon}`).catch(()=> null),
   threatsUnified: (lat:number, lon:number)=> req(`/api/assets/threatened?lat=${lat}&lon=${lon}`).catch(()=> null),

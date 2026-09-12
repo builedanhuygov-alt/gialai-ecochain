@@ -95,6 +95,9 @@ ASSET_STATUS = ("active", "inactive", "maintenance")
 # Giá trị ngoài enum bị API từ chối 400 — không chuẩn hóa ngầm.
 ROAD_CONDITIONS = ("GOOD", "FAIR", "POOR", "BLOCKED")
 SURFACE_TYPES = ("PAVED", "GRAVEL", "FOREST_ROAD", "TRAIL")
+# A3 canonical seasonal access. Legacy free-text (dry-season-only, year-round…)
+# normalized on write — never stored raw.
+SEASONAL_ACCESS = ("DRY_ONLY", "YEAR_ROUND")
 # Module E — viewer fallback chain (tính toán, không lưu DB).
 VIEWER_TYPES = ("streetview", "photos", "panoee", "satellite", "none")
 

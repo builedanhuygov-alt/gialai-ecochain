@@ -40,6 +40,25 @@ def _enum_or_none(raw, allowed: tuple, field: str):
     return v
 
 
+# A3 legacy free-text → canonical (documents the migration; rejects unknowns).
+_SEASONAL_ALIASES = {
+    "DRY_ONLY": "DRY_ONLY", "DRY-ONLY": "DRY_ONLY", "DRY SEASON ONLY": "DRY_ONLY",
+    "DRY-SEASON-ONLY": "DRY_ONLY", "DRY": "DRY_ONLY", "MUA KHO": "DRY_ONLY",
+    "YEAR_ROUND": "YEAR_ROUND", "YEAR-ROUND": "YEAR_ROUND", "YEAR ROUND": "YEAR_ROUND",
+    "QUANH NAM": "YEAR_ROUND", "YEARROUND": "YEAR_ROUND",
+}
+
+
+def _seasonal_or_none(raw):
+    if raw is None or str(raw).strip() == "":
+        return None
+    v = str(raw).strip().upper()
+    if v in _SEASONAL_ALIASES:
+        return _SEASONAL_ALIASES[v]
+    from app.models.ops import SEASONAL_ACCESS
+    raise HTTPException(400, f"seasonal_access must be one of {', '.join(SEASONAL_ACCESS)} (or omitted)")
+
+
 def _nearby_photo_counts(db: Session, points: list) -> dict:
     """Bulk photo proximity (≤1km) for Module E `photos` tier.
 
@@ -301,11 +320,11 @@ def patch_asset(asset_id: str, body: dict, db: Session = Depends(get_db),
         raise HTTPException(404, "Asset not found")
     editable_text = ("note", "contact", "route_type", "district", "commune",
                      "manager", "source", "contact_person", "contact_phone",
-                     "organization", "seasonal_access", "capture_source")
+                     "organization", "capture_source")
     limits = {"note": 500, "contact": 255, "route_type": 50, "district": 100,
               "commune": 100, "manager": 255, "source": 255,
               "contact_person": 255, "contact_phone": 50, "organization": 255,
-              "seasonal_access": 100, "capture_source": 255}
+              "capture_source": 255}
     for f in editable_text:
         if f in body:
             v = body[f]
@@ -319,6 +338,8 @@ def patch_asset(asset_id: str, body: dict, db: Session = Depends(get_db),
         a.road_condition = _enum_or_none(body["road_condition"], ROAD_CONDITIONS, "road_condition")
     if "surface_type" in body:
         a.surface_type = _enum_or_none(body["surface_type"], SURFACE_TYPES, "surface_type")
+    if "seasonal_access" in body:
+        a.seasonal_access = _seasonal_or_none(body["seasonal_access"])
     if "max_vehicle_tons" in body:
         v = body["max_vehicle_tons"]
         if v in (None, ""):
@@ -583,7 +604,7 @@ def create_asset(body: dict, db: Session = Depends(get_db), user=Depends(get_cur
     contact_phone = str(body.get("contact_phone") or "").strip()[:50] or None
     organization = str(body.get("organization") or "").strip()[:255] or None
     verification_date = _parse_verification_date(body.get("verification_date"))
-    seasonal_access = str(body.get("seasonal_access") or "").strip()[:100] or None
+    seasonal_access = _seasonal_or_none(body.get("seasonal_access"))
     hsv = body.get("has_streetview")
     has_streetview = None if hsv in (None, "") else bool(hsv)
     # Module 360 (M1/M5) — preview + capture metadata, NULL until real media.

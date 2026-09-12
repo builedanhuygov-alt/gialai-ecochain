@@ -70,13 +70,17 @@ def test_module_b_survey_enums_reject_garbage():
     assert ok.status_code == 200, ok.text
     d = ok.json()
     assert d["road_condition"] == "FAIR" and d["surface_type"] == "GRAVEL"
-    assert d["max_vehicle_tons"] == 5 and d["seasonal_access"] == "dry-season-only"
+    assert d["max_vehicle_tons"] == 5 and d["seasonal_access"] == "DRY_ONLY"
     # PATCH completion loop
     p = c.patch(f"/api/assets/{d['id']}", json={"road_condition": "GOOD",
+                                                "seasonal_access": "year-round",
                                                 "verification_date": "2026-09-01"}, headers=h)
     assert p.status_code == 200 and p.json()["road_condition"] == "GOOD"
+    assert p.json()["seasonal_access"] == "YEAR_ROUND"
     bad3 = c.patch(f"/api/assets/{d['id']}", json={"verification_date": "hom-qua"}, headers=h)
     assert bad3.status_code == 400
+    bad4 = c.patch(f"/api/assets/{d['id']}", json={"seasonal_access": "sometimes"}, headers=h)
+    assert bad4.status_code == 400
 
 
 def test_module_c_threatened_communities_no_probability():

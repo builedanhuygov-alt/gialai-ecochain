@@ -445,6 +445,21 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
     wind_speed = wsum.get("wind_speed") if wsum.get("wind_speed") is not None else 15.0
     wind_from = wsum.get("wind_direction") if wsum.get("wind_direction") is not None else 45.0
     wind_toward = (wind_from + 180.0) % 360.0
+    # B8 scenario override (Part D linkage): simulator-driven wind replaces
+    # live wind for spread/FWI/threats. Always labeled in wind_source.
+    wind_source = "Open-Meteo live" if wsum.get("wind_speed") is not None else "default"
+    if body.get("wind_speed_kmh") is not None:
+        try:
+            wind_speed = float(body["wind_speed_kmh"])
+            wind_source = "scenario override (simulator)"
+        except Exception:
+            pass
+    if body.get("wind_direction_deg") is not None:
+        try:
+            wind_toward = float(body["wind_direction_deg"]) % 360.0
+            wind_source = "scenario override (simulator)"
+        except Exception:
+            pass
     rain_mm, temp, humidity = None, wsum.get("temperature"), wsum.get("humidity")
     try:
         hist = await fetch_history(lat, lon)
@@ -654,7 +669,7 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
                     "wind_toward_deg": round(wind_toward, 1), "rain_14d_mm": rain_mm,
                     "status": "LIVE" if temp is not None else "UNAVAILABLE"},
         "fwi": fwi,
-        "spread": {**sim, "wind_source": "Open-Meteo live" if temp is not None else "default"},
+        "spread": {**sim, "wind_source": wind_source},
         "affected_area": affected_area,
         "nearest_station": {**station, "travel_minutes": station_travel} if station else None,
         "primary_station": primary_station, "backup_station": backup_station,

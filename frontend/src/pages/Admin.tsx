@@ -121,7 +121,7 @@ function AssetBoard(){
       if(f.verification_date.trim()) body.verification_date = f.verification_date.trim()
       if(f.surface_type) body.surface_type = f.surface_type
       if(f.max_vehicle_tons) body.max_vehicle_tons = Number(f.max_vehicle_tons)
-      if(f.seasonal_access.trim()) body.seasonal_access = f.seasonal_access.trim()
+      if(f.seasonal_access) body.seasonal_access = f.seasonal_access
       if(f.preview_image_url.trim()) body.preview_image_url = f.preview_image_url.trim()
       if(f.capture_date.trim()) body.capture_date = f.capture_date.trim()
       if(f.capture_source.trim()) body.capture_source = f.capture_source.trim()
@@ -165,7 +165,11 @@ function AssetBoard(){
           {['PAVED','GRAVEL','FOREST_ROAD','TRAIL'].map(v=> <option key={v} value={v}>{v}</option>)}
         </select>
         <input value={f.max_vehicle_tons} onChange={e=> setF({...f, max_vehicle_tons: e.target.value})} placeholder="Tải trọng tối đa (tấn)" aria-label="Tải trọng tối đa" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:140}} />
-        <input value={f.seasonal_access} onChange={e=> setF({...f, seasonal_access: e.target.value})} placeholder="Tiếp cận mùa (vd: dry-season-only)" aria-label="Tiếp cận theo mùa" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:170}} />
+        <select value={f.seasonal_access} onChange={e=> setF({...f, seasonal_access: e.target.value})} aria-label="Tiếp cận theo mùa" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 8px', fontSize:12}}>
+          <option value="">— Tiếp cận mùa —</option>
+          <option value="DRY_ONLY">DRY_ONLY (mùa khô)</option>
+          <option value="YEAR_ROUND">YEAR_ROUND (quanh năm)</option>
+        </select>
         <input value={f.district} onChange={e=> setF({...f, district: e.target.value})} placeholder="Huyện" aria-label="Huyện" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:100}} />
         <input value={f.commune} onChange={e=> setF({...f, commune: e.target.value})} placeholder="Xã" aria-label="Xã" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:120}} />
         <input value={f.manager} onChange={e=> setF({...f, manager: e.target.value})} placeholder="Quản lý (vd: Hạt Kiểm lâm)" aria-label="Đơn vị quản lý" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, flex:'1 1 150px'}} />

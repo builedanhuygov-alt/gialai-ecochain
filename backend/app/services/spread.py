@@ -45,10 +45,15 @@ def _ellipse_points(lon: float, lat: float, length_km: float, width_km: float,
 
 def simulate(lon: float, lat: float, wind_speed_kmh: float, wind_dir_deg: float,
              slope_deg: float = 12.0, hours: List[float] | None = None,
-             base_ros_kmh: float = 0.25) -> Dict[str, Any]:
-    """Wind_dir_deg = direction wind blows TOWARD (degrees from north)."""
+             base_ros_kmh: float = 0.25, ros_override_kmh: float | None = None) -> Dict[str, Any]:
+    """Wind_dir_deg = direction wind blows TOWARD (degrees from north).
+
+    ros_override_kmh: scenario-adjusted ROS (e.g. from simulate_scenario);
+    when set it replaces head_ros_kmh — always echoed in inputs + steps so
+    callers can verify the math. None = standard wind/slope model.
+    """
     hours = hours or [1.0, 3.0, 6.0]
-    ros = head_ros_kmh(wind_speed_kmh, slope_deg, base_ros_kmh)
+    ros = round(min(ros_override_kmh, 3.0), 3) if ros_override_kmh else head_ros_kmh(wind_speed_kmh, slope_deg, base_ros_kmh)
     lb = 1.0 + wind_speed_kmh / 25.0  # length-to-breadth ratio
     steps = []
     for h in hours:
@@ -69,10 +74,43 @@ def simulate(lon: float, lat: float, wind_speed_kmh: float, wind_dir_deg: float,
         "model": MODEL,
         "ignition": {"lon": lon, "lat": lat},
         "inputs": {"wind_speed_kmh": wind_speed_kmh, "wind_direction_deg": wind_dir_deg % 360,
-                   "slope_deg": slope_deg, "base_ros_kmh": base_ros_kmh},
+                   "slope_deg": slope_deg, "base_ros_kmh": base_ros_kmh,
+                   "ros_override_kmh": ros_override_kmh},
         "steps": steps,
         "disclaimer": DISCLAIMER,
     }
+
+
+# ── Scenario ROS mapping (Part B, decision-support heuristic, NOT physics) ──
+# Maps What-if sliders to a ROS multiplier with PUBLISHED factors:
+#   temp:   1 + max(0, T-30)*0.02, capped 1.30  (hotter → drier fine fuel)
+#   rain:   1 - min(0.50, rain_mm/20*0.50)      (wet fuel → slower)
+#   fuel:   1 + min(0.30, forest_loss_ha/2000)  (heavier fuel load → hotter)
+# ros_sim = min(3.0, base_ros * temp_f * rain_f * fuel_f).
+# Every factor is returned — no hidden tuning.
+def scenario_ros(base_ros_kmh: float, temperature_c: float | None,
+                 rain_mm: float | None, forest_loss_ha: float | None) -> Dict[str, Any]:
+    """Slider inputs → adjusted ROS + published factors. None input = neutral."""
+    temp_f, rain_f, fuel_f = 1.0, 1.0, 1.0
+    if temperature_c is not None:
+        try:
+            temp_f = round(min(1.30, 1.0 + max(0.0, float(temperature_c) - 30.0) * 0.02), 3)
+        except Exception:
+            pass
+    if rain_mm is not None:
+        try:
+            rain_f = round(1.0 - min(0.50, max(0.0, float(rain_mm)) / 20.0 * 0.50), 3)
+        except Exception:
+            pass
+    if forest_loss_ha is not None:
+        try:
+            fuel_f = round(1.0 + min(0.30, max(0.0, float(forest_loss_ha)) / 2000.0), 3)
+        except Exception:
+            pass
+    ros_sim = round(min(3.0, float(base_ros_kmh) * temp_f * rain_f * fuel_f), 3)
+    return {"ros_kmh": ros_sim, "base_ros_kmh": base_ros_kmh,
+            "factors": {"temperature": temp_f, "rain": rain_f, "fuel": fuel_f},
+            "formula": "min(3.0, base*temp_f*rain_f*fuel_f); temp_f=1+max(0,T-30)*0.02≤1.30; rain_f=1-min(0.5,rain/20*0.5); fuel_f=1+min(0.3,loss_ha/2000)"}
 
 
 def _point_in_ring(lon: float, lat: float, ring) -> bool:

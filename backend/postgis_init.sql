@@ -57,6 +57,12 @@ CREATE INDEX IF NOT EXISTS ix_op_assets_type_status ON operational_assets (asset
 -- M3 threatened: spread polygons are computed in Python (elliptical heuristic);
 -- on PostGIS intersect them via ST_GeomFromGeoJSON(:polygon):
 -- SELECT w.id FROM water_assets w WHERE ST_Intersects(w.geom, ST_GeomFromGeoJSON(:poly_1h));
+-- Part B FireSim: same pattern for scenario ellipses (client sends simulated
+-- polygons back for persistence-free impact math, or compute in-DB):
+-- SELECT c.code FROM communes c WHERE ST_Intersects(c.geom, ST_GeomFromGeoJSON(:sim_poly));
+-- Route impact in-DB (earliest step): unnest route vertices, ST_Within vs steps:
+-- SELECT r.id, min(s.hour) FROM routes r, (SELECT * FROM (VALUES (1.0, :poly_1h),(3.0, :poly_3h),(6.0, :poly_6h)) AS t(hour, geom)) s
+-- WHERE ST_Intersects(r.geom, ST_GeomFromGeoJSON(s.geom)) GROUP BY r.id;
 -- M1/M2 tactical nullable columns (SQLite create_all handles fresh DBs;
 -- existing Postgres needs these ALTERs):
 ALTER TABLE operational_assets ADD COLUMN IF NOT EXISTS contact TEXT;
