@@ -233,6 +233,26 @@ def _rank_stations(db: Session, lon: float, lat: float, avg_speed_kmh: float,
     return ranked
 
 
+def _route_vertices(geometry_text) -> list:
+    """Extract [(lon, lat)] vertices from stored GeoJSON (shared helper)."""
+    import json as _json
+    try:
+        g = _json.loads(geometry_text) if geometry_text else None
+    except Exception:
+        return []
+    if not g:
+        return []
+    lines = [g["coordinates"]] if g.get("type") == "LineString" else g.get("coordinates", [])
+    pts = []
+    for line in lines or []:
+        for p in line or []:
+            try:
+                pts.append((float(p[0]), float(p[1])))
+            except Exception:
+                continue
+    return pts
+
+
 def _route_vertex_distance(geometry_text, lon: float, lat: float):
     """Documented approximation: min haversine to LineString vertices."""
     import json as _json

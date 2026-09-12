@@ -11,7 +11,7 @@ import { useEffect } from 'react'
 export type SimData = any
 
 const IDS = ['fsim-ellipses', 'fsim-ignition', 'fsim-communities',
-  'fsim-assets', 'fsim-routes', 'fsim-wind']
+  'fsim-assets', 'fsim-routes', 'fsim-wind', 'fsim-wind-corridor']
 const SRC = (id: string) => `src-${id}`
 
 function clear(map: any){
@@ -90,6 +90,7 @@ export default function FireSimulationLayer({ map, data, show, communeFc, isMobi
           paint:{ 'line-color':['get','color'], 'line-width':4 } } as any)
       }
       // — WindVectorMesh: schematic arrows along wind axis (symbol, rotated)
+      // + Module 5 corridor outline (server polygon, dashed cyan)
       if(show.wind && data.wind_layer){
         const { direction_deg, speed_kmh } = data.wind_layer
         const klon = 111.32 * Math.max(0.2, Math.cos(data.ignition.lat * Math.PI / 180))
@@ -100,11 +101,20 @@ export default function FireSimulationLayer({ map, data, show, communeFc, isMobi
             data.ignition.lat + Math.cos(direction_deg * Math.PI / 180) * k * 1.5 / 111.32,
           ] },
         }))
+        const corr = data.wind_corridor?.polygon
+        if(corr?.coordinates?.[0]?.length){
+          feats.push({ type:'Feature', properties:{ rot: 0, corridor: true },
+            geometry: { type:'Polygon', coordinates: corr.coordinates } } as any)
+        }
         map.addSource(SRC('fsim-wind'), { type:'geojson', data:{ type:'FeatureCollection', features: feats } } as any)
         map.addLayer({ id:'fsim-wind', type:'symbol', source:SRC('fsim-wind'),
+          filter: ['!', ['has', 'corridor']],
           layout:{ 'text-field':'➤', 'text-size': 18 + Math.min(14, speed_kmh), 'text-rotate':['get','rot'],
             'text-allow-overlap':true, 'text-font':['Open Sans Bold','Arial Unicode MS Bold'] },
           paint:{ 'text-color':'#0EA5E9', 'text-halo-color':'#fff', 'text-halo-width':1 } } as any)
+        map.addLayer({ id:'fsim-wind-corridor', type:'line', source:SRC('fsim-wind'),
+          filter: ['has', 'corridor'],
+          paint:{ 'line-color':'#06B6D4', 'line-width':2, 'line-dasharray':[3,2] } } as any)
       }
     }catch(e){ console.warn('firesim layers failed', e) }
     return ()=>{ try{ if(map) clear(map) }catch{} }

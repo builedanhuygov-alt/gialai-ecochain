@@ -600,6 +600,11 @@ def earth_intelligence(fire: dict, weather: dict, slope_deg: float | None,
     return {
         "terrain_driver": terrain_driver, "fuel_driver": fuel_driver,
         "weather_driver": weather_driver, "access_driver": access_driver,
+        "water_driver": water_constraint,
+        "major_risk_driver": max(
+            [("terrain", terrain_driver), ("fuel", fuel_driver),
+             ("weather", weather_driver), ("access", access_driver)],
+            key=lambda kv: {"LOW": 0, "MODERATE": 1, "HIGH": 2}.get(kv[1].get("level"), -1))[0],
         "water_constraint": water_constraint,
         "terrain_constraints": terrain_driver["detail"],
         "water_constraints": water_constraint["detail"],
@@ -648,3 +653,193 @@ def deployment_plan(primary_station, backup_station, primary_water,
                       "eta_minutes": None,
                       "detail": "Chưa có trạm/nước/tuyến — xác minh thực địa trước khi điều động"})
     return steps
+
+
+# ── Module 7 shared: nearest support around any point ────────────────────
+# waters: [{longitude, latitude, status, ...}] (verified counts as ok)
+# stations: [{longitude, latitude, ...}] (any ops station/team/watchtower)
+# routes: [{vertices: [(lon,lat)...], band}] — nearest by vertex distance.
+# All distances haversine (documented rural approximation, no road network).
+def nearest_support(lon: float, lat: float, waters: list, stations: list,
+                    routes: list) -> dict:
+    best_w, best_wd = None, None
+    for w in waters or []:
+        try:
+            d = haversine_km(lon, lat, float(w["longitude"]), float(w["latitude"]))
+        except Exception:
+            continue
+        if best_wd is None or d < best_wd:
+            best_wd, best_w = d, w
+    best_s, best_sd = None, None
+    for s in stations or []:
+        try:
+            d = haversine_km(lon, lat, float(s["longitude"]), float(s["latitude"]))
+        except Exception:
+            continue
+        if best_sd is None or d < best_sd:
+            best_sd, best_s = d, s
+    best_r, best_rd = None, None
+    for r in routes or []:
+        for vx, vy in (r.get("vertices") or []):
+            try:
+                d = haversine_km(lon, lat, float(vx), float(vy))
+            except Exception:
+                continue
+            if best_rd is None or d < best_rd:
+                best_rd, best_r = d, r
+    water_ok = bool(best_w) and str(best_w.get("status") or "") == "verified"
+    return {
+        "water_eta_min": road_eta_minutes(best_wd) if best_wd is not None else None,
+        "water_ok": water_ok, "water_name": (best_w or {}).get("name"),
+        "station_eta_min": road_eta_minutes(best_sd) if best_sd is not None else None,
+        "has_station": bool(best_s), "station_name": (best_s or {}).get("name"),
+        "route_band": (best_r or {}).get("band"),
+        "route_name": (best_r or {}).get("route_name") or (best_r or {}).get("name"),
+    }
+
+
+# ── Module 5: wind corridor (downwind swath, pure geometry) ──────────────
+# Corridor = axis from ignition along wind + half-width from ellipse LB ratio.
+# Communes whose centroid falls inside are "trong hành lang gió". No terrain
+# CFD claimed — ridge/valley interaction is read from the 3D DEM client-side.
+def wind_corridor(lon: float, lat: float, wind_toward_deg: float,
+                  length_km: float, half_width_km: float) -> dict:
+    """Downwind corridor polygon + axis. All inputs echoed, no hidden model."""
+    import math as _m
+    th = _m.radians(wind_toward_deg % 360.0)
+    dx, dy = _m.sin(th), _m.cos(th)  # east, north unit
+    klon = 111.32 * max(0.2, _m.cos(_m.radians(lat)))
+    # perpendicular half-width in degrees
+    px, py = dy, -dx
+    ex = lon + dx * length_km / klon
+    ey = lat + dy * length_km / 111.32
+    hx = px * half_width_km / klon
+    hy = py * half_width_km / 111.32
+    poly = [[lon - hx, lat - hy], [lon + hx, lat + hy],
+            [ex + hx, ey + hy], [ex - hx, ey - hy], [lon - hx, lat - hy]]
+    return {
+        "axis": [[lon, lat], [round(ex, 5), round(ey, 5)]],
+        "length_km": round(length_km, 2), "half_width_km": round(half_width_km, 2),
+        "polygon": {"type": "Polygon", "coordinates": [[[round(x, 5), round(y, 5)] for x, y in poly]]},
+        "method": "hình học thuần túy theo hướng/tốc gió — không CFD địa hình",
+    }
+
+
+def corridor_contains(poly_ring, lon: float, lat: float) -> bool:
+    return _point_in_ring(lon, lat, poly_ring)
+
+
+# ── Module 7: Community Shield Score (deterministic, no %) ───────────────
+# Components (each VERIFIED/derived or MISSING):
+#   exposure: threat band of the commune (CRITICAL..SAFE)
+#   water:    nearest strategic water ETA ( unverified/missing → weak)
+#   response: nearest station ETA (missing → weak)
+#   routes:   nearest route band/condition (missing → weak)
+# Rule table (worst-factor dominates, no averaging tricks):
+#   exposure CRITICAL → CRITICAL (unless water+response both strong → VULNERABLE)
+#   exposure THREATENED → VULNERABLE (strong support → WATCH)
+#   exposure WATCH → WATCH (no support at all → VULNERABLE)
+#   exposure SAFE → RESILIENT (missing population data → WATCH)
+SHIELD_ORDER = {"CRITICAL": 0, "VULNERABLE": 1, "WATCH": 2, "RESILIENT": 3}
+
+
+def community_shield(exposure_band: str, water_eta_min, water_ok: bool,
+                     station_eta_min, has_station: bool,
+                     route_band: str | None, population) -> dict:
+    """Shield category + cited components. water_ok = verified source exists."""
+    support_strong = bool(water_ok) and bool(has_station)
+    no_support = (not water_ok) and (not has_station)
+    if exposure_band == "CRITICAL":
+        cat = "VULNERABLE" if support_strong else "CRITICAL"
+    elif exposure_band == "THREATENED":
+        cat = "WATCH" if support_strong else "VULNERABLE"
+    elif exposure_band == "WATCH":
+        cat = "VULNERABLE" if no_support else "WATCH"
+    else:
+        cat = "WATCH" if population is None else "RESILIENT"
+    return {
+        "shield": cat,
+        "components": {
+            "threat_exposure": exposure_band,
+            "water_availability": ("STRONG" if water_ok else "MISSING") +
+                                  (f" (ETA ~{water_eta_min}′)" if water_eta_min is not None else ""),
+            "response_availability": ("STRONG" if has_station else "MISSING") +
+                                     (f" (ETA ~{station_eta_min}′)" if station_eta_min is not None else ""),
+            "route_resilience": route_band or "MISSING",
+        },
+    }
+
+
+# ── Module 8: Asset Protection Plan ──────────────────────────────────────
+# PROTECT_NOW: CRITICAL, or THREATENED strategic water / station.
+# MONITOR: THREATENED others + WATCH. LOW_PRIORITY: SAFE.
+def protection_priority(band: str, asset_type: str, strategic: bool) -> str:
+    if band == "CRITICAL":
+        return "PROTECT_NOW"
+    if band == "THREATENED":
+        if strategic or asset_type in ("station", "team", "water"):
+            return "PROTECT_NOW"
+        return "MONITOR"
+    if band == "WATCH":
+        return "MONITOR"
+    return "LOW_PRIORITY"
+
+
+def protection_plan(threats: list, strategic_ids: set | None = None) -> list:
+    """threats: assess_* outputs (+asset_type). Returns priority-sorted plan."""
+    strategic_ids = strategic_ids or set()
+    out = []
+    for t in threats or []:
+        strategic = t.get("id") in strategic_ids or t.get("priority") == "A"
+        prio = protection_priority(t.get("band"), t.get("asset_type"), strategic)
+        out.append({**t, "protection": prio,
+                    "strategic": strategic,
+                    "detail": f"{t.get('name')} — {t.get('band')} "
+                              f"(ETA ~{t.get('eta_hours')}h) → {prio}"})
+    order = {"PROTECT_NOW": 0, "MONITOR": 1, "LOW_PRIORITY": 2}
+    out.sort(key=lambda x: (order.get(x["protection"], 9),
+                            {"CRITICAL": 0, "THREATENED": 1, "WATCH": 2, "SAFE": 3}.get(x.get("band"), 9)))
+    return out
+
+
+# ── Module 11: Tactical Story Mode (deterministic narrative, no LLM) ──────
+# Each event cites its source numbers. Frontend syncs highlighting with the
+# T+0/1/3/6/12 timeline; unknown legs render as MISSING, never invented.
+def tactical_story(ignition: dict, steps: list, communities: list,
+                   routes: list, waters: list, primaries: dict) -> list:
+    """Ordered narrative events {t_hour, text, kind}."""
+    story = [{
+        "t_hour": 0, "kind": "ignition",
+        "text": f"Đám cháy xuất hiện tại {ignition.get('lon')},{ignition.get('lat')} — "
+                f"ROS {((steps or [{}])[0].get('ros_kmh'))} km/h theo gió.",
+    }]
+    for r in (routes or []):
+        if r.get("impacted_in_hours") is not None and not r.get("closed"):
+            story.append({
+                "t_hour": r["impacted_in_hours"], "kind": "route",
+                "text": f"Tuyến {r.get('route_name')} dự kiến bị cắt sau ~{r['impacted_in_hours']}h "
+                        f"({r.get('band')}) — {r.get('panel')}.",
+            })
+    for cm in (communities or [])[:5]:
+        if (cm.get("band") or "SAFE") != "SAFE":
+            story.append({
+                "t_hour": cm.get("first_hour"), "kind": "community",
+                "text": f"{cm.get('commune')} chuyển {cm.get('band')} "
+                        f"(dân số {cm.get('population') or 'chưa rõ'}, ETA ~{cm.get('eta_hours')}h).",
+            })
+    pw = (primaries or {}).get("primary_water") or {}
+    ps = (primaries or {}).get("primary_station") or {}
+    if pw.get("name") or ps.get("station_name"):
+        story.append({
+            "t_hour": 0, "kind": "deployment",
+            "text": f"Đề xuất điều động: {ps.get('station_name') or 'chưa rõ trạm'} → "
+                    f"lấy nước {pw.get('name') or 'chưa rõ nguồn'} "
+                    f"(ETA ~{pw.get('eta_minutes')}′).",
+        })
+    else:
+        story.append({"t_hour": 0, "kind": "deployment",
+                      "text": "Chưa đủ trạm/nước để đề xuất điều động — xác minh thực địa."})
+    order = {"ignition": 0, "deployment": 1, "route": 2, "community": 3}
+    story.sort(key=lambda e: ((e.get("t_hour") if e.get("t_hour") is not None else 99),
+                              order.get(e.get("kind"), 9)))
+    return story

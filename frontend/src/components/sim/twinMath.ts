@@ -6,7 +6,7 @@ export const BAND_COLORS_3D: Record<string, string> = {
 }
 
 export const STEP_COLORS_3D: Record<number, string> = {
-  0: '#DC2626', 1: '#F97316', 3: '#EAB308', 6: '#525252',
+  0: '#DC2626', 1: '#F97316', 3: '#EAB308', 6: '#525252', 12: '#1E293B',
 }
 
 // AOI radius from sim extent: half of max ellipse length + 0.5km margin,

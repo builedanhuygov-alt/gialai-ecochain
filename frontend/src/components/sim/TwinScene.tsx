@@ -13,26 +13,31 @@ import { canopyKey as canopyOf, TerrainMesh, updateDynamic } from './TwinLayers'
 export type TwinShow = {
   ellipses: boolean; canopy: boolean; front: boolean; wind: boolean;
   assets: boolean; routes: boolean; communities: boolean; water: boolean;
+  plan: boolean;
 }
 
 type Ctx = {
   renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera;
   controls: OrbitControls; sampler: (x: number, z: number)=>number;
-  origin: { lon: number; lat: number }; sizeM: number; raf: number; dead: boolean;
+  origin: { lon: number; lat: number }; sizeM: number; aoiKm: number;
+  raf: number; dead: boolean;
   updaters: Array<(t: number, dt: number)=>void>; quality: 'high' | 'low';
   weak: boolean; lowFpsSince: number | null; degraded: boolean;
   setFps: (fps: number)=>void;
 }
 
-export default function TwinScene({ sim, waters, opsAssets, communeFc, show, onError, onFps }: {
+export default function TwinScene({ sim, waters, opsAssets, communeFc, show, plan, aoiKm, focusKey, onError, onFps }: {
   sim: any; waters: any[]; opsAssets: any[];
   communeFc: any | null;
-  show: TwinShow; onError: (msg: string)=>void; onFps: (fps: number)=>void;
+  show: TwinShow; plan?: any; aoiKm?: number | null; focusKey?: number;
+  onError: (msg: string)=>void; onFps: (fps: number)=>void;
 }){
   const divRef = useRef<HTMLDivElement>(null)
   const [note, setNote] = useState('')
   const showRef = useRef(show)
   showRef.current = show
+  const planRef = useRef(plan)
+  planRef.current = plan
   useEffect(()=>{
     if(!divRef.current || !sim?.ignition) return
     const div = divRef.current
@@ -40,7 +45,7 @@ export default function TwinScene({ sim, waters, opsAssets, communeFc, show, onE
     let cancelled = false
     ;(async ()=>{
       try{
-        ctx = await buildScene(div, sim, waters, opsAssets, communeFc, showRef.current, onFps, setNote)
+        ctx = await buildScene(div, sim, waters, opsAssets, communeFc, showRef.current, planRef.current, onFps, setNote)
         if(cancelled){ destroyScene(ctx); ctx = null }
       }catch(e: any){
         if(!cancelled) onError(String(e?.message || e))
@@ -53,8 +58,17 @@ export default function TwinScene({ sim, waters, opsAssets, communeFc, show, onE
   // live-update dynamic layers when sim payload or toggles change
   useEffect(()=>{
     const d = (divRef.current as any)?._twin as Ctx | undefined
-    if(d && sim) updateDynamic(d, sim, waters, opsAssets, communeFc, showRef.current)
-  }, [sim, waters, opsAssets, communeFc, show])
+    if(d && sim) updateDynamic(d, sim, waters, opsAssets, communeFc, showRef.current, planRef.current)
+  }, [sim, waters, opsAssets, communeFc, show, plan])
+  // Focus Fire + AOI framing without rebuilding the scene
+  useEffect(()=>{
+    const d = (divRef.current as any)?._twin as any
+    if(!d || !focusKey) return
+    const rKm = aoiKm || d.aoiKm || 2
+    d.controls.target.set(0, 0, 0)
+    d.camera.position.set(rKm * 1000 * 1.1, rKm * 1000 * 0.9, rKm * 1000 * 1.1)
+    d.controls.update()
+  }, [focusKey, aoiKm])
   // canopy rebuilds only on ignition move (imagery sampling is expensive)
   useEffect(()=>{
     const d = (divRef.current as any)?._twin as any
@@ -96,7 +110,7 @@ function destroyScene(c: Ctx){
 }
 
 async function buildScene(div: HTMLDivElement, sim: any, waters: any[], opsAssets: any[],
-  communeFc: any, show: TwinShow, onFps: (fps: number)=>void,
+  communeFc: any, show: TwinShow, plan: any, onFps: (fps: number)=>void,
   setNote: (s: string)=>void): Promise<Ctx>{
   const W = div.clientWidth || 800, H = div.clientHeight || 500
   const weak = (navigator as any).hardwareConcurrency <= 4 || W < 640 ||
@@ -152,7 +166,7 @@ async function buildScene(div: HTMLDivElement, sim: any, waters: any[], opsAsset
 
   const c: Ctx = { renderer, scene, camera, controls, sampler: Hrel, origin,
     sizeM, raf: 0, dead: false, updaters: [], quality, weak,
-    lowFpsSince: null, degraded: false, setFps: onFps }
+    lowFpsSince: null, degraded: false, setFps: onFps, aoiKm: radiusKm }
   ;(div as any)._twin = c
 
   // resize
@@ -195,7 +209,7 @@ async function buildScene(div: HTMLDivElement, sim: any, waters: any[], opsAsset
   }
   c.raf = requestAnimationFrame(loop)
 
-  updateDynamic(c, sim, waters, opsAssets, communeFc, show)
+  updateDynamic(c, sim, waters, opsAssets, communeFc, show, plan)
   ;(c as any)._texCanvas = terr.texCanvas
   ;(c as any)._block = terr.block
   ;(c as any)._canopyKey = null

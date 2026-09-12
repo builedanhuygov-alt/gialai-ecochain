@@ -218,6 +218,17 @@ export default function Command(){
             return rows.map((r, i)=> <div key={i} style={{fontSize:12, borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>{r}</div>)
           })()}
         </Card>
+        <Card>
+          <b>⚔️ Attack Plan</b>
+          {!(plan?.deployment_plan || []).length && !(plan?.protection_plan || []).length &&
+            <div style={{fontSize:12, color:'#64748B'}}>Chạy Response Plan để sinh phương án tấn công/phòng thủ.</div>}
+          {(plan?.deployment_plan || []).slice(0,4).map((d:any, i:number)=> (
+            <div key={i} style={{fontSize:12, borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>▶ {d.detail}</div>
+          ))}
+          {(plan?.protection_plan || []).filter((p:any)=> p.protection === 'PROTECT_NOW').slice(0,3).map((p:any, i:number)=> (
+            <div key={`p${i}`} style={{fontSize:12, borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>🛡️ {p.detail}</div>
+          ))}
+        </Card>
       </div>
       <style>{`.card{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:12px}`}</style>
     </div>

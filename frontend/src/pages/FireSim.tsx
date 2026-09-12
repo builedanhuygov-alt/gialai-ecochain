@@ -54,7 +54,13 @@ export default function FireSim(){
   const [plan, setPlan] = useState<any>(null)
   const [planLoading, setPlanLoading] = useState(false)
   const [show, setShow] = useState({ ellipses:true, assets:true, routes:true, communities:true, wind:true })
-  const [show3d, setShow3d] = useState({ ellipses:true, canopy:true, front:true, wind:true, assets:true, routes:true, communities:true, water:true })
+  const [show3d, setShow3d] = useState({ ellipses:true, canopy:true, front:true, wind:true, assets:true, routes:true, communities:true, water:true, plan:true })
+  // Module 1/10: AOI size + scenario timeline + playback
+  const [aoiKm, setAoiKm] = useState(3)
+  const [ext12, setExt12] = useState(false)
+  const [untilHour, setUntilHour] = useState<number | null>(null)
+  const [playing, setPlaying] = useState(false)
+  const [focusKey, setFocusKey] = useState(0)
   const [mode, setMode] = useState<'2d'|'3d'>(typeof window !== 'undefined' && window.innerWidth < 640 ? '2d' : '3d')
   const [waters, setWaters] = useState<any[]>([])
   const [opsAssets, setOpsAssets] = useState<any[]>([])
@@ -118,12 +124,13 @@ export default function FireSim(){
     setRouteMesh(map, data.routes || [], byId)
   },[map, mapReady, data, show.routes, opsAssets, mode])
 
+  const hoursFor = ()=> ext12 ? [1.0, 3.0, 6.0, 12.0] : [1.0, 3.0, 6.0]
   const runSim = async (withPlan: boolean)=>{
     if(timer.current) clearTimeout(timer.current)
     if(planTimer.current) clearTimeout(planTimer.current)
     setLoading(true); setError('')
     const body = { lon, lat, wind_speed_kmh: wind, wind_direction_deg: wdir, slope_deg: slope,
-      temperature_c: temp, rain_mm: rain, forest_loss_ha: fuel,
+      temperature_c: temp, rain_mm: rain, forest_loss_ha: fuel, hours: hoursFor(),
       closed_route_ids: closedRoute ? [closedRoute] : [],
       min_water_capacity_m3: minCap > 0 ? minCap : null }
     try{
@@ -155,7 +162,7 @@ export default function FireSim(){
     timer.current = setTimeout(()=> runSim(false), 500)
     planTimer.current = setTimeout(async ()=>{
       const body = { lon, lat, wind_speed_kmh: wind, wind_direction_deg: wdir, slope_deg: slope,
-        temperature_c: temp, rain_mm: rain, forest_loss_ha: fuel,
+        temperature_c: temp, rain_mm: rain, forest_loss_ha: fuel, hours: hoursFor(),
         closed_route_ids: closedRoute ? [closedRoute] : [],
         min_water_capacity_m3: minCap > 0 ? minCap : null }
       try{
@@ -166,6 +173,52 @@ export default function FireSim(){
     }, 1500)
   }
   useEffect(()=>{ runSim(true); return ()=>{ if(timer.current) clearTimeout(timer.current); if(planTimer.current) clearTimeout(planTimer.current) } },[]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Module 1: click-to-ignite on 2D map (no mock coords — user-picked point)
+  useEffect(()=>{
+    if(!map || mode !== '2d') return
+    const h = (e: any)=>{
+      const ll = e.lngLat
+      if(!ll) return
+      setLon(Number(ll.lng.toFixed(4))); setLat(Number(ll.lat.toFixed(4)))
+      setTimeout(()=> autoRef.current(), 0)
+    }
+    map.on('click', h)
+    return ()=>{ try{ map.off('click', h) }catch{} }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[map, mode])
+  const autoRef = useRef(()=>{})
+  autoRef.current = auto
+  // Module 10 playback: step T+0 → hours, 1.4s per step
+  useEffect(()=>{
+    if(!playing) return
+    const seq = [0, ...(data?.spread?.steps || []).map((s: any)=> s.hour)]
+    if(seq.length < 2) { setPlaying(false); return }
+    let i = 0
+    setUntilHour(seq[0])
+    const id = setInterval(()=>{
+      i++
+      if(i >= seq.length){ setPlaying(false); return }
+      setUntilHour(seq[i])
+    }, 1400)
+    return ()=> clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[playing])
+  // simView: timeline filters ellipses/front/communities/story (routes/waters
+  // stay full-horizon "expected" panels — labeled in UI).
+  const simView = (()=> {
+    if(!data || untilHour === null) return data
+    return { ...data,
+      spread: { ...data.spread, steps: (data.spread?.steps || []).filter((s: any)=> s.hour <= untilHour) },
+      communities: (data.communities || []).filter((c: any)=> (c.first_hour ?? 99) <= untilHour),
+      story: (data.story || []).filter((e: any)=> (e.t_hour ?? 99) <= untilHour),
+    }
+  })()
+  const focusFire = ()=>{
+    if(mode === '2d'){
+      const z = aoiKm === 1 ? 13 : aoiKm === 5 ? 10.5 : 11.5
+      try{ map?.flyTo({ center:[lon, lat], zoom: z, duration:1200 }) }catch{}
+    } else setFocusKey(k=> k + 1)
+  }
 
   const imp = data?.impact
   return (
@@ -194,9 +247,20 @@ export default function FireSim(){
             </select>
           </label>
           <Slider label="💧 Ngưỡng dung tích hồ" value={minCapM} min={0} max={1000} step={10} unit=" tr.m³" onChange={v=> { setMinCapM(v); auto() }} />
-          <button onClick={()=> runSim(true)} disabled={loading} style={{background:'#DC2626', color:'#fff', border:0, borderRadius:999, padding:'10px', fontWeight:800, cursor:'pointer'}}>
-            {loading ? 'ĐANG CHẠY…' : '▶ RUN SIMULATION + PLAN'}
-          </button>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8}}>
+            <label style={{fontSize:12}}>🎯 AOI<select value={aoiKm} onChange={e=> setAoiKm(Number(e.target.value))} style={{width:'100%', border:'1px solid #E2E8E5', borderRadius:8, padding:'4px 8px', fontSize:12}}>
+              <option value={1}>1 km</option><option value={3}>3 km</option><option value={5}>5 km</option>
+            </select></label>
+            <label style={{fontSize:12, display:'flex', gap:6, alignItems:'flex-end', paddingBottom:4}}>
+              <input type="checkbox" checked={ext12} onChange={e=> { setExt12(e.target.checked); setUntilHour(null); auto() }} /> T+12h
+            </label>
+          </div>
+          <div style={{display:'flex', gap:6}}>
+            <button onClick={()=> runSim(true)} disabled={loading} style={{flex:1, background:'#DC2626', color:'#fff', border:0, borderRadius:999, padding:'10px', fontWeight:800, cursor:'pointer'}}>
+              {loading ? 'ĐANG CHẠY…' : '▶ RUN SIMULATION + PLAN'}
+            </button>
+            <button onClick={focusFire} title="Focus Fire: zoom tới điểm cháy" style={{background:'#0B1412', color:'#fff', border:0, borderRadius:999, padding:'10px 14px', fontWeight:800, cursor:'pointer'}}>🎯</button>
+          </div>
           {planStale && !planLoading && <div style={{fontSize:11, color:'#B45309'}}>Plan đang cũ hơn kịch bản — sẽ tự tái sinh…</div>}
           {error && <div style={{fontSize:12, color:'#B91C1C'}}>⚠ {error}</div>}
           <div style={{display:'flex', flexDirection:'column', gap:4, borderTop:'1px solid #F1F5F9', paddingTop:8}}>
@@ -212,7 +276,7 @@ export default function FireSim(){
             ) : (
               <>
                 {(Object.keys(show3d) as (keyof typeof show3d)[]).map(k=> (
-                  <Toggle key={k} label={{ellipses:'Ellipse lan', canopy:'Tán cây (proxy)', front:'Vệt lửa 3D', wind:'Mũi tên gió', assets:'Tài sản', routes:'Tuyến', communities:'Xã', water:'Đường lấy nước'}[k]} value={show3d[k]} onChange={v=> setShow3d(s=> ({...s, [k]:v}))} />
+                  <Toggle key={k} label={{ellipses:'Ellipse lan', canopy:'Tán cây (proxy)', front:'Vệt lửa 3D', wind:'Mũi tên gió', assets:'Tài sản', routes:'Tuyến', communities:'Xã', water:'Đường lấy nước', plan:'Kế hoạch điều động'}[k]} value={show3d[k]} onChange={v=> setShow3d(s=> ({...s, [k]:v}))} />
                 ))}
               </>
             )}
@@ -226,13 +290,14 @@ export default function FireSim(){
           </div>
           {mode === '2d' && map && mapReady && data && (
             <>
-              <FireSimulationLayer map={map} data={data} show={show} communeFc={communeFc} isMobile={isMobile} />
-              <FireFrontCanvas map={map} steps={data.spread?.steps} on={particles} />
+              <FireSimulationLayer map={map} data={simView} show={show} communeFc={communeFc} isMobile={isMobile} />
+              <FireFrontCanvas map={map} steps={simView?.spread?.steps} on={particles} />
             </>
           )}
           {mode === '3d' && data && !demError && (
-            <TwinScene sim={data} waters={waters} opsAssets={opsAssets} communeFc={communeFc}
-              show={show3d as TwinShow} onError={(m)=> setDemError(m)} onFps={setFps} />
+            <TwinScene sim={simView} waters={waters} opsAssets={opsAssets} communeFc={communeFc}
+              show={show3d as TwinShow} plan={plan} aoiKm={aoiKm} focusKey={focusKey}
+              onError={(m)=> setDemError(m)} onFps={setFps} />
           )}
           {mode === '3d' && demError && (
             <div style={{position:'absolute', inset:0, display:'grid', placeItems:'center', background:'#0B1412', color:'#fff', padding:24, textAlign:'center', zIndex:6}}>
@@ -245,8 +310,20 @@ export default function FireSim(){
           )}
           <div style={{position:'absolute', top:8, left:8, marginTop:34, background:'rgba(255,255,255,0.95)', borderRadius:8, padding:'6px 10px', fontSize:11, zIndex:6}}>
             <b>🔴 hiện tại</b> · <b style={{color:'#F97316'}}>🟠 +1h</b> · <b style={{color:'#B45309'}}>🟡 +3h</b> · <b style={{color:'#525252'}}>⚫ +6h</b>
+            {ext12 && <><b style={{color:'#1E293B'}}> · ⬛ +12h</b></>}
             {mode === '3d' && <span style={{color:'#64748B'}}> · địa hình DEM thật ×1.5{fps !== null && <> · {fps} FPS</>}</span>}
           </div>
+          {/* Module 10 timeline: T+0 → steps + playback (lọc ellipse/xã/story) */}
+          {data?.spread?.steps && (
+            <div style={{position:'absolute', bottom:8, left:8, right:8, background:'rgba(255,255,255,0.95)', borderRadius:8, padding:'6px 10px', zIndex:6, display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}>
+              <button onClick={()=> { setUntilHour(null); setPlaying(false) }} style={{fontSize:11, fontWeight:700, borderRadius:999, border: untilHour === null ? '2px solid #0B1412' : '1px solid #E2E8E5', padding:'2px 10px', background:'#fff', cursor:'pointer'}}>ALL</button>
+              {[0, ...(data.spread.steps.map((s: any)=> s.hour))].map((h: number)=> (
+                <button key={h} onClick={()=> { setUntilHour(h === 0 ? 0 : h); setPlaying(false) }} style={{fontSize:11, fontWeight:700, borderRadius:999, border: untilHour === h ? '2px solid #0B1412' : '1px solid #E2E8E5', padding:'2px 10px', background:'#fff', cursor:'pointer'}}>T+{h}h</button>
+              ))}
+              <button onClick={()=> setPlaying(p=> !p)} style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'2px 10px', background: playing ? '#DC2626' : '#fff', color: playing ? '#fff' : '#0B1412', cursor:'pointer'}}>{playing ? '⏸' : '▶'} Playback</button>
+              <span style={{fontSize:10, color:'#64748B'}}>timeline lọc ellipse + xã + story (tuyến/nước theo toàn kịch bản)</span>
+            </div>
+          )}
           {mode === '3d' && (
             <div style={{position:'absolute', bottom:8, left:8, background:'rgba(255,255,255,0.92)', borderRadius:8, padding:'4px 10px', fontSize:10, color:'#64748B', zIndex:6}}>
               Cây = proxy tán từ ảnh vệ tinh (ESTIMATED) · kéo xoay / lăn zoom / chuột phải nghiêng
@@ -263,6 +340,13 @@ export default function FireSim(){
           <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
             <b>🏘️ {imp.communities_threatened} xã: {(imp.communes || []).join(', ') || '—'}</b>
             <div style={{fontSize:12, color:'#64748B'}}>Trạm ảnh hưởng: {(imp.stations_impacted || []).join(', ') || '—'}</div>
+            {(simView?.communities || []).length > 0 && (
+              <div style={{fontSize:11, marginTop:4}}>{(simView.communities || []).slice(0, 6).map((c: any)=> (
+                <span key={c.code} style={{display:'inline-block', background:'#F1F5F9', borderRadius:8, padding:'2px 8px', marginRight:4, marginBottom:4}}>
+                  {c.commune} · {c.band} · 🛡️{c.shield}
+                </span>
+              ))}</div>
+            )}
           </div>
           <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
             <b>💧 Nước ảnh hưởng: {(imp.water_impacted || []).join(', ') || '—'}</b>
@@ -277,8 +361,40 @@ export default function FireSim(){
             <div key={r.id} style={{fontSize:12, display:'flex', gap:8, alignItems:'center', borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>
               <span style={{width:10, height:10, borderRadius:999, background:r.color}} />
               <b>{r.route_name}</b><span style={{color:'#64748B'}}>{r.panel}</span>
+              {r.alternative_route && <span style={{color:'#0F766E'}}>→ thay thế: {r.alternative_route} (~{r.alternative_distance_km} km)</span>}
             </div>
           ))}
+        </div>
+      )}
+      {(simView?.story?.length > 0 || data?.wind_corridor) && (
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))', gap:8}}>
+          {(simView?.story?.length > 0) && (
+            <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
+              <b>📖 Story mode (theo timeline T+{untilHour ?? 'ALL'})</b>
+              {(simView.story || []).map((e: any, i: number)=> (
+                <div key={i} style={{fontSize:12, borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>
+                  <b>T+{e.t_hour}h</b> · {e.text}
+                </div>
+              ))}
+            </div>
+          )}
+          {data?.wind_corridor && (
+            <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
+              <b>🌬️ Hành lang gió ({data.wind_corridor.length_km} km × ±{data.wind_corridor.half_width_km} km)</b>
+              <div style={{fontSize:12, color:'#64748B'}}>Xã trong hành lang: {(data.wind_corridor.communes_inside || []).join(', ') || '—'}</div>
+              <div style={{fontSize:11, color:'#64748B'}}>{data.wind_corridor.method}</div>
+            </div>
+          )}
+          {(data?.protection_plan?.length > 0) && (
+            <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
+              <b>🛡️ Bảo vệ tài sản</b>
+              {data.protection_plan.slice(0, 8).map((p: any, i: number)=> (
+                <div key={i} style={{fontSize:12, borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>
+                  <b>{p.protection}</b> · {p.detail}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {data?.waters?.length > 0 && (

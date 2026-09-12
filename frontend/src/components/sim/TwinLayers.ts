@@ -302,10 +302,25 @@ export function WaterAccessLayer(g: THREE.Group, c: Ctx, sim: any, waters: any[]
   })
 }
 
-// <WindFieldLayer /> — M6 schematic arrows (grid, length ∝ speed, bob).
+// <WindFieldLayer /> — M6 schematic arrows (grid, length ∝ speed, bob)
+// + Module 5 corridor outline (server polygon, dashed cyan).
 export function WindFieldLayer(g: THREE.Group, c: Ctx, sim: any){
   if(!sim.wind_layer) return
   const H = c.sampler
+  const corr = sim.wind_corridor?.polygon?.coordinates?.[0]
+  if(corr?.length){
+    const shape = new THREE.Shape()
+    corr.forEach((p: number[], i: number)=>{
+      const q = toLocal(p[0], p[1], c.origin)
+      if(i === 0) shape.moveTo(q.x, -q.z)
+      else shape.lineTo(q.x, -q.z)
+    })
+    const pts = shape.getPoints(48).map(p2=> new THREE.Vector3(p2.x, H(p2.x, -p2.y) + 20, -p2.y))
+    const lg = new THREE.BufferGeometry().setFromPoints(pts)
+    g.add(new THREE.LineLoop(lg, new THREE.LineDashedMaterial({
+      color: '#06B6D4', dashSize: 60, gapSize: 40 })))
+    ;(g.children[g.children.length - 1] as THREE.Line).computeLineDistances()
+  }
   const dir = (sim.wind_layer.direction_deg * Math.PI) / 180
   const sp = sim.wind_layer.speed_kmh || 0
   const R = c.sizeM / 2 * 0.7
@@ -377,7 +392,7 @@ export function FireFrontPoints(g: THREE.Group, c: Ctx, sim: any){
 }
 
 export function updateDynamic(c: Ctx, sim: any, waters: any[], opsAssets: any[],
-  communeFc: any, show: any){
+  communeFc: any, show: any, plan?: any){
   const old = c.scene.getObjectByName('twin-dyn')
   if(old){
     c.scene.remove(old)
@@ -400,7 +415,62 @@ export function updateDynamic(c: Ctx, sim: any, waters: any[], opsAssets: any[],
   if(show.water) WaterAccessLayer(g, c, sim, waters)
   if(show.wind) WindFieldLayer(g, c, sim)
   if(show.front) FireFrontPoints(g, c, sim)
+  if(show.plan && plan) ResponsePlanLayer(g, c, sim, plan, waters, opsAssets)
   c.scene.add(g)
+}
+
+// <ResponsePlanLayer /> — M13 dispatch viz: station→fire (green), primary
+// route white underlay, water ring. Names matched best-effort against loaded
+// assets; unmatched legs are skipped (never placed by guess).
+export function ResponsePlanLayer(g: THREE.Group, c: Ctx, sim: any, plan: any,
+  waters: any[], opsAssets: any[]){
+  const H = c.sampler
+  const P = (lon: number, lat: number, lift = 0)=>{
+    const p = toLocal(lon, lat, c.origin)
+    return new THREE.Vector3(p.x, H(p.x, p.z) + lift, p.z)
+  }
+  const o = P(sim.ignition.lon, sim.ignition.lat, 30)
+  const wName = plan.primary_water?.name
+  const wFull = waters.find((x: any)=> x.name === wName)
+  if(wFull && typeof wFull.longitude === 'number'){
+    const wp = P(wFull.longitude, wFull.latitude, 12)
+    const ring = new THREE.Mesh(new THREE.RingGeometry(45, 75, 24),
+      new THREE.MeshBasicMaterial({ color: '#2563EB', transparent: true,
+        opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }))
+    ring.rotation.x = -Math.PI / 2
+    ring.position.copy(wp)
+    g.add(ring)
+  }
+  const sName = plan.primary_station?.station_name
+  const st = opsAssets.find((a: any)=> a.name === sName &&
+    ['station', 'team'].includes(a.asset_type))
+  if(st && typeof st.longitude === 'number'){
+    const s = P(st.longitude, st.latitude, 30)
+    const lg = new THREE.BufferGeometry().setFromPoints([s, o])
+    g.add(new THREE.Line(lg, new THREE.LineDashedMaterial({
+      color: '#16A34A', dashSize: 50, gapSize: 30 })))
+    ;(g.children[g.children.length - 1] as THREE.Line).computeLineDistances()
+    const ring = new THREE.Mesh(new THREE.RingGeometry(40, 70, 24),
+      new THREE.MeshBasicMaterial({ color: '#16A34A', transparent: true,
+        opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }))
+    ring.rotation.x = -Math.PI / 2
+    ring.position.copy(s)
+    g.add(ring)
+  }
+  const rName = plan.primary_route?.route_name
+  const rt = opsAssets.find((a: any)=> a.id === plan.primary_route?.id || a.name === rName)
+  const geom = rt?.geometry
+  if(geom && rName){
+    const lines = geom.type === 'LineString' ? [geom.coordinates] : (geom.coordinates || [])
+    for(const line of lines){
+      const v3 = line.map((p: number[])=>{
+        const q = toLocal(p[0], p[1], c.origin)
+        return new THREE.Vector3(q.x, H(q.x, q.z) + 14, q.z)
+      })
+      const lg = new THREE.BufferGeometry().setFromPoints(v3)
+      g.add(new THREE.Line(lg, new THREE.LineBasicMaterial({ color: '#FFFFFF' })))
+    }
+  }
 }
 
 // M3 canopy rebuild — imagery sampling is expensive, only on ignition move.

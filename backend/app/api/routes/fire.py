@@ -531,6 +531,7 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
     # M5 full contract: top-2 stations/routes via shared rankers (PostGIS KNN
     # inside when available, haversine fallback on SQLite).
     from app.api.routes.assets import _rank_routes, _rank_stations
+    from app.api.routes.assets import _route_vertices as _rv
     st_ranked = _rank_stations(db, lon, lat, speed, top=2)
     station = None
     if st_ranked:
@@ -709,6 +710,40 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
         })
     deployment = ops.deployment_plan(primary_station, backup_station, primary,
                                      backup, primary_route, threatened_assets)
+    _strat_ids = {t.get("id") for t in water_threats
+                  if t.get("band") in ("CRITICAL", "THREATENED")}
+    protection = ops.protection_plan(
+        threatened_assets
+        + [{"id": r.get("id"), "name": r.get("route_name"), "asset_type": "route",
+            "band": "SAFE", "distance_km": r.get("distance_km"), "eta_hours": None}
+           for r in _rt_all]
+        + [{"id": tc.get("code"), "name": tc.get("commune"), "asset_type": "community",
+            "band": tc.get("band"), "distance_km": tc.get("distance_km"),
+            "eta_hours": tc.get("eta_hours")} for tc in threatened_communities],
+        _strat_ids)
+    _rings = {s.get("hour"): (s.get("polygon") or {}).get("coordinates", [[]])[0]
+              for s in sim["steps"]}
+    _story_routes = []
+    for _rr in db.query(OperationalAsset).filter(
+            OperationalAsset.asset_type == "route",
+            OperationalAsset.status == "active").all():
+        _pts = _rv(_rr.geometry)
+        if not _pts:
+            continue
+        _eh = None
+        for _hr in sorted(_rings):
+            if any(ops._point_in_ring(_px, _py, _rings[_hr]) for _px, _py in _pts):
+                _eh = _hr
+                break
+        _story_routes.append({"route_name": _rr.name, "impacted_in_hours": _eh,
+                              "band": ops.community_band(_eh),
+                              "panel": f"Route expected impacted in {_eh} hours" if _eh else "outside spread",
+                              "closed": _rr.id in exclude_route_ids})
+    story = ops.tactical_story(
+        {"lon": lon, "lat": lat}, sim["steps"], threatened_communities,
+        _story_routes,
+        [{"name": s.get("name")} for s in ranking["ranked"][:3]],
+        {"primary_water": primary or {}, "primary_station": primary_station or {}})
     earth_intel = ops.earth_intelligence(
         {"lon": lon, "lat": lat},
         {"temperature": temp, "humidity": humidity, "wind_speed_kmh": wind_speed},
@@ -743,6 +778,8 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
         "threatened_assets": threatened_assets,
         "threatened_communities": threatened_communities,
         "deployment_plan": deployment,
+        "protection_plan": protection,
+        "story": story,
         "earth_intelligence": earth_intel,
         "scenario": {"exclude_route_ids": sorted(exclude_route_ids),
                      "closed_routes": closed_routes,
