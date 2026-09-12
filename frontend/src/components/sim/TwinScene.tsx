@@ -13,7 +13,7 @@ import { canopyKey as canopyOf, TerrainMesh, updateDynamic } from './TwinLayers'
 export type TwinShow = {
   ellipses: boolean; canopy: boolean; front: boolean; wind: boolean;
   assets: boolean; routes: boolean; communities: boolean; water: boolean;
-  plan: boolean;
+  plan: boolean; terrain: boolean; why: boolean;
 }
 
 type Ctx = {
@@ -26,11 +26,11 @@ type Ctx = {
   setFps: (fps: number)=>void;
 }
 
-export default function TwinScene({ sim, waters, opsAssets, communeFc, show, plan, aoiKm, focusKey, onError, onFps }: {
+export default function TwinScene({ sim, waters, opsAssets, communeFc, show, plan, aoiKm, focusKey, onError, onFps, onTerrain }: {
   sim: any; waters: any[]; opsAssets: any[];
   communeFc: any | null;
   show: TwinShow; plan?: any; aoiKm?: number | null; focusKey?: number;
-  onError: (msg: string)=>void; onFps: (fps: number)=>void;
+  onError: (msg: string)=>void; onFps: (fps: number)=>void; onTerrain?: (stats: any)=>void;
 }){
   const divRef = useRef<HTMLDivElement>(null)
   const [note, setNote] = useState('')
@@ -38,6 +38,8 @@ export default function TwinScene({ sim, waters, opsAssets, communeFc, show, pla
   showRef.current = show
   const planRef = useRef(plan)
   planRef.current = plan
+  const onTerrainRef = useRef(onTerrain)
+  onTerrainRef.current = onTerrain
   useEffect(()=>{
     if(!divRef.current || !sim?.ignition) return
     const div = divRef.current
@@ -58,7 +60,10 @@ export default function TwinScene({ sim, waters, opsAssets, communeFc, show, pla
   // live-update dynamic layers when sim payload or toggles change
   useEffect(()=>{
     const d = (divRef.current as any)?._twin as Ctx | undefined
-    if(d && sim) updateDynamic(d, sim, waters, opsAssets, communeFc, showRef.current, planRef.current)
+    if(d && sim){
+      updateDynamic(d, sim, waters, opsAssets, communeFc, showRef.current, planRef.current)
+      try{ onTerrainRef.current?.((d as any)._terrainStats || null) }catch{}
+    }
   }, [sim, waters, opsAssets, communeFc, show, plan])
   // Focus Fire + AOI framing without rebuilding the scene
   useEffect(()=>{
@@ -212,6 +217,7 @@ async function buildScene(div: HTMLDivElement, sim: any, waters: any[], opsAsset
   updateDynamic(c, sim, waters, opsAssets, communeFc, show, plan)
   ;(c as any)._texCanvas = terr.texCanvas
   ;(c as any)._block = terr.block
+  ;(c as any)._grid = (terr as any).grid
   ;(c as any)._canopyKey = null
   return c
 }

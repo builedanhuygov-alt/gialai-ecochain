@@ -229,6 +229,40 @@ export default function Command(){
             <div key={`p${i}`} style={{fontSize:12, borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>🛡️ {p.detail}</div>
           ))}
         </Card>
+        <Card>
+          <b>🎖️ Operations Officer — TOP 5</b>
+          {!(plan?.top_actions || []).length &&
+            <div style={{fontSize:12, color:'#64748B'}}>Chạy Response Plan để sinh 5 hành động.</div>}
+          {(plan?.top_actions || []).map((a:any, i:number)=> (
+            <div key={i} style={{fontSize:12, borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>
+              <b>{a.action}</b> · {a.title}: {a.unit || 'MISSING'} <span style={{color:'#64748B'}}>({a.confidence})</span>
+            </div>
+          ))}
+          {plan?.earth_intelligence?.best_intervention &&
+            <div style={{fontSize:12, marginTop:4, background:'#EFF6FF', borderRadius:8, padding:6}}><b>Can thiệp tốt nhất:</b> {plan.earth_intelligence.best_intervention}</div>}
+        </Card>
+        <Card>
+          <b>🧠 Risk Drivers</b>
+          {!plan?.earth_intelligence &&
+            <div style={{fontSize:12, color:'#64748B'}}>Chạy Response Plan để xem driver.</div>}
+          {plan?.earth_intelligence && (
+            <div style={{fontSize:12}}>
+              <div>Chủ đạo: <b>{plan.earth_intelligence.major_risk_driver}</b> · Nút thắt: <b>{plan.earth_intelligence.major_bottleneck}</b></div>
+              <div style={{color:'#64748B'}}>Địa hình {plan.earth_intelligence.terrain_driver?.level} · Nhiên liệu {plan.earth_intelligence.fuel_driver?.level} · Thời tiết {plan.earth_intelligence.weather_driver?.level} · Tiếp cận {plan.earth_intelligence.access_driver?.level}</div>
+              {plan?.fire_behavior && <div style={{marginTop:4}}>🔥 <b>{plan.fire_behavior.behavior}</b> · {plan.fire_behavior.why}</div>}
+            </div>
+          )}
+        </Card>
+        <Card>
+          <b>🛡️ Community Shield</b>
+          {(plan?.threatened_communities || []).length === 0 &&
+            <div style={{fontSize:12, color:'#64748B'}}>Chạy Response Plan để chấm shield.</div>}
+          {(plan?.threatened_communities || []).slice(0,5).map((t:any)=> (
+            <div key={t.code} title={`Nước: ${t.shield_components?.water_availability || '?'} · Trạm: ${t.shield_components?.response_availability || '?'} · Địa hình: ${t.shield_components?.terrain_difficulty || '?'}`} style={{fontSize:12, display:'flex', justifyContent:'space-between', borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>
+              <span>{t.commune}</span><b>{t.shield || t.band}</b>
+            </div>
+          ))}
+        </Card>
       </div>
       <style>{`.card{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:12px}`}</style>
     </div>

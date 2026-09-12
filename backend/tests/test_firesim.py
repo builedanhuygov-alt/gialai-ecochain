@@ -146,3 +146,62 @@ def test_h_communities_distance_eta():
     assert len(d["communes"]) >= 1
     for t in d["communes"]:
         assert t["distance_km"] is not None and t["eta_hours"] is not None
+
+
+def test_officer_top5_checklist_behavior_no_percent():
+    c = setup()
+    d = c.post("/api/simulate/fire", json={"lon": 109.02, "lat": 14.06}).json()
+    for key in ("top_actions", "checklist", "fire_behavior", "deployment_plan",
+                "protection_plan", "story", "wind_corridor"):
+        assert key in d, key
+    assert len(d["top_actions"]) == 5
+    titles = [a["title"] for a in d["top_actions"]]
+    assert titles == ["Deploy station", "Use water source", "Use access route",
+                      "Protect community", "Prepare backup water source"]
+    for a in d["top_actions"]:
+        assert a["confidence"] in ("LOW", "MODERATE", "HIGH")
+        assert "reason" in a and "required_assets" in a
+    assert "%" not in str(d["top_actions"])
+    ch = d["checklist"]
+    assert set(ch) == {"immediate", "short_term", "medium_term"}
+    assert sum(len(v) for v in ch.values()) >= 1
+    bh = d["fire_behavior"]
+    assert bh["behavior"] in ("wind-driven", "terrain-driven", "fuel-driven", "mixed")
+    assert "why" in bh and "direction" in bh
+    # plan carries the same officer outputs
+    p = c.post("/api/v1/fires/response-plan", json={"lon": 109.02, "lat": 14.06}).json()
+    assert len(p["top_actions"]) == 5 and "checklist" in p and "fire_behavior" in p
+    assert "protection_plan" in p and "story" in p
+    ei = p["earth_intelligence"]
+    for key in ("major_risk_driver", "major_bottleneck", "best_intervention",
+                "critical_asset", "critical_community"):
+        assert key in ei, key
+    b = p["analyst_bulletin"]
+    for key in ("hanh_dong_uu_tien", "giai_thich_chay"):
+        assert key in b, key
+    assert len(b["hanh_dong_uu_tien"]) == 5
+    assert "wind-driven" in b["giai_thich_chay"] or "mixed" in b["giai_thich_chay"] \
+        or "terrain-driven" in b["giai_thich_chay"] or "fuel-driven" in b["giai_thich_chay"]
+    assert all("shield" in t and "nearest_water" in t for t in p["threatened_communities"])
+
+
+def test_shield_terrain_caps_category():
+    from app.services import twin_ops as ops
+    assert ops.terrain_difficulty(None) == "UNKNOWN"
+    assert ops.terrain_difficulty({"mean_slope_deg": 25}) == "HIGH"
+    base = ops.community_shield("WATCH", 10, True, 8, True, "SAFE", 5000)
+    assert base["shield"] == "WATCH"
+    steep = ops.community_shield("WATCH", 10, True, 8, True, "SAFE", 5000,
+                                 {"mean_slope_deg": 25})
+    assert steep["shield"] == "VULNERABLE"
+    assert steep["components"]["terrain_difficulty"] == "HIGH"
+    assert steep["components"]["population"] == 5000
+
+
+def test_protection_priority_rules():
+    from app.services import twin_ops as ops
+    assert ops.protection_priority("CRITICAL", "community", False) == "PROTECT_NOW"
+    assert ops.protection_priority("THREATENED", "station", False) == "PROTECT_NOW"
+    assert ops.protection_priority("THREATENED", "route", False) == "MONITOR"
+    assert ops.protection_priority("WATCH", "water", False) == "MONITOR"
+    assert ops.protection_priority("SAFE", "water", False) == "LOW_PRIORITY"

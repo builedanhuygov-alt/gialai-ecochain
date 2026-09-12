@@ -697,16 +697,34 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
             if _c.get("code") and _c["code"] not in _first_hr:
                 _first_hr[_c["code"]] = _s.get("hour")
     threatened_communities = []
+    _pw_geo = [{"name": w.get("name"), "longitude": w.get("longitude"),
+                "latitude": w.get("latitude"), "status": w.get("status")}
+               for w in spec_rows]
+    _ps_geo = [{"name": a.get("name"), "longitude": a.get("longitude"),
+                "latitude": a.get("latitude")}
+               for a in assets
+               if a.get("asset_type") in ("station", "team", "watchtower")
+               and a.get("status") == "active"]
     for _code, _hr in sorted(_first_hr.items(), key=lambda kv: kv[1]):
         _dd = _demo.get(_code, {})
         _cx, _cy = _cent.get(_code, (None, None))
         _dist = round(ops.haversine_km(lon, lat, _cx, _cy), 2) if _cx is not None else None
+        _band = ops.community_band(_hr)
+        _sup = ops.nearest_support(_cx, _cy, _pw_geo, _ps_geo, []) if _cx is not None else {}
+        _sh = ops.community_shield(_band, (_sup or {}).get("water_eta_min"),
+                                   bool((_sup or {}).get("water_ok")),
+                                   (_sup or {}).get("station_eta_min"),
+                                   bool((_sup or {}).get("has_station")),
+                                   None, _dd.get("population"))
         threatened_communities.append({
             "code": _code, "commune": _dd.get("name"), "population": _dd.get("population"),
             "population_status": "VERIFIED" if _dd.get("population") is not None else "MISSING",
-            "first_hour": _hr, "band": ops.community_band(_hr),
+            "first_hour": _hr, "band": _band,
             "distance_km": _dist,
             "eta_hours": round(_dist / ros, 2) if _dist is not None and ros else None,
+            "shield": _sh["shield"], "shield_components": _sh["components"],
+            "nearest_water": (_sup or {}).get("water_name"),
+            "nearest_station": (_sup or {}).get("station_name"),
         })
     deployment = ops.deployment_plan(primary_station, backup_station, primary,
                                      backup, primary_route, threatened_assets)
@@ -744,12 +762,30 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
         _story_routes,
         [{"name": s.get("name")} for s in ranking["ranked"][:3]],
         {"primary_water": primary or {}, "primary_station": primary_station or {}})
+    _crit_asset = next((t for t in protection if t.get("protection") == "PROTECT_NOW"), None)
+    _crit_comm = next((tc for tc in threatened_communities
+                       if tc.get("band") in ("CRITICAL", "THREATENED")), None)
     earth_intel = ops.earth_intelligence(
         {"lon": lon, "lat": lat},
         {"temperature": temp, "humidity": humidity, "wind_speed_kmh": wind_speed},
         float(body.get("slope_deg", 12.0)), ros, ranking, _rt_all,
         sum(1 for t in threatened_assets if t.get("band") in ("CRITICAL", "THREATENED")),
-        len(threatened_communities), result.get("missing", []))
+        len(threatened_communities), result.get("missing", []),
+        critical_asset=({"name": _crit_asset.get("name"),
+                         "protection": _crit_asset.get("protection")} if _crit_asset else None),
+        critical_community=({"commune": _crit_comm.get("commune"),
+                             "band": _crit_comm.get("band")} if _crit_comm else None))
+    # Module 1 officer + Module 2 checklist + Module 6 behavior (all cited)
+    top_actions = ops.operations_officer(
+        primary_station, backup_station, primary, backup, primary_route,
+        closed_routes, threatened_communities, threatened_communities)
+    checklist = ops.operational_checklist(deployment, threatened_assets,
+                                          threatened_communities)
+    behavior = ops.fire_behavior(
+        wind_speed, float(body.get("slope_deg", 12.0)), {},
+        round(wind_toward, 1),
+        sorted({c.get("name") for s in sim["steps"]
+                for c in (s.get("affected_communes") or []) if c.get("name")}))
     plan_out = {
         "fire": {"lon": lon, "lat": lat},
         "risk_summary": {"level": result["warning_level"], "score": result["risk_score"],
@@ -780,6 +816,9 @@ async def response_plan(body: dict, db: Session = Depends(get_db)):
         "deployment_plan": deployment,
         "protection_plan": protection,
         "story": story,
+        "top_actions": top_actions,
+        "checklist": checklist,
+        "fire_behavior": behavior,
         "earth_intelligence": earth_intel,
         "scenario": {"exclude_route_ids": sorted(exclude_route_ids),
                      "closed_routes": closed_routes,

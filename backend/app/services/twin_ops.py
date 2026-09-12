@@ -403,6 +403,10 @@ def build_analyst_bulletin(plan: dict) -> dict:
                                or ["Chưa rõ xã ảnh hưởng."]),
         "ke_hoach_trieu_dong": ([f"B{((d.get('order') or 0) + 1)}: {d.get('detail')}" for d in depl]
                                 or ["Chưa lập được kế hoạch — thiếu trạm/nước/tuyến."]),
+        "hanh_dong_uu_tien": [f"{a.get('action')}: {a.get('title')} — {a.get('unit') or 'MISSING'} "
+                              f"({a.get('reason')})" for a in (plan.get("top_actions") or [])],
+        "giai_thich_chay": ((plan.get("fire_behavior") or {}).get("why")
+                            or "Chưa giải thích được hành vi cháy (thiếu gió/dốc)."),
         "rui_ro_van_hanh": ([ei.get("access_constraints"), ei.get("water_constraints")]
                             + (rs.get("missing") or [])),
     }
@@ -529,7 +533,9 @@ def community_band(first_hour) -> str:
 def earth_intelligence(fire: dict, weather: dict, slope_deg: float | None,
                        ros_kmh: float | None, water_ranking: dict,
                        routes: list, n_threatened: int,
-                       n_communes: int, missing: list) -> dict:
+                       n_communes: int, missing: list,
+                       critical_asset: dict | None = None,
+                       critical_community: dict | None = None) -> dict:
     """Drivers + constraints + recommended action + operational insights."""
     ranked = (water_ranking or {}).get("ranked", [])
     top_water = ranked[0] if ranked else None
@@ -597,6 +603,15 @@ def earth_intelligence(fire: dict, weather: dict, slope_deg: float | None,
         f"{n_communes} xã trong vùng lan 6h" if n_communes else "Chưa rõ xã ảnh hưởng",
         f"Thiếu: {', '.join(missing)} — các driver liên quan đã hạ mức" if missing else "Đầu vào đủ cho suy luận hiện tại",
     ]
+    # Module 10 V3: bottleneck = worst constraint; best intervention follows it.
+    _sev = {"LOW": 0, "MODERATE": 1, "HIGH": 2}
+    _bottleneck = "access" if _sev.get(access_driver["level"], -1) >= _sev.get(
+        water_constraint["level"], -1) else "water"
+    if _bottleneck == "access":
+        best_intervention = ("Khảo sát tuyến tiếp cận và chốt tình trạng mặt đường "
+                             "trước khi điều xe nặng")
+    else:
+        best_intervention = recommended_action
     return {
         "terrain_driver": terrain_driver, "fuel_driver": fuel_driver,
         "weather_driver": weather_driver, "access_driver": access_driver,
@@ -610,6 +625,10 @@ def earth_intelligence(fire: dict, weather: dict, slope_deg: float | None,
         "water_constraints": water_constraint["detail"],
         "access_constraints": access_driver["detail"],
         "recommended_action": recommended_action,
+        "major_bottleneck": _bottleneck,
+        "critical_asset": critical_asset,
+        "critical_community": critical_community,
+        "best_intervention": best_intervention,
         "operational_insights": insights,
     }
 
@@ -745,8 +764,10 @@ SHIELD_ORDER = {"CRITICAL": 0, "VULNERABLE": 1, "WATCH": 2, "RESILIENT": 3}
 
 def community_shield(exposure_band: str, water_eta_min, water_ok: bool,
                      station_eta_min, has_station: bool,
-                     route_band: str | None, population) -> dict:
-    """Shield category + cited components. water_ok = verified source exists."""
+                     route_band: str | None, population, terrain=None) -> dict:
+    """Shield category + cited components. water_ok = verified source exists.
+    terrain: optional {"mean_slope_deg": x} (DEM analysis) — HIGH difficulty
+    caps the category one level worse (never better). Absent → UNKNOWN."""
     support_strong = bool(water_ok) and bool(has_station)
     no_support = (not water_ok) and (not has_station)
     if exposure_band == "CRITICAL":
@@ -757,6 +778,10 @@ def community_shield(exposure_band: str, water_eta_min, water_ok: bool,
         cat = "VULNERABLE" if no_support else "WATCH"
     else:
         cat = "WATCH" if population is None else "RESILIENT"
+    terr = terrain_difficulty(terrain)
+    if terr == "HIGH" and cat in ("WATCH", "VULNERABLE", "RESILIENT"):
+        cat = {"RESILIENT": "WATCH", "WATCH": "VULNERABLE",
+               "VULNERABLE": "CRITICAL"}.get(cat, cat)
     return {
         "shield": cat,
         "components": {
@@ -766,6 +791,8 @@ def community_shield(exposure_band: str, water_eta_min, water_ok: bool,
             "response_availability": ("STRONG" if has_station else "MISSING") +
                                      (f" (ETA ~{station_eta_min}′)" if station_eta_min is not None else ""),
             "route_resilience": route_band or "MISSING",
+            "terrain_difficulty": terr,
+            "population": population if population is not None else "MISSING",
         },
     }
 
@@ -843,3 +870,194 @@ def tactical_story(ignition: dict, steps: list, communities: list,
     story.sort(key=lambda e: ((e.get("t_hour") if e.get("t_hour") is not None else 99),
                               order.get(e.get("kind"), 9)))
     return story
+
+
+# ── Module 7 V2: terrain difficulty in shield (additive, optional) ─────────
+# terrain: None (unknown) | {"mean_slope_deg": x, "ruggedness": y} from DEM
+# analysis (client or future server DEM). Difficulty HIGH if mean slope ≥ 20°.
+def terrain_difficulty(terrain) -> str:
+    if not terrain:
+        return "UNKNOWN"
+    try:
+        slope = float(terrain.get("mean_slope_deg", 0))
+    except Exception:
+        return "UNKNOWN"
+    return "HIGH" if slope >= 20 else ("MODERATE" if slope >= 10 else "LOW")
+
+
+# ── Module 1: AI Operations Officer — TOP 5 ACTIONS ────────────────────────
+# Deterministic rules over plan/sim pieces. Confidence is LOW/MODERATE/HIGH
+# (data-completeness based), NEVER a %. Every action cites reason + ETA +
+# required assets.
+def operations_officer(primary_station, backup_station, primary_water,
+                       backup_water, primary_route, closed_routes: list,
+                       threatened: list, communities: list) -> list:
+    """Five ordered tactical actions. Missing legs → explicit MISSING action."""
+    actions = []
+    if primary_station:
+        actions.append({
+            "action": "ACTION 1", "title": "Deploy station",
+            "unit": primary_station.get("station_name"),
+            "reason": f"Trạm gần nhất ({primary_station.get('distance_km')} km) — "
+                      "đến hiện trường nhanh nhất theo đường chim bay",
+            "eta_minutes": primary_station.get("eta_minutes"),
+            "required_assets": [primary_station.get("station_name")],
+            "confidence": "MODERATE",
+        })
+    else:
+        actions.append({
+            "action": "ACTION 1", "title": "Deploy station",
+            "unit": None, "reason": "MISSING — chưa có trạm/tổ trong DB",
+            "eta_minutes": None, "required_assets": [],
+            "confidence": "LOW",
+        })
+    if primary_water:
+        actions.append({
+            "action": "ACTION 2", "title": "Use water source",
+            "unit": primary_water.get("name"),
+            "reason": f"Nguồn hạng {primary_water.get('priority')} gần nhất "
+                      f"({primary_water.get('distance_km')} km) — trữ lượng "
+                      f"{primary_water.get('capacity_m3') or 'chưa rõ'} m³",
+            "eta_minutes": primary_water.get("eta_minutes"),
+            "required_assets": [primary_water.get("name")],
+            "confidence": "HIGH" if primary_water.get("priority") == "A" else "MODERATE",
+        })
+    else:
+        actions.append({
+            "action": "ACTION 2", "title": "Use water source",
+            "unit": None, "reason": "MISSING — chưa có nguồn nước khả dụng",
+            "eta_minutes": None, "required_assets": [],
+            "confidence": "LOW",
+        })
+    if closed_routes:
+        actions.append({
+            "action": "ACTION 3", "title": "Close route",
+            "unit": ", ".join(closed_routes),
+            "reason": "Tuyến đã đóng theo kịch bản — cấm xe vào, chuyển sang dự phòng",
+            "eta_minutes": None,
+            "required_assets": closed_routes,
+            "confidence": "HIGH",
+        })
+    elif primary_route:
+        rn = primary_route.get("route_name") or primary_route.get("name")
+        actions.append({
+            "action": "ACTION 3", "title": "Use access route",
+            "unit": rn,
+            "reason": f"Tuyến gần nhất ({primary_route.get('distance_km')} km)"
+                      + (f", tình trạng {primary_route.get('road_condition')}"
+                         if primary_route.get("road_condition") else ", chưa rõ tình trạng"),
+            "eta_minutes": None,
+            "required_assets": [rn],
+            "confidence": "MODERATE" if primary_route.get("road_condition") else "LOW",
+        })
+    else:
+        actions.append({
+            "action": "ACTION 3", "title": "Use access route",
+            "unit": None, "reason": "FIELD_VERIFICATION_REQUIRED — chưa có tuyến khảo sát",
+            "eta_minutes": None, "required_assets": [],
+            "confidence": "LOW",
+        })
+    hot = [t for t in (threatened or []) if t.get("band") in ("CRITICAL", "THREATENED")]
+    if hot:
+        t0 = hot[0]
+        actions.append({
+            "action": "ACTION 4", "title": "Protect community",
+            "unit": t0.get("commune") or t0.get("name"),
+            "reason": f"{t0.get('commune') or t0.get('name')} ở band {t0.get('band')} "
+                      f"(ETA cháy ~{t0.get('eta_hours')}h, dân số {t0.get('population') or 'chưa rõ'})",
+            "eta_minutes": round(t0["eta_hours"] * 60) if t0.get("eta_hours") is not None else None,
+            "required_assets": [t0.get("commune") or t0.get("name")],
+            "confidence": "MODERATE",
+        })
+    else:
+        actions.append({
+            "action": "ACTION 4", "title": "Protect community",
+            "unit": None, "reason": "Không có xã CRITICAL/THREATENED trong kịch bản",
+            "eta_minutes": None, "required_assets": [],
+            "confidence": "HIGH",
+        })
+    if backup_water:
+        actions.append({
+            "action": "ACTION 5", "title": "Prepare backup water source",
+            "unit": backup_water.get("name"),
+            "reason": f"Dự phòng khi nguồn chính quá tải/khói che ({backup_water.get('distance_km')} km)",
+            "eta_minutes": backup_water.get("eta_minutes"),
+            "required_assets": [backup_water.get("name")],
+            "confidence": "MODERATE",
+        })
+    else:
+        actions.append({
+            "action": "ACTION 5", "title": "Prepare backup water source",
+            "unit": None, "reason": "MISSING — chỉ có một hoặc không có nguồn nước",
+            "eta_minutes": None, "required_assets": [],
+            "confidence": "LOW",
+        })
+    return actions
+
+
+# ── Module 2: Operational Checklist (time buckets, no invented times) ─────
+# immediate: verify + dispatch legs with known ETA. 30min: legs with ETA ≤30
+# + community warnings <3h. 1h: THREATENED protections. 3h: WATCH + backups.
+def operational_checklist(deployment: list, threatened: list,
+                          communities: list) -> dict:
+    """{immediate, short_term, medium_term} — each item cites its source."""
+    immediate, short, medium = [], [], []
+    for d in (deployment or []):
+        eta = d.get("eta_minutes")
+        item = f"{d.get('detail')}"
+        if d.get("action") == "verify_first":
+            immediate.append(item + " [xác minh trước mọi điều động]")
+        elif eta is not None and eta <= 30:
+            short.append(item + f" [ETA ~{eta}′]")
+        elif eta is not None:
+            medium.append(item + f" [ETA ~{eta}′]")
+        else:
+            short.append(item)
+    for t in (threatened or []):
+        if t.get("band") == "CRITICAL":
+            short.append(f"Bảo vệ NGAY {t.get('name')} (ETA cháy ~{t.get('eta_hours')}h)")
+        elif t.get("band") == "THREATENED":
+            medium.append(f"Chuẩn bị bảo vệ {t.get('name')} (ETA cháy ~{t.get('eta_hours')}h)")
+    for cm in (communities or [])[:5]:
+        if (cm.get("band") or "SAFE") != "SAFE":
+            medium.append(f"Cảnh báo {cm.get('commune')} ({cm.get('band')}, ETA ~{cm.get('eta_hours')}h)")
+    if not (immediate or short or medium):
+        immediate.append("Chưa có dữ liệu điều động — xác minh trạm/nước/tuyến thực địa")
+    return {"immediate": immediate, "short_term": short, "medium_term": medium}
+
+
+# ── Module 6: Fire Behavior Explainer (which factor dominates ROS) ─────────
+# Compares the multiplicative ROS factors (wind vs slope vs scenario) and
+# names the dominant one. Direction sentence cites wind_toward + communes.
+def fire_behavior(wind_speed_kmh, slope_deg: float | None, ros_factors: dict,
+                  wind_toward_deg, communes_downwind: list) -> dict:
+    """terrain-driven | wind-driven | fuel-driven | mixed + why."""
+    try:
+        wind_f = 1.0 + max(0.0, float(wind_speed_kmh or 0)) / 12.0
+    except Exception:
+        wind_f = 1.0
+    try:
+        slope_f = 1.0 + max(0.0, float(slope_deg or 0)) / 35.0
+    except Exception:
+        slope_f = 1.0
+    factors = dict(ros_factors or {})
+    temp_f = float(factors.get("temperature", 1.0))
+    rain_f = float(factors.get("rain", 1.0))
+    fuel_f = float(factors.get("fuel", 1.0))
+    scored = {"wind-driven": wind_f, "terrain-driven": slope_f,
+              "fuel-driven": max(temp_f, fuel_f) / max(rain_f, 0.01)}
+    best = max(scored, key=lambda k: scored[k])
+    second = sorted(scored.values(), reverse=True)[1]
+    behavior = best if scored[best] >= second * 1.3 else "mixed"
+    communes = ", ".join(communes_downwind[:4]) if communes_downwind else "chưa rõ xã"
+    return {
+        "behavior": behavior,
+        "dominant_factor": best,
+        "factors": {"wind": round(wind_f, 2), "slope": round(slope_f, 2),
+                    "temperature": temp_f, "rain": rain_f, "fuel": fuel_f},
+        "direction": f"Lan theo hướng {wind_toward_deg}° về phía {communes}",
+        "why": (f"Cháy lan theo hướng {wind_toward_deg}° vì gió {wind_speed_kmh} km/h "
+                f"(hệ số gió ×{round(wind_f, 2)})"
+                + (f", dốc {slope_deg}° (×{round(slope_f, 2)})" if slope_deg is not None else "")
+                + f" — yếu tố chính: {behavior}."),
+    }

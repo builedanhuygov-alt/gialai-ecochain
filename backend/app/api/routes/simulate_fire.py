@@ -279,6 +279,29 @@ def simulate_fire(body: dict, db: Session = Depends(get_db)):
         {"primary_water": {"name": _w_by_dist[0]["name"],
                            "eta_minutes": _w_by_dist[0]["current"]["travel_minutes"]} if _w_by_dist else {},
          "primary_station": {"station_name": _st_cands[0]["name"]} if _st_cands else {}})
+    # Module 1 officer + Module 2 checklist + Module 6 behavior (all cited).
+    _open_routes = [r for r in routes if not r["closed"]]
+    _pw = {"name": _w_by_dist[0]["name"], "priority": None,
+           "distance_km": _w_by_dist[0]["distance_km"],
+           "capacity_m3": None,
+           "eta_minutes": _w_by_dist[0]["current"]["travel_minutes"]} if _w_by_dist else None
+    _bw = {"name": _w_by_dist[1]["name"], "distance_km": _w_by_dist[1]["distance_km"],
+           "eta_minutes": _w_by_dist[1]["current"]["travel_minutes"]} if len(_w_by_dist) > 1 else None
+    _ps = ({"station_name": _st_cands[0]["name"], "station_type": _st_cands[0]["asset_type"],
+            "distance_km": _st_cands[0]["distance_km"],
+            "eta_minutes": ops.travel_minutes(_st_cands[0]["distance_km"])}
+           if _st_cands else None)
+    _pr = _open_routes[0] if _open_routes else None
+    top_actions = ops.operations_officer(
+        _ps, None, _pw, _bw, _pr,
+        [r["route_name"] for r in routes if r["closed"]],
+        communities, communities)
+    _depl = ops.deployment_plan(_ps, None, _pw, _bw, _pr, op_threats + w_threats)
+    checklist = ops.operational_checklist(
+        _depl, op_threats + w_threats, communities)
+    behavior = ops.fire_behavior(
+        wind, slope, scen.get("factors", {}), round(wdir % 360, 1),
+        [c["commune"] for c in communities][:4])
     impact = {
         "area_affected_ha": max(areas) if areas else 0,
         "communities_threatened": len(communities),
@@ -307,6 +330,10 @@ def simulate_fire(body: dict, db: Session = Depends(get_db)):
         "wind_corridor": corridor,
         "protection_plan": protection,
         "story": story,
+        "top_actions": top_actions,
+        "checklist": checklist,
+        "fire_behavior": behavior,
+        "deployment_plan": _depl,
         "impact": impact,
         "generated_at": utcnow().isoformat(),
     }

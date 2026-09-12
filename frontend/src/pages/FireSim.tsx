@@ -54,7 +54,11 @@ export default function FireSim(){
   const [plan, setPlan] = useState<any>(null)
   const [planLoading, setPlanLoading] = useState(false)
   const [show, setShow] = useState({ ellipses:true, assets:true, routes:true, communities:true, wind:true })
-  const [show3d, setShow3d] = useState({ ellipses:true, canopy:true, front:true, wind:true, assets:true, routes:true, communities:true, water:true, plan:true })
+  const [show3d, setShow3d] = useState({ ellipses:true, canopy:true, front:true, wind:true, assets:true, routes:true, communities:true, water:true, plan:true, terrain:false, why:true })
+  const [terrainStats, setTerrainStats] = useState<any>(null)
+  // Module 7 compare: second scenario overlaid dashed on 2D + delta panel
+  const [simB, setSimB] = useState<any>(null)
+  const [compareWind, setCompareWind] = useState(40)
   // Module 1/10: AOI size + scenario timeline + playback
   const [aoiKm, setAoiKm] = useState(3)
   const [ext12, setExt12] = useState(false)
@@ -219,6 +223,37 @@ export default function FireSim(){
       try{ map?.flyTo({ center:[lon, lat], zoom: z, duration:1200 }) }catch{}
     } else setFocusKey(k=> k + 1)
   }
+  // Module 7 compare: second scenario (gió khác), overlay nét đứt trên 2D
+  const runCompare = async ()=>{
+    setLoading(true); setError('')
+    try{
+      const b: any = await api.firesim({ lon, lat, wind_speed_kmh: compareWind,
+        wind_direction_deg: wdir, slope_deg: slope, temperature_c: temp,
+        rain_mm: rain, forest_loss_ha: fuel, hours: hoursFor() })
+      setSimB(b)
+      if(map && mode === '2d'){
+        try{
+          if(map.getLayer('fsim-compare')) map.removeLayer('fsim-compare')
+          if(map.getSource('src-fsim-compare')) map.removeSource('src-fsim-compare')
+        }catch{}
+        const feats = (b.spread?.steps || []).map((s: any)=> ({ type:'Feature',
+          properties:{ hour:s.hour }, geometry: s.polygon }))
+        map.addSource('src-fsim-compare', { type:'geojson',
+          data:{ type:'FeatureCollection', features: feats } } as any)
+        map.addLayer({ id:'fsim-compare', type:'line', source:'src-fsim-compare',
+          paint:{ 'line-color':'#7C3AED', 'line-width':2, 'line-dasharray':[4,2] } } as any)
+      }
+    }catch(e:any){ setError(String(e.message || e).slice(0, 200)) }
+    finally{ setLoading(false) }
+  }
+  const compareDelta = (()=>{
+    if(!simB || !data) return null
+    const aMax = data.impact?.area_affected_ha || 0
+    const bMax = simB.impact?.area_affected_ha || 0
+    const aN = data.impact?.communities_threatened || 0
+    const bN = simB.impact?.communities_threatened || 0
+    return { aMax, bMax, dArea: Math.round((bMax - aMax) * 10) / 10, dN: bN - aN }
+  })()
 
   const imp = data?.impact
   return (
@@ -261,6 +296,18 @@ export default function FireSim(){
             </button>
             <button onClick={focusFire} title="Focus Fire: zoom tới điểm cháy" style={{background:'#0B1412', color:'#fff', border:0, borderRadius:999, padding:'10px 14px', fontWeight:800, cursor:'pointer'}}>🎯</button>
           </div>
+          <div style={{display:'flex', gap:6, alignItems:'center', borderTop:'1px solid #F1F5F9', paddingTop:8}}>
+            <span style={{fontSize:11, color:'#64748B'}}>So sánh gió</span>
+            <input value={compareWind} onChange={e=> setCompareWind(Number(e.target.value))} type="number" step={5} style={{width:64, border:'1px solid #E2E8E5', borderRadius:8, padding:'4px 8px', fontSize:12}} aria-label="Gió kịch bản B" />
+            <span style={{fontSize:11, color:'#64748B'}}>km/h</span>
+            <button onClick={runCompare} disabled={loading} style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #7C3AED', background:'#fff', color:'#7C3AED', padding:'4px 12px', cursor:'pointer'}}>So sánh A/B</button>
+            {simB && <button onClick={()=> { setSimB(null); try{ if(map?.getLayer('fsim-compare')) map.removeLayer('fsim-compare'); if(map?.getSource('src-fsim-compare')) map.removeSource('src-fsim-compare') }catch{} }} style={{fontSize:11, borderRadius:999, border:'1px solid #E2E8E5', background:'#fff', padding:'4px 10px', cursor:'pointer'}}>Xóa B</button>}
+          </div>
+          {compareDelta && (
+            <div style={{fontSize:11, background:'#F5F3FF', border:'1px solid #DDD6FE', borderRadius:8, padding:'6px 10px'}}>
+              B (gió {compareWind} km/h, nét đứt tím) vs A (gió {wind} km/h): diện tích {compareDelta.dArea >= 0 ? '+' : ''}{compareDelta.dArea} ha · xã {compareDelta.dN >= 0 ? '+' : ''}{compareDelta.dN}
+            </div>
+          )}
           {planStale && !planLoading && <div style={{fontSize:11, color:'#B45309'}}>Plan đang cũ hơn kịch bản — sẽ tự tái sinh…</div>}
           {error && <div style={{fontSize:12, color:'#B91C1C'}}>⚠ {error}</div>}
           <div style={{display:'flex', flexDirection:'column', gap:4, borderTop:'1px solid #F1F5F9', paddingTop:8}}>
@@ -276,7 +323,7 @@ export default function FireSim(){
             ) : (
               <>
                 {(Object.keys(show3d) as (keyof typeof show3d)[]).map(k=> (
-                  <Toggle key={k} label={{ellipses:'Ellipse lan', canopy:'Tán cây (proxy)', front:'Vệt lửa 3D', wind:'Mũi tên gió', assets:'Tài sản', routes:'Tuyến', communities:'Xã', water:'Đường lấy nước', plan:'Kế hoạch điều động'}[k]} value={show3d[k]} onChange={v=> setShow3d(s=> ({...s, [k]:v}))} />
+                  <Toggle key={k} label={{ellipses:'Ellipse lan', canopy:'Tán cây (proxy)', front:'Vệt lửa 3D', wind:'Mũi tên gió', assets:'Tài sản', routes:'Tuyến', communities:'Xã', water:'Đường lấy nước', plan:'Kế hoạch điều động', terrain:'Phân tích địa hình', why:'Màu driver (WHY)'}[k]} value={show3d[k]} onChange={v=> setShow3d(s=> ({...s, [k]:v}))} />
                 ))}
               </>
             )}
@@ -297,7 +344,7 @@ export default function FireSim(){
           {mode === '3d' && data && !demError && (
             <TwinScene sim={simView} waters={waters} opsAssets={opsAssets} communeFc={communeFc}
               show={show3d as TwinShow} plan={plan} aoiKm={aoiKm} focusKey={focusKey}
-              onError={(m)=> setDemError(m)} onFps={setFps} />
+              onError={(m)=> setDemError(m)} onFps={setFps} onTerrain={setTerrainStats} />
           )}
           {mode === '3d' && demError && (
             <div style={{position:'absolute', inset:0, display:'grid', placeItems:'center', background:'#0B1412', color:'#fff', padding:24, textAlign:'center', zIndex:6}}>
@@ -342,7 +389,7 @@ export default function FireSim(){
             <div style={{fontSize:12, color:'#64748B'}}>Trạm ảnh hưởng: {(imp.stations_impacted || []).join(', ') || '—'}</div>
             {(simView?.communities || []).length > 0 && (
               <div style={{fontSize:11, marginTop:4}}>{(simView.communities || []).slice(0, 6).map((c: any)=> (
-                <span key={c.code} style={{display:'inline-block', background:'#F1F5F9', borderRadius:8, padding:'2px 8px', marginRight:4, marginBottom:4}}>
+                <span key={c.code} title={`Nước: ${c.shield_components?.water_availability || '?'} · Trạm: ${c.shield_components?.response_availability || '?'} · Tuyến: ${c.shield_components?.route_resilience || '?'} · Địa hình: ${c.shield_components?.terrain_difficulty || '?'} · Dân số: ${c.population ?? '?'}`} style={{display:'inline-block', background:'#F1F5F9', borderRadius:8, padding:'2px 8px', marginRight:4, marginBottom:4}}>
                   {c.commune} · {c.band} · 🛡️{c.shield}
                 </span>
               ))}</div>
@@ -371,11 +418,17 @@ export default function FireSim(){
           {(simView?.story?.length > 0) && (
             <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
               <b>📖 Story mode (theo timeline T+{untilHour ?? 'ALL'})</b>
-              {(simView.story || []).map((e: any, i: number)=> (
-                <div key={i} style={{fontSize:12, borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>
-                  <b>T+{e.t_hour}h</b> · {e.text}
-                </div>
-              ))}
+              {(()=>{ const groups: Record<string, any[]> = {}
+                for(const e of (simView.story || [])){ const k = `T+${e.t_hour}h`; (groups[k] = groups[k] || []).push(e) }
+                return Object.entries(groups).map(([t, evs])=> (
+                  <div key={t} style={{marginTop:6}}>
+                    <div style={{fontSize:11, fontWeight:800, color:'#0F766E'}}>{t}</div>
+                    {evs.map((e: any, i: number)=> (
+                      <div key={i} style={{fontSize:12, borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>↓ {e.text}</div>
+                    ))}
+                  </div>
+                ))
+              })()}
             </div>
           )}
           {data?.wind_corridor && (
@@ -393,6 +446,33 @@ export default function FireSim(){
                   <b>{p.protection}</b> · {p.detail}
                 </div>
               ))}
+            </div>
+          )}
+          {(data?.top_actions?.length > 0 || data?.checklist || data?.fire_behavior) && (
+            <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
+              <b>🎖️ Operations Officer — TOP 5</b>
+              {(data.top_actions || []).map((a: any, i: number)=> (
+                <div key={i} style={{fontSize:12, borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>
+                  <b>{a.action}: {a.title}</b> — {a.unit || 'MISSING'} · {a.reason}
+                  {a.eta_minutes != null && <> · ETA ~{a.eta_minutes}′</>} · tin cậy {a.confidence}
+                </div>
+              ))}
+              {data?.fire_behavior && <div style={{fontSize:12, marginTop:6, background:'#F8FAFC', borderRadius:8, padding:6}}><b>🔥 {data.fire_behavior.behavior}</b> · {data.fire_behavior.why}</div>}
+              {data?.checklist && (
+                <div style={{fontSize:12, marginTop:6}}>
+                  <b>☑️ Checklist:</b>
+                  <div>Ngay: {(data.checklist.immediate || []).join(' · ') || '—'}</div>
+                  <div>30′: {(data.checklist.short_term || []).join(' · ') || '—'}</div>
+                  <div>1–3h: {(data.checklist.medium_term || []).join(' · ') || '—'}</div>
+                </div>
+              )}
+            </div>
+          )}
+          {terrainStats && (
+            <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
+              <b>⛰️ Phân tích địa hình AOI (DEM thật)</b>
+              <div style={{fontSize:12}}>Dốc TB {terrainStats.mean_slope_deg}° · max {terrainStats.max_slope_deg}° · gồ ghề {terrainStats.ruggedness} · dốc đứng {terrainStats.steep_share}%</div>
+              <div style={{fontSize:11, color:'#64748B'}}>Ridge 🟤 {terrainStats.ridge_points} điểm · valley 🔵 {terrainStats.valley_points} điểm · {terrainStats.method}</div>
             </div>
           )}
         </div>

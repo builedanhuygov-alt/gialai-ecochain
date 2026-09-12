@@ -150,7 +150,8 @@ export async function TerrainMesh(origin: { lon: number; lat: number }, quality:
   tex3.colorSpace = THREE.SRGBColorSpace
   const mesh = new THREE.Mesh(tg, new THREE.MeshStandardMaterial({ map: tex3, vertexColors: true, roughness: 1 }))
   mesh.receiveShadow = quality === 'high'
-  return { mesh, sampler, origin, sizeM, texCanvas: tex.canvas, block }
+  return { mesh, sampler, origin, sizeM, texCanvas: tex.canvas, block,
+           grid: { H: Hgrid, n: N, cell, sizeM } }
 }
 
 // <FireEllipseMesh /> — M4 server ellipses draped on terrain.
@@ -276,7 +277,78 @@ export function CommunityImpactLayer(g: THREE.Group, c: Ctx, sim: any, communeFc
   }
 }
 
-// <WaterAccessLayer /> — M9 dashed lines + ETA sprites (top-2 AVAILABLE).
+// <TerrainAnalysisLayer /> — M5 slope zones + ridge/valley (ESTIMATED).
+// Reads the real DEM grid stored on ctx by TwinScene. Ridges = local maxima,
+// valleys = local minima (8-neighbourhood + prominence gate) — labeled
+// estimated, never surveyed ridgelines. Returns stats for the panel.
+export function TerrainAnalysisLayer(g: THREE.Group, c: Ctx){
+  const grid = (c as any)._grid as { H: Float32Array; n: number; cell: number; sizeM: number } | undefined
+  if(!grid) return null
+  const { H, n, cell, sizeM } = grid
+  const Hh = c.sampler
+  let sum = 0, sum2 = 0, mx = 0, steep = 0, cnt = 0
+  const ridge: number[] = [], valley: number[] = []
+  const at = (i: number, j: number)=> H[j * n + i]
+  for(let j = 1; j < n - 1; j += 2) for(let i = 1; i < n - 1; i += 2){
+    const h = at(i, j)
+    let isMax = true, isMin = true
+    for(let dj = -1; dj <= 1; dj++) for(let di = -1; di <= 1; di++){
+      if(!di && !dj) continue
+      const o = at(i + di, j + dj)
+      if(o >= h - 0.5) isMax = false
+      if(o <= h + 0.5) isMin = false
+    }
+    const x = (i / (n - 1) - 0.5) * sizeM, z = (j / (n - 1) - 0.5) * sizeM
+    const dx = (at(Math.min(n - 1, i + 1), j) - at(Math.max(0, i - 1), j)) / (2 * cell)
+    const dy = (at(i, Math.min(n - 1, j + 1)) - at(i, Math.max(0, j - 1))) / (2 * cell)
+    const sl = Math.sqrt(dx * dx + dy * dy)
+    const deg = Math.atan(sl) * 180 / Math.PI
+    sum += deg; sum2 += deg * deg; mx = Math.max(mx, deg); cnt++
+    if(deg >= Math.atan(0.35) * 180 / Math.PI) steep++
+    if(isMax) ridge.push(x, Hh(x, z) + 15, z)
+    if(isMin) valley.push(x, Hh(x, z) + 15, z)
+  }
+  const mean = sum / Math.max(1, cnt)
+  const rugged = Math.sqrt(Math.max(0, sum2 / Math.max(1, cnt) - mean * mean))
+  const mk = (arr: number[], color: number)=>{
+    if(!arr.length) return
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3))
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({
+      color, size: 22, sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false }))
+    g.add(pts)
+  }
+  mk(ridge, 0xB45309)
+  mk(valley, 0x2563EB)
+  return {
+    mean_slope_deg: Math.round(mean * 10) / 10,
+    max_slope_deg: Math.round(mx * 10) / 10,
+    ruggedness: Math.round(rugged * 10) / 10,
+    steep_share: cnt ? Math.round((steep / cnt) * 100) : 0,
+    ridge_points: ridge.length / 3, valley_points: valley.length / 3,
+    method: 'DEM ước tính (cực trị cục bộ + prominence 0.5m) — không phải đường đồng mức khảo sát',
+  }
+}
+
+// <RiskDriverLayer /> — M4 WHY on terrain: outline of the current ellipse
+// tinted by the dominant driver + legend. Colors: terrain ochre, wind sky,
+// fuel green, access violet.
+const DRIVER_COLORS: Record<string, string> = {
+  terrain: '#A16207', fuel: '#65A30D', wind: '#0EA5E9', access: '#7C3AED',
+}
+export function RiskDriverLayer(g: THREE.Group, c: Ctx, sim: any, plan: any){
+  const driver = plan?.earth_intelligence?.major_risk_driver
+  if(!driver || !sim.spread?.steps?.length) return null
+  const ring = sim.spread.steps[0].polygon.coordinates[0]
+  const pts = ring.map((p: number[])=>{
+    const q = toLocal(p[0], p[1], c.origin)
+    return new THREE.Vector3(q.x, c.sampler(q.x, q.z) + 26, q.z)
+  })
+  const lg = new THREE.BufferGeometry().setFromPoints(pts)
+  g.add(new THREE.LineLoop(lg, new THREE.LineBasicMaterial({
+    color: DRIVER_COLORS[driver] || '#A16207' })))
+  return { driver, color: DRIVER_COLORS[driver] || '#A16207' }
+}
 export function WaterAccessLayer(g: THREE.Group, c: Ctx, sim: any, waters: any[]){
   const H = c.sampler
   const P = (lon: number, lat: number, lift = 0)=>{
@@ -416,6 +488,9 @@ export function updateDynamic(c: Ctx, sim: any, waters: any[], opsAssets: any[],
   if(show.wind) WindFieldLayer(g, c, sim)
   if(show.front) FireFrontPoints(g, c, sim)
   if(show.plan && plan) ResponsePlanLayer(g, c, sim, plan, waters, opsAssets)
+  if(show.terrain) (c as any)._terrainStats = TerrainAnalysisLayer(g, c) || null
+  else (c as any)._terrainStats = null
+  if(show.why) RiskDriverLayer(g, c, sim, plan)
   c.scene.add(g)
 }
 
