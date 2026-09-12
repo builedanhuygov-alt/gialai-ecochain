@@ -5,6 +5,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api, API_BASE } from '../services/api'
 import FireSimulationLayer, { setRouteMesh } from '../components/sim/FireSimLayers'
 import FireFrontCanvas, { frontSupported } from '../components/sim/FireFrontCanvas'
+import TwinScene from '../components/sim/TwinScene'
+import type { TwinShow } from '../components/sim/TwinScene'
 
 const API = API_BASE.replace(/\/$/, '')
 
@@ -47,6 +49,12 @@ export default function FireSim(){
   const [plan, setPlan] = useState<any>(null)
   const [planLoading, setPlanLoading] = useState(false)
   const [show, setShow] = useState({ ellipses:true, assets:true, routes:true, communities:true, wind:true })
+  const [show3d, setShow3d] = useState({ ellipses:true, canopy:true, front:true, wind:true, assets:true, routes:true, communities:true, water:true })
+  const [mode, setMode] = useState<'2d'|'3d'>(typeof window !== 'undefined' && window.innerWidth < 640 ? '2d' : '3d')
+  const [waters, setWaters] = useState<any[]>([])
+  const [opsAssets, setOpsAssets] = useState<any[]>([])
+  const [demError, setDemError] = useState('')
+  const [fps, setFps] = useState<number | null>(null)
   const [terrain3d, setTerrain3d] = useState(false)
   const [particles, setParticles] = useState(frontSupported())
   const [communeFc, setCommuneFc] = useState<any>(null)
@@ -88,15 +96,22 @@ export default function FireSim(){
       .catch(()=> fetch('gialai_135.geojson').then(r=> r.ok ? r.json() : null).then(j=> { if(j?.features) setCommuneFc(j) }).catch(()=> {}))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[])
-  // route geometries for RouteImpactMesh (from /api/assets, colored by sim band)
+  // asset + water coords once (3D joins + route mesh; not per sim)
   useEffect(()=>{
-    if(!map || !mapReady || !data || !show.routes) return
-    fetch(`${API}/api/assets?asset_type=route`).then(r=> r.json()).then((rows: any[])=>{
-      const byId: Record<string, any> = {}
-      for(const a of (Array.isArray(rows) ? rows : [])) byId[a.id] = a
-      setRouteMesh(map, data.routes || [], byId)
+    fetch(`${API}/api/assets`).then(r=> r.json()).then((rows: any[])=>{
+      if(Array.isArray(rows)) setOpsAssets(rows)
     }).catch(()=> {})
-  },[map, mapReady, data, show.routes])
+    fetch(`${API}/api/water/assets`).then(r=> r.json()).then((j: any)=>{
+      if(Array.isArray(j?.assets)) setWaters(j.assets)
+    }).catch(()=> {})
+  },[])
+  // route geometries for RouteImpactMesh (colored by sim band)
+  useEffect(()=>{
+    if(!map || !mapReady || !data || !show.routes || mode !== '2d') return
+    const byId: Record<string, any> = {}
+    for(const a of opsAssets) byId[a.id] = a
+    setRouteMesh(map, data.routes || [], byId)
+  },[map, mapReady, data, show.routes, opsAssets, mode])
 
   const runSim = async (withPlan: boolean)=>{
     if(timer.current) clearTimeout(timer.current)
@@ -149,25 +164,58 @@ export default function FireSim(){
           </button>
           {error && <div style={{fontSize:12, color:'#B91C1C'}}>⚠ {error}</div>}
           <div style={{display:'flex', flexDirection:'column', gap:4, borderTop:'1px solid #F1F5F9', paddingTop:8}}>
-            <b style={{fontSize:12}}>Lớp hiển thị</b>
-            {(Object.keys(show) as (keyof typeof show)[]).map(k=> (
-              <Toggle key={k} label={{ellipses:'Ellipse lan', assets:'Tài sản', routes:'Tuyến', communities:'Xã', wind:'Gió'}[k]} value={show[k]} onChange={v=> setShow(s=> ({...s, [k]:v}))} />
-            ))}
-            <Toggle label="⛰️ 3D địa hình" value={terrain3d} onChange={setTerrain3d} />
-            <Toggle label="🔥 Vệt lửa động" value={particles} onChange={setParticles} />
+            <b style={{fontSize:12}}>Lớp hiển thị {mode === '3d' ? '(3D)' : '(2D)'}</b>
+            {mode === '2d' ? (
+              <>
+                {(Object.keys(show) as (keyof typeof show)[]).map(k=> (
+                  <Toggle key={k} label={{ellipses:'Ellipse lan', assets:'Tài sản', routes:'Tuyến', communities:'Xã', wind:'Gió'}[k]} value={show[k]} onChange={v=> setShow(s=> ({...s, [k]:v}))} />
+                ))}
+                <Toggle label="⛰️ 3D địa hình (2D)" value={terrain3d} onChange={setTerrain3d} />
+                <Toggle label="🔥 Vệt lửa động (2D)" value={particles} onChange={setParticles} />
+              </>
+            ) : (
+              <>
+                {(Object.keys(show3d) as (keyof typeof show3d)[]).map(k=> (
+                  <Toggle key={k} label={{ellipses:'Ellipse lan', canopy:'Tán cây (proxy)', front:'Vệt lửa 3D', wind:'Mũi tên gió', assets:'Tài sản', routes:'Tuyến', communities:'Xã', water:'Đường lấy nước'}[k]} value={show3d[k]} onChange={v=> setShow3d(s=> ({...s, [k]:v}))} />
+                ))}
+              </>
+            )}
           </div>
           {data?.ros && <div style={{fontSize:11, color:'#64748B'}}>ROS {data.ros.ros_kmh} km/h (nền {data.ros.base_ros_kmh} × T{data.ros.factors.temperature} × mưa{data.ros.factors.rain} × nhiên liệu{data.ros.factors.fuel})<br/>{data.ros.formula}</div>}
         </div>
         <div style={{position:'relative', minHeight:420, borderRadius:12, overflow:'hidden', border:'1px solid #E2E8E5'}} ref={mapDiv}>
-          {map && mapReady && data && (
+          <div style={{position:'absolute', top:8, left:8, zIndex:7, display:'flex', gap:6}}>
+            <button onClick={()=> setMode('2d')} style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'4px 12px', background: mode==='2d' ? '#0B1412' : '#fff', color: mode==='2d' ? '#fff' : '#0B1412', cursor:'pointer'}}>2D bản đồ</button>
+            <button onClick={()=> { setDemError(''); setMode('3d') }} style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'4px 12px', background: mode==='3d' ? '#0B1412' : '#fff', color: mode==='3d' ? '#fff' : '#0B1412', cursor:'pointer'}}>3D Twin</button>
+          </div>
+          {mode === '2d' && map && mapReady && data && (
             <>
               <FireSimulationLayer map={map} data={data} show={show} communeFc={communeFc} isMobile={isMobile} />
               <FireFrontCanvas map={map} steps={data.spread?.steps} on={particles} />
             </>
           )}
-          <div style={{position:'absolute', top:8, left:8, background:'rgba(255,255,255,0.95)', borderRadius:8, padding:'6px 10px', fontSize:11, zIndex:6}}>
+          {mode === '3d' && data && !demError && (
+            <TwinScene sim={data} waters={waters} opsAssets={opsAssets} communeFc={communeFc}
+              show={show3d as TwinShow} onError={(m)=> setDemError(m)} onFps={setFps} />
+          )}
+          {mode === '3d' && demError && (
+            <div style={{position:'absolute', inset:0, display:'grid', placeItems:'center', background:'#0B1412', color:'#fff', padding:24, textAlign:'center', zIndex:6}}>
+              <div>
+                <div style={{fontSize:14, fontWeight:800}}>Không dựng được địa hình 3D</div>
+                <div style={{fontSize:12, color:'#FDE68A', marginTop:6}}>{demError} — không dùng mặt phẳng giả thay thế.</div>
+                <button onClick={()=> setMode('2d')} style={{marginTop:10, background:'#0F766E', color:'#fff', border:0, borderRadius:999, padding:'8px 18px', fontWeight:700, cursor:'pointer'}}>Về 2D</button>
+              </div>
+            </div>
+          )}
+          <div style={{position:'absolute', top:8, left:8, marginTop:34, background:'rgba(255,255,255,0.95)', borderRadius:8, padding:'6px 10px', fontSize:11, zIndex:6}}>
             <b>🔴 hiện tại</b> · <b style={{color:'#F97316'}}>🟠 +1h</b> · <b style={{color:'#B45309'}}>🟡 +3h</b> · <b style={{color:'#525252'}}>⚫ +6h</b>
+            {mode === '3d' && <span style={{color:'#64748B'}}> · địa hình DEM thật ×1.5{fps !== null && <> · {fps} FPS</>}</span>}
           </div>
+          {mode === '3d' && (
+            <div style={{position:'absolute', bottom:8, left:8, background:'rgba(255,255,255,0.92)', borderRadius:8, padding:'4px 10px', fontSize:10, color:'#64748B', zIndex:6}}>
+              Cây = proxy tán từ ảnh vệ tinh (ESTIMATED) · kéo xoay / lăn zoom / chuột phải nghiêng
+            </div>
+          )}
         </div>
       </div>
       {imp && (
