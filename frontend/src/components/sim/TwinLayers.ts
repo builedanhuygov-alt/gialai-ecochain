@@ -234,6 +234,9 @@ export async function TerrainMesh(origin: { lon: number; lat: number }, quality:
   tex3.anisotropy = 4 // crisper ground at grazing angles (no extra downloads)
   const mesh = new THREE.Mesh(tg, new THREE.MeshStandardMaterial({ map: tex3, vertexColors: true, roughness: 1 }))
   mesh.receiveShadow = quality === 'high'
+  // M6/M12 visual hierarchy: terrain render trước (0, đục); fire sau (2–3);
+  // overlay thứ ba (1, 4–5, trong suốt) — núi đọc trước, lửa sau, phủ sau.
+  mesh.renderOrder = 0
   return { mesh, sampler, origin, sizeM, texCanvas, block, texStatus, meshSegs: N - 1, exag: EXAG,
            grid: { H: Hgrid, n: N, cell, sizeM } }
 }
@@ -301,23 +304,31 @@ export function FireEllipseMesh(g: THREE.Group, c: Ctx, sim: any){
       return geo
     }
     const color = STEP_COLORS_3D[s.hour] || '#F97316'
-    // M6 forecast = outline-dominant (fill giảm mạnh), current = fill nổi bật
+    // M6: Current Fire = fill (+pulse). Forecast = outline + fill mờ 12%,
+    // không glow chồng — terrain luôn đọc được bên dưới.
+    const isCurrent = s.hour === 0
     const core = new THREE.Mesh(drape(new THREE.ShapeGeometry(shape), 0),
       new THREE.MeshBasicMaterial({ color, transparent: true,
-        opacity: s.hour === 0 ? 0.8 : 0.2,
+        opacity: isCurrent ? 0.8 : 0.12,
         side: THREE.DoubleSide, depthWrite: false }))
+    core.renderOrder = isCurrent ? 2 : 1
     g.add(core)
-    // soft outer glow: same shape, slightly higher + lower opacity
-    const glow = new THREE.Mesh(drape(new THREE.ShapeGeometry(shape), 6),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.1,
-        side: THREE.DoubleSide, depthWrite: false }))
-    g.add(glow)
+    if(isCurrent){
+      const glow = new THREE.Mesh(drape(new THREE.ShapeGeometry(shape), 6),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.1,
+          side: THREE.DoubleSide, depthWrite: false }))
+      glow.renderOrder = 1
+      g.add(glow)
+    }
     // crisp edge (distorted ring, not the perfect ellipse)
     const edge = distorted.map(p=> new THREE.Vector3(p.x, 0, -p.y))
     const edgeGeo = new THREE.BufferGeometry().setFromPoints(
       edge.map(v=> new THREE.Vector3(v.x, H(v.x, v.z) + lift + 2, v.z)))
-    g.add(new THREE.LineLoop(edgeGeo, new THREE.LineBasicMaterial({ color })))
-    if(s.hour === 0){
+    const edgeLine = new THREE.LineLoop(edgeGeo, new THREE.LineBasicMaterial({
+      color, transparent: true, opacity: isCurrent ? 0.95 : 1 }))
+    edgeLine.renderOrder = 3
+    g.add(edgeLine)
+    if(isCurrent){
       const m = core.material as THREE.MeshBasicMaterial
       c.updaters.push((t: number)=>{ m.opacity = 0.62 + 0.22 * Math.sin(t * 3) })
     }
@@ -358,6 +369,7 @@ export function ThreatenedAssetLayer(g: THREE.Group, c: Ctx, sim: any,
     })
     im.instanceMatrix.needsUpdate = true
     if(im.instanceColor) im.instanceColor.needsUpdate = true
+    im.renderOrder = 4
     g.add(im)
   }
   mk(new THREE.SphereGeometry(22, 12, 10), items.filter(i=> i.kind === 'water'))
@@ -384,9 +396,13 @@ export function RouteImpactLayer(g: THREE.Group, c: Ctx, sim: any, opsAssets: an
       if(v3.length < 2) continue
       const curve = new THREE.CatmullRomCurve3(v3)
       const tube = new THREE.TubeGeometry(curve, 48, 9, 5, false)
-      g.add(new THREE.Mesh(tube, new THREE.MeshBasicMaterial({ color: '#FFFFFF' })))
+      const casing = new THREE.Mesh(tube, new THREE.MeshBasicMaterial({ color: '#FFFFFF' }))
+      casing.renderOrder = 4
+      g.add(casing)
       const core = new THREE.TubeGeometry(curve, 48, 4.5, 5, false)
-      g.add(new THREE.Mesh(core, new THREE.MeshBasicMaterial({ color: r.color || '#3B82F6' })))
+      const coreMesh = new THREE.Mesh(core, new THREE.MeshBasicMaterial({ color: r.color || '#3B82F6' }))
+      coreMesh.renderOrder = 4
+      g.add(coreMesh)
     }
   }
 }
@@ -419,7 +435,8 @@ export function CommunityImpactLayer(g: THREE.Group, c: Ctx, sim: any, communeFc
         pp.setXYZ(k, x, H(x, z) + 6, z)
       }
       g.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-        color, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false })))
+        color, transparent: true, opacity: 0.15, side: THREE.DoubleSide, depthWrite: false })))
+      g.children[g.children.length - 1].renderOrder = 1
     }
   }
 }
@@ -561,7 +578,9 @@ export function WaterAccessLayer(g: THREE.Group, c: Ctx, sim: any, waters: any[]
 export function WindFieldLayer(g: THREE.Group, c: Ctx, sim: any){
   if(!sim.wind_layer) return
   const H = c.sampler
-  const corr = sim.wind_corridor?.polygon?.coordinates?.[0]
+    const corr = sim.wind_corridor?.polygon?.coordinates?.[0]
+  // P7: wind mờ hơn một nấc để terrain đọc được (declutter, không bỏ lớp).
+  const WIND_OP = 0.8
   if(corr?.length){
     const shape = new THREE.Shape()
     corr.forEach((p: number[], i: number)=>{
@@ -571,8 +590,10 @@ export function WindFieldLayer(g: THREE.Group, c: Ctx, sim: any){
     })
     const pts = shape.getPoints(48).map(p2=> new THREE.Vector3(p2.x, H(p2.x, -p2.y) + 20, -p2.y))
     const lg = new THREE.BufferGeometry().setFromPoints(pts)
-    g.add(new THREE.LineLoop(lg, new THREE.LineDashedMaterial({
-      color: '#06B6D4', dashSize: 60, gapSize: 40 })))
+    const corridor = new THREE.LineLoop(lg, new THREE.LineDashedMaterial({
+      color: '#06B6D4', dashSize: 60, gapSize: 40, transparent: true, opacity: WIND_OP }))
+    corridor.renderOrder = 4
+    g.add(corridor)
     ;(g.children[g.children.length - 1] as THREE.Line).computeLineDistances()
   }
   const dir = (sim.wind_layer.direction_deg * Math.PI) / 180
@@ -596,7 +617,12 @@ export function WindFieldLayer(g: THREE.Group, c: Ctx, sim: any){
       new THREE.Vector3(Math.sin(dir), 0, -Math.cos(dir)),
       new THREE.Vector3(x, H(x, z) + 260, z),
       len, shelter < 0.85 ? 0x64748B : 0x0EA5E9, len * 0.25, len * 0.12)
+    ;(ah.line.material as THREE.LineBasicMaterial).transparent = true
+    ;(ah.line.material as THREE.LineBasicMaterial).opacity = WIND_OP
+    if(ah.cone){ (ah.cone.material as THREE.MeshBasicMaterial).transparent = true; (ah.cone.material as THREE.MeshBasicMaterial).opacity = WIND_OP }
     arrows.push(ah)
+    ah.line.renderOrder = 4
+    if(ah.cone) ah.cone.renderOrder = 4
     g.add(ah)
   }
   const bases = arrows.map(a=> a.position.y)
@@ -627,6 +653,7 @@ export function FireFrontPoints(g: THREE.Group, c: Ctx, sim: any){
     opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true })
   const pts = new THREE.Points(geo, mat)
   pts.frustumCulled = false
+  pts.renderOrder = 5
   g.add(pts)
   const at = (ring: number[][], f: number)=>{
     const idx = Math.min(ring.length - 2, Math.floor(f * (ring.length - 1)))
@@ -823,7 +850,7 @@ export async function buildCanopy(c: Ctx, sim: any, texCanvas: HTMLCanvasElement
   const alphaTex = new THREE.CanvasTexture(acv)
   const geo = new THREE.CircleGeometry(1, 12)
   geo.rotateX(-Math.PI / 2)
-  const mat = new THREE.MeshStandardMaterial({ roughness: 1, transparent: true, opacity: 0.6,
+  const mat = new THREE.MeshStandardMaterial({ roughness: 1, transparent: true, opacity: 0.45,
     alphaMap: alphaTex, depthWrite: false })
   const im = new THREE.InstancedMesh(geo, mat, patches.length)
   const m4 = new THREE.Matrix4()
@@ -841,6 +868,7 @@ export async function buildCanopy(c: Ctx, sim: any, texCanvas: HTMLCanvasElement
   im.instanceMatrix.needsUpdate = true
   if(im.instanceColor) im.instanceColor.needsUpdate = true
   im.name = 'twin-canopy'
+  im.renderOrder = 1
   c.scene.add(im)
   ;(c as any)._canopyCount = patches.length
 }

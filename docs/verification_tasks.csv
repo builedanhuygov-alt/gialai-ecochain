@@ -1,0 +1,60 @@
+task_id,phase,target_type,target,required_fields,acceptance,status,priority
+GPS-01,PH1-GPS,station,Chi cục Kiểm lâm tỉnh Gia Lai,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-02,PH1-GPS,station,Chi cục Kiểm lâm tỉnh Gia Lai — Phòng Xử lý vi phạm về lâm nghiệp,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-03,PH1-GPS,team,Đội Kiểm lâm cơ động và PCCCR số 1,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-04,PH1-GPS,team,Đội Kiểm lâm cơ động và PCCCR số 2,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-05,PH1-GPS,team,Đội Kiểm lâm cơ động và PCCCR số 3,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-06,PH1-GPS,station,Hạt Kiểm lâm khu vực An Khê,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-07,PH1-GPS,station,Hạt Kiểm lâm khu vực An Lão,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-08,PH1-GPS,station,Hạt Kiểm lâm khu vực An Nhơn,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-09,PH1-GPS,station,Hạt Kiểm lâm khu vực Ayun Pa,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-10,PH1-GPS,station,Hạt Kiểm lâm khu vực Chư Păh,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-11,PH1-GPS,station,Hạt Kiểm lâm khu vực Chư Prông,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-12,PH1-GPS,station,Hạt Kiểm lâm khu vực Chư Sê,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-13,PH1-GPS,station,Hạt Kiểm lâm khu vực Đak Đoa,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-14,PH1-GPS,station,Hạt Kiểm lâm khu vực Đức Cơ,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-15,PH1-GPS,station,Hạt Kiểm lâm khu vực Hoài Ân,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-16,PH1-GPS,station,Hạt Kiểm lâm khu vực Hoài Nhơn,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-17,PH1-GPS,station,Hạt Kiểm lâm khu vực Ia Grai,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-18,PH1-GPS,station,Hạt Kiểm lâm khu vực Ia Pa,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-19,PH1-GPS,station,Hạt Kiểm lâm khu vực Kbang,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-20,PH1-GPS,station,Hạt Kiểm lâm khu vực Kông Chro,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-21,PH1-GPS,station,Hạt Kiểm lâm khu vực Mang Yang,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-22,PH1-GPS,station,Hạt Kiểm lâm khu vực Phù Cát,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-23,PH1-GPS,station,Hạt Kiểm lâm khu vực Phù Mỹ,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-24,PH1-GPS,station,Hạt Kiểm lâm khu vực Phú Túc,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-25,PH1-GPS,station,Hạt Kiểm lâm khu vực Tây Sơn,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-26,PH1-GPS,station,Hạt Kiểm lâm khu vực Tuy Phước - Quy Nhơn,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-27,PH1-GPS,station,Hạt Kiểm lâm khu vực Vân Canh,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+GPS-28,PH1-GPS,station,Hạt Kiểm lâm khu vực Vĩnh Thạnh,lat;lon;verification_date;verified_by;photo,"GPS field-measured on site (no estimate, no Google Maps copy)",PENDING,P0
+WTR-01,PH2-WATER,water,An Khê,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-02,PH2-WATER,water,Ayun Hạ,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-03,PH2-WATER,water,Biển Hồ (T'Nưng),contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-04,PH2-WATER,water,Hồ Bầu Cạn,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-05,PH2-WATER,water,Hồ Ia Hrung,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-06,PH2-WATER,water,Hội Sơn,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-07,PH2-WATER,water,Ia Mơr,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-08,PH2-WATER,water,Ia Ring (Vòng Ia),contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-09,PH2-WATER,water,Ialy,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-10,PH2-WATER,water,Ka Nak,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-11,PH2-WATER,water,Núi Một,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-12,PH2-WATER,water,Plei Krông,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-13,PH2-WATER,water,Thuận Ninh,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-14,PH2-WATER,water,Vạn Hội,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-15,PH2-WATER,water,Định Bình,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+WTR-16,PH2-WATER,water,Đồng Mít,contact_phone;verification_date;asset_photo;viewer_check,phone dated + 1 photo; viewer tier recomputed,PENDING,P0
+COM-01,PH3-COMMUNE,commune,119 Xã Phù Mỹ,lanh_dao;lanh_dao_phone;tru_so,leader+phone+office filled from commune office,PENDING,P1
+COM-02,PH3-COMMUNE,commune,133 Xã Sơn Lang,lanh_dao;lanh_dao_phone;tru_so,leader+phone+office filled from commune office,PENDING,P1
+COM-03,PH3-COMMUNE,commune,134 Xã SRó,lanh_dao;lanh_dao_phone;tru_so,leader+phone+office filled from commune office,PENDING,P1
+COM-04,PH3-COMMUNE,commune,135 Phường Tam Quan,lanh_dao;lanh_dao_phone;tru_so,leader+phone+office filled from commune office,PENDING,P1
+EVAC-00,PH4-EVAC,program,134 communes,evacuation_plan;assembly_points;evacuation_routes;priority_notes,per-commune plan from commune office or MISSING,PENDING,P1
+COR-01,PH6-ROAD,corridor,"Cat Thanh cluster (109.179,14.042 to 109.157,14.206)",surface_type;road_condition;seasonal_access;max_vehicle_tons;survey_date;geometry,driven/walked survey + LineString geometry,PENDING,P1
+COR-02,PH6-ROAD,corridor,"Cat Hai to Vung Chua (109.250,13.953 to 109.192,13.740)",surface_type;road_condition;seasonal_access;max_vehicle_tons;survey_date;geometry,driven/walked survey + LineString geometry,PENDING,P1
+COR-03,PH6-ROAD,corridor,"Hoi Son TK213 to Ka Nak water (108.997,14.097 to 108.563,14.238)",surface_type;road_condition;seasonal_access;max_vehicle_tons;survey_date;geometry,driven/walked survey + LineString geometry,PENDING,P1
+COR-04,PH6-ROAD,corridor,"Chu Puh Ia Ko to Ia Mor water (107.967,13.333 to 107.650,13.250)",surface_type;road_condition;seasonal_access;max_vehicle_tons;survey_date;geometry,driven/walked survey + LineString geometry,PENDING,P1
+COR-05,PH6-ROAD,corridor,"Phu Thien to Ayun Ha water (108.125,13.588 to 108.243,13.565)",surface_type;road_condition;seasonal_access;max_vehicle_tons;survey_date;geometry,driven/walked survey + LineString geometry,PENDING,P1
+PHO-W,PH7-PHOTO,pilot,16 water assets,"1+ photo each (PhotoEvidence, geotagged)",photo row linked + near-asset,PENDING,P1
+PHO-S,PH7-PHOTO,pilot,28 registry stations (post-GPS),1+ photo each,photo row linked + near-asset,PENDING,P2
+PAN-01,PH8-360,pilot,Bien Ho lake,viewer_url;verified_date,Panoee tour URL verified in browser,PENDING,P2
+PAN-02,PH8-360,pilot,1 station (TBD post-GPS),viewer_url;verified_date,same,PENDING,P2
+PAN-03,PH8-360,pilot,1 watchtower (TBD post-GPS),viewer_url;verified_date,same,PENDING,P2

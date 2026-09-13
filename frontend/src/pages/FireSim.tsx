@@ -10,6 +10,9 @@ import type { TwinShow } from '../components/sim/TwinScene'
 
 const API = API_BASE.replace(/\/$/, '')
 
+// Motion: camera 300–600ms; đứng yên khi reduced-motion.
+const animDur = (ms:number)=> (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) ? 0 : ms
+
 function Slider({ label, value, min, max, step, unit, onChange }: {
   label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number)=>void
 }){
@@ -54,7 +57,9 @@ export default function FireSim(){
   const [plan, setPlan] = useState<any>(null)
   const [planLoading, setPlanLoading] = useState(false)
   const [show, setShow] = useState({ ellipses:true, assets:true, routes:true, communities:true, wind:true })
-  const [show3d, setShow3d] = useState({ ellipses:true, canopy:true, front:true, wind:true, assets:true, routes:true, communities:true, water:true, plan:true, terrain:false, why:true })
+  // M7: mặc định gọn — fire/water/communities/stations; WHY + terrain
+  // analysis tắt để bản đồ đọc được trong 5 giây.
+  const [show3d, setShow3d] = useState({ ellipses:true, canopy:true, front:true, wind:true, assets:true, routes:true, communities:true, water:true, plan:true, terrain:false, why:false })
   const [terrainStats, setTerrainStats] = useState<any>(null)
   // Module 7 compare: second scenario overlaid dashed on 2D + delta panel
   const [simB, setSimB] = useState<any>(null)
@@ -86,7 +91,7 @@ export default function FireSim(){
       style: { version:8, sources:{ osm:{ type:'raster', tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize:256, attribution:'© OpenStreetMap' } }, layers:[{ id:'osm', type:'raster', source:'osm' }] } as any,
       center:[108.41, 13.85], zoom:7.8, maxBounds:[[107.0,11.5],[109.7,15.1]], attributionControl:false,
     })
-    m.addControl(new maplibregl.NavigationControl(), 'top-right')
+    m.addControl(new maplibregl.NavigationControl(), 'bottom-right')
     m.fitBounds([[107.45,12.99],[109.36,14.70]], { padding:30, duration:0 })
     try{ if((m as any).loaded()) setMapReady(true); else m.once('load', ()=> setMapReady(true)) }catch{}
     setMap(m)
@@ -100,8 +105,8 @@ export default function FireSim(){
         if(!map.getSource('terrain-dem'))
           map.addSource('terrain-dem', { type:'raster-dem', tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'], tileSize:256, maxzoom:15, encoding:'terrarium' } as any)
         map.setTerrain({ source:'terrain-dem', exaggeration:1.2 })
-        map.easeTo({ pitch:60, duration:1000 })
-      }else{ map.setTerrain(null); try{ map.easeTo({ pitch:0, duration:600 }) }catch{} }
+        map.easeTo({ pitch:60, duration:animDur(500) })
+      }else{ map.setTerrain(null); try{ map.easeTo({ pitch:0, duration:animDur(450) }) }catch{} }
     }catch{ setTerrain3d(false) }
   },[map, terrain3d])
   // commune boundaries once (desktop only — mobile uses panel list)
@@ -141,7 +146,7 @@ export default function FireSim(){
     try{
       const d: any = await api.firesim(body)
       setData(d)
-      try{ map?.flyTo({ center:[lon, lat], zoom:10.5, duration:1200 }) }catch{}
+      try{ map?.flyTo({ center:[lon, lat], zoom:10.5, duration:animDur(600) }) }catch{}
       if(withPlan) await regenPlan(body)
       else setPlanStale(true)
     }catch(e:any){ setError(String(e.message || e).slice(0, 200)) }
@@ -219,14 +224,22 @@ export default function FireSim(){
     }
   })()
   const focusFire = ()=>{
+    // M2: fit AOI bounds — fire trong cảnh, không chiếm cảnh.
     if(mode === '2d'){
-      const z = aoiKm === 1 ? 13 : aoiKm === 5 ? 10.5 : 11.5
-      try{ map?.flyTo({ center:[lon, lat], zoom: z, duration:1200 }) }catch{}
+      try{
+        const dLat = aoiKm / 111.32
+        const dLon = aoiKm / (111.32 * Math.max(0.2, Math.cos(lat * Math.PI / 180)))
+        map?.fitBounds([[lon - dLon, lat - dLat],[lon + dLon, lat + dLat]], { padding: 40, duration: animDur(600) })
+      }catch{
+        const z = aoiKm === 1 ? 13 : aoiKm === 5 ? 10.5 : 11.5
+        try{ map?.flyTo({ center:[lon, lat], zoom: z, duration:animDur(600) }) }catch{}
+      }
     } else setFocusKey(k=> k + 1)
   }
   // M10 focus targets (coords resolved from loaded data, never guessed)
   const [focusReq, setFocusReq] = useState<any>(null)
-  const [orbitMode, setOrbitMode] = useState<'tactical'|'cinematic'>('tactical')
+  // M3: 2 mode — OVERVIEW (toàn địa hình, mặc định) / TACTICAL (hiện trường).
+  const [orbitMode, setOrbitMode] = useState<'tactical'|'overview'>('overview')
   const focusTarget = (kind: 'fire' | 'water' | 'community' | 'route')=>{
     if(mode === '2d'){
       const targets: Record<string, [number, number] | null> = { fire: [lon, lat],
@@ -240,7 +253,7 @@ export default function FireSim(){
         : rt?.geometry?.coordinates?.[0]?.[0]
       if(rc) targets.route = [rc[0], rc[1]]
       const t = targets[kind]
-      if(t){ try{ map?.flyTo({ center: t, zoom: 12, duration: 1200 }) }catch{} }
+      if(t){ try{ map?.flyTo({ center: t, zoom: 12, duration: animDur(600) }) }catch{} }
       return
     }
     const base = { fire: { lon, lat }, water: null as any, community: null as any, route: null as any }
@@ -292,7 +305,7 @@ export default function FireSim(){
   return (
     <div style={{display:'flex', flexDirection:'column', gap:12}}>
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8}}>
-        <h1 style={{margin:0}}>🔥 Mô phỏng cháy 3D <span style={{fontSize:11, fontWeight:400, color:'#64748B'}}>ELLIPTICAL_HEURISTIC — phác thảo chiến thuật, không phải vật lý cháy</span></h1>
+            <h1 style={{margin:0}}>🔥 Mô phỏng cháy 3D <span style={{fontSize:11, fontWeight:400, color:'#64748B'}}>ELLIPTICAL_HEURISTIC. Phác thảo chiến thuật, không phải vật lý cháy</span></h1>
         <Link to="/command" style={{fontSize:12, color:'#0F766E', fontWeight:700}}>→ Chỉ huy</Link>
       </div>
       <div style={{display:'grid', gridTemplateColumns:'300px 1fr', gap:12}} className="firesim-grid">
@@ -310,7 +323,7 @@ export default function FireSim(){
           <label style={{display:'block', fontSize:12}}>
             <div style={{display:'flex', justifyContent:'space-between'}}><span>🚧 Đóng tuyến (kịch bản)</span></div>
             <select value={closedRoute} onChange={e=> { setClosedRoute(e.target.value); auto() }} style={{width:'100%', border:'1px solid #E2E8E5', borderRadius:8, padding:'4px 8px', fontSize:12}}>
-              <option value="">— Không đóng —</option>
+              <option value="">Không đóng</option>
               {opsAssets.filter((a: any)=> a.asset_type === 'route').map((a: any)=> <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </label>
@@ -327,7 +340,7 @@ export default function FireSim(){
             <button onClick={()=> runSim(true)} disabled={loading} style={{flex:1, background:'#DC2626', color:'#fff', border:0, borderRadius:999, padding:'10px', fontWeight:800, cursor:'pointer'}}>
               {loading ? 'ĐANG CHẠY…' : '▶ RUN SIMULATION + PLAN'}
             </button>
-            <button onClick={focusFire} title="Focus Fire: zoom tới điểm cháy" style={{background:'#0B1412', color:'#fff', border:0, borderRadius:999, padding:'10px 14px', fontWeight:800, cursor:'pointer'}}>🎯</button>
+            <button onClick={focusFire} title="Focus Fire: fit AOI" style={{background:'#0B1412', color:'#fff', border:0, borderRadius:999, padding:'10px 14px', fontWeight:800, cursor:'pointer'}}>🎯</button>
           </div>
           <div style={{display:'flex', gap:6, alignItems:'center', borderTop:'1px solid #F1F5F9', paddingTop:8}}>
             <span style={{fontSize:11, color:'#64748B'}}>So sánh gió</span>
@@ -341,7 +354,7 @@ export default function FireSim(){
               B (gió {compareWind} km/h, nét đứt tím) vs A (gió {wind} km/h): diện tích {compareDelta.dArea >= 0 ? '+' : ''}{compareDelta.dArea} ha · xã {compareDelta.dN >= 0 ? '+' : ''}{compareDelta.dN}
             </div>
           )}
-          {planStale && !planLoading && <div style={{fontSize:11, color:'#B45309'}}>Plan đang cũ hơn kịch bản — sẽ tự tái sinh…</div>}
+          {planStale && !planLoading && <div style={{fontSize:11, color:'#B45309'}}>Plan đang cũ hơn kịch bản. Sẽ tự tái sinh.</div>}
           {error && <div style={{fontSize:12, color:'#B91C1C'}}>⚠ {error}</div>}
           <div style={{display:'flex', flexDirection:'column', gap:4, borderTop:'1px solid #F1F5F9', paddingTop:8}}>
             <b style={{fontSize:12}}>Lớp hiển thị {mode === '3d' ? '(3D)' : '(2D)'}</b>
@@ -383,40 +396,44 @@ export default function FireSim(){
             <div style={{position:'absolute', inset:0, display:'grid', placeItems:'center', background:'#0B1412', color:'#fff', padding:24, textAlign:'center', zIndex:6}}>
               <div>
                 <div style={{fontSize:14, fontWeight:800}}>Không dựng được địa hình 3D</div>
-                <div style={{fontSize:12, color:'#FDE68A', marginTop:6}}>{demError} — không dùng mặt phẳng giả thay thế.</div>
+                <div style={{fontSize:12, color:'#FDE68A', marginTop:6}}>{demError}. Không dùng mặt phẳng giả thay thế.</div>
                 <button onClick={()=> setMode('2d')} style={{marginTop:10, background:'#0F766E', color:'#fff', border:0, borderRadius:999, padding:'8px 18px', fontWeight:700, cursor:'pointer'}}>Về 2D</button>
               </div>
             </div>
           )}
-          <div style={{position:'absolute', top:8, left:8, marginTop:34, background:'rgba(255,255,255,0.95)', borderRadius:8, padding:'6px 10px', fontSize:11, zIndex:6}}>
-            <b>🔴 hiện tại</b> · <b style={{color:'#F97316'}}>🟠 +1h</b> · <b style={{color:'#B45309'}}>🟡 +3h</b> · <b style={{color:'#525252'}}>⚫ +6h</b>
+          {/* M5 legend — icon + label khớp lớp đang bật (không chỉ màu) */}
+          <div style={{position:'absolute', top:8, left:8, marginTop:34, background:'rgba(255,255,255,0.95)', borderRadius:8, padding:'6px 10px', fontSize:11, zIndex:6, maxWidth:'calc(100% - 280px)'}}>
+            <b>🔥 hiện tại</b> · <b style={{color:'#F97316'}}>🟠 +1h</b> · <b style={{color:'#B45309'}}>🟡 +3h</b> · <b style={{color:'#525252'}}>⚫ +6h</b>
             {ext12 && <><b style={{color:'#1E293B'}}> · ⬛ +12h</b></>}
-            {mode === '3d' && <span style={{color:'#64748B'}}> · địa hình DEM thật{terrainStats?.exag ? <> ×{terrainStats.exag}</> : null}{terrainStats?.meshSegs ? <> · lưới {terrainStats.meshSegs}²</> : null}{terrainStats?.texStatus ? <> · ảnh {terrainStats.texStatus}</> : null}{terrainStats?.lod ? <> · LOD {terrainStats.lod}</> : null}{terrainStats?.canopyPatches != null ? <> · rừng {terrainStats.canopyPatches} patch</> : null}{camH != null ? <> · cam {camH}m</> : null}{fps !== null && <> · {fps} FPS</>}</span>}
+            {mode === '3d' && (show3d.water || show3d.routes || show3d.communities || show3d.wind || show3d.assets) && (
+              <span style={{color:'#334155'}}>
+                {show3d.assets && <> · 🏕️ Trạm/tổ</>}{show3d.water && <> · 💧 Nước</>}
+                {show3d.routes && <> · 🛣️ Tuyến</>}{show3d.communities && <> · 🏘️ Xã</>}
+                {show3d.wind && <> · 💨 Gió</>}
+              </span>
+            )}
+            {mode === '3d' && <span style={{color:'#64748B'}}> · địa hình DEM thật{terrainStats?.exag ? <> ×{terrainStats.exag}</> : null}{camH != null ? <> · cam {camH}m</> : null}{fps !== null && <> · {fps} FPS</>}</span>}
           </div>
-          {/* Module 10 timeline: T+0 → steps + playback (lọc ellipse/xã/story) */}
+          {/* P8 timeline: chuyển step mềm (transition viền, không remount nút) */}
           {data?.spread?.steps && (
-            <div style={{position:'absolute', bottom:8, left:8, right:8, background:'rgba(255,255,255,0.95)', borderRadius:8, padding:'6px 10px', zIndex:6, display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}>
-              <button onClick={()=> { setUntilHour(null); setPlaying(false) }} style={{fontSize:11, fontWeight:700, borderRadius:999, border: untilHour === null ? '2px solid #0B1412' : '1px solid #E2E8E5', padding:'2px 10px', background:'#fff', cursor:'pointer'}}>ALL</button>
+            <div style={{position:'absolute', bottom:8, left:8, right:64, background:'rgba(255,255,255,0.95)', borderRadius:8, padding:'6px 10px', zIndex:6, display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}>
+              <button onClick={()=> { setUntilHour(null); setPlaying(false) }} style={{fontSize:11, fontWeight:700, borderRadius:999, border: untilHour === null ? '2px solid #0B1412' : '1px solid #E2E8E5', padding:'2px 10px', background:'#fff', cursor:'pointer', transition:'border-color 200ms cubic-bezier(0.16,1,0.3,1)'}}>ALL</button>
               {[0, ...(data.spread.steps.map((s: any)=> s.hour))].map((h: number)=> (
-                <button key={h} onClick={()=> { setUntilHour(h === 0 ? 0 : h); setPlaying(false) }} style={{fontSize:11, fontWeight:700, borderRadius:999, border: untilHour === h ? '2px solid #0B1412' : '1px solid #E2E8E5', padding:'2px 10px', background:'#fff', cursor:'pointer'}}>T+{h}h</button>
+                <button key={h} onClick={()=> { setUntilHour(h === 0 ? 0 : h); setPlaying(false) }} style={{fontSize:11, fontWeight:700, borderRadius:999, border: untilHour === h ? '2px solid #0B1412' : '1px solid #E2E8E5', padding:'2px 10px', background:'#fff', cursor:'pointer', transition:'border-color 200ms cubic-bezier(0.16,1,0.3,1)'}}>T+{h}h</button>
               ))}
-              <button onClick={()=> setPlaying(p=> !p)} style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'2px 10px', background: playing ? '#DC2626' : '#fff', color: playing ? '#fff' : '#0B1412', cursor:'pointer'}}>{playing ? '⏸' : '▶'} Playback</button>
-              <span style={{fontSize:10, color:'#64748B'}}>timeline lọc ellipse + xã + story (tuyến/nước theo toàn kịch bản)</span>
+              <button onClick={()=> setPlaying(p=> !p)} style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'2px 10px', background: playing ? '#DC2626' : '#fff', color: playing ? '#fff' : '#0B1412', cursor:'pointer', transition:'background-color 200ms cubic-bezier(0.16,1,0.3,1), color 200ms cubic-bezier(0.16,1,0.3,1)'}}>{playing ? '⏸' : '▶'} Playback</button>
+              <button onClick={()=> { setUntilHour(null); setPlaying(false) }} title="Reset timeline về toàn kịch bản" style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'2px 10px', background:'#fff', cursor:'pointer'}}>↺ Reset</button>
+              <span style={{fontSize:10, color:'#64748B'}}>timeline lọc ellipse + xã + story (tuyến/nước theo toàn kịch bản){mode === '3d' && ' · cây = proxy tán ESTIMATED · kéo xoay / lăn zoom / chuột phải nghiêng'}</span>
             </div>
           )}
           {mode === '3d' && (
-            <div style={{position:'absolute', bottom:8, left:8, background:'rgba(255,255,255,0.92)', borderRadius:8, padding:'4px 10px', fontSize:10, color:'#64748B', zIndex:6}}>
-              Cây = proxy tán từ ảnh vệ tinh (ESTIMATED) · kéo xoay / lăn zoom / chuột phải nghiêng
-            </div>
-          )}
-          {mode === '3d' && (
-            <div style={{position:'absolute', top:8, right:8, zIndex:7, display:'flex', gap:4, flexWrap:'wrap', maxWidth:220, justifyContent:'flex-end'}}>
+            <div style={{position:'absolute', top:8, right:8, zIndex:7, display:'flex', gap:4, flexWrap:'wrap', maxWidth:240, justifyContent:'flex-end'}}>
               {[['fire','🔥 Cháy'],['water','💧 Nước'],['community','🏘 Xã'],['route','🛣 Tuyến']].map(([k, label])=> (
-                <button key={k} onClick={()=> focusTarget(k as any)} style={{fontSize:10, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', background:'#fff', padding:'3px 10px', cursor:'pointer'}}>{label}</button>
+                <button key={k} onClick={()=> focusTarget(k as any)} title={k === 'fire' ? 'Focus Fire: fit AOI. Fire trong cảnh, không chiếm cảnh' : label} style={{fontSize:10, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', background:'#fff', padding:'3px 10px', cursor:'pointer'}}>{label}</button>
               ))}
-              <button onClick={()=> setOrbitMode(m=> m === 'tactical' ? 'cinematic' : 'tactical')} title="Cinematic: tự xoay chậm / Tactical: điều khiển tay" style={{fontSize:10, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', background: orbitMode === 'cinematic' ? '#0B1412' : '#fff', color: orbitMode === 'cinematic' ? '#fff' : '#0B1412', padding:'3px 10px', cursor:'pointer'}}>
-                {orbitMode === 'cinematic' ? '🎥 Cinematic' : '🎯 Tactical'}
-              </button>
+              {[['overview','⛰ Overview'],['tactical','🎯 Tactical']].map(([m, label])=> (
+                <button key={m} onClick={()=> setOrbitMode(m as any)} title={m === 'overview' ? 'Overview: toàn bộ địa hình/AOI' : 'Tactical: zoom gần hiện trường'} style={{fontSize:10, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', background: orbitMode === m ? '#0B1412' : '#fff', color: orbitMode === m ? '#fff' : '#0B1412', padding:'3px 10px', cursor:'pointer'}}>{label}</button>
+              ))}
             </div>
           )}
         </div>
@@ -428,19 +445,19 @@ export default function FireSim(){
             <div style={{fontSize:12, color:'#64748B'}}>ROS {imp.ros_kmh} km/h · tiến triển: {Object.entries(imp.progression || {}).map(([h, v]: any)=> `+${h}h ${v.length_km}km`).join(' · ')}</div>
           </div>
           <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
-            <b>🏘️ {imp.communities_threatened} xã: {(imp.communes || []).join(', ') || '—'}</b>
-            <div style={{fontSize:12, color:'#64748B'}}>Trạm ảnh hưởng: {(imp.stations_impacted || []).join(', ') || '—'}</div>
+            <b>🏘️ {imp.communities_threatened} xã: {(imp.communes || []).join(', ') || 'MISSING'}</b>
+            <div style={{fontSize:12, color:'#64748B'}}>Trạm ảnh hưởng: {(imp.stations_impacted || []).join(', ') || 'MISSING'}</div>
             {(simView?.communities || []).length > 0 && (
               <div style={{fontSize:11, marginTop:4}}>{(simView.communities || []).slice(0, 6).map((c: any)=> (
-                <span key={c.code} title={`Nước: ${c.shield_components?.water_availability || '?'} · Trạm: ${c.shield_components?.response_availability || '?'} · Tuyến: ${c.shield_components?.route_resilience || '?'} · Địa hình: ${c.shield_components?.terrain_difficulty || '?'} · Dân số: ${c.population ?? '?'}`} style={{display:'inline-block', background:'#F1F5F9', borderRadius:8, padding:'2px 8px', marginRight:4, marginBottom:4}}>
+                <span key={c.code} title={`Nước: ${c.shield_components?.water_availability || 'MISSING'} · Trạm: ${c.shield_components?.response_availability || 'MISSING'} · Tuyến: ${c.shield_components?.route_resilience || 'MISSING'} · Địa hình: ${c.shield_components?.terrain_difficulty || 'MISSING'} · Dân số: ${c.population ?? 'MISSING'}`} style={{display:'inline-block', background:'#F1F5F9', borderRadius:8, padding:'2px 8px', marginRight:4, marginBottom:4}}>
                   {c.commune} · {c.band} · 🛡️{c.shield}
                 </span>
               ))}</div>
             )}
           </div>
           <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
-            <b>💧 Nước ảnh hưởng: {(imp.water_impacted || []).join(', ') || '—'}</b>
-            <div style={{fontSize:12, color:'#64748B'}}>Tuyến ảnh hưởng: {(imp.routes_impacted || []).join(', ') || '—'}</div>
+            <b>💧 Nước ảnh hưởng: {(imp.water_impacted || []).join(', ') || 'MISSING'}</b>
+            <div style={{fontSize:12, color:'#64748B'}}>Tuyến ảnh hưởng: {(imp.routes_impacted || []).join(', ') || 'MISSING'}</div>
           </div>
         </div>
       )}
@@ -459,7 +476,7 @@ export default function FireSim(){
       {(simView?.story?.length > 0 || data?.wind_corridor) && (
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))', gap:8}}>
           {(simView?.story?.length > 0) && (
-            <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
+            <div key={untilHour ?? 'ALL'} className="anim-fade" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
               <b>📖 Story mode (theo timeline T+{untilHour ?? 'ALL'})</b>
               {(()=>{ const groups: Record<string, any[]> = {}
                 for(const e of (simView.story || [])){ const k = `T+${e.t_hour}h`; (groups[k] = groups[k] || []).push(e) }
@@ -477,7 +494,7 @@ export default function FireSim(){
           {data?.wind_corridor && (
             <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
               <b>🌬️ Hành lang gió ({data.wind_corridor.length_km} km × ±{data.wind_corridor.half_width_km} km)</b>
-              <div style={{fontSize:12, color:'#64748B'}}>Xã trong hành lang: {(data.wind_corridor.communes_inside || []).join(', ') || '—'}</div>
+              <div style={{fontSize:12, color:'#64748B'}}>Xã trong hành lang: {(data.wind_corridor.communes_inside || []).join(', ') || 'MISSING'}</div>
               <div style={{fontSize:11, color:'#64748B'}}>{data.wind_corridor.method}</div>
             </div>
           )}
@@ -504,9 +521,9 @@ export default function FireSim(){
               {data?.checklist && (
                 <div style={{fontSize:12, marginTop:6}}>
                   <b>☑️ Checklist:</b>
-                  <div>Ngay: {(data.checklist.immediate || []).join(' · ') || '—'}</div>
-                  <div>30′: {(data.checklist.short_term || []).join(' · ') || '—'}</div>
-                  <div>1–3h: {(data.checklist.medium_term || []).join(' · ') || '—'}</div>
+                  <div>Ngay: {(data.checklist.immediate || []).join(' · ') || 'MISSING'}</div>
+                  <div>30′: {(data.checklist.short_term || []).join(' · ') || 'MISSING'}</div>
+                  <div>1–3h: {(data.checklist.medium_term || []).join(' · ') || 'MISSING'}</div>
                 </div>
               )}
             </div>
@@ -542,7 +559,7 @@ export default function FireSim(){
           {planLoading && <div style={{fontSize:12, color:'#64748B'}}>Đang tổng hợp…</div>}
           {plan && !planLoading && !plan.error && (
             <div style={{fontSize:12, display:'flex', flexDirection:'column', gap:4, marginTop:6}}>
-              <div>CẤP <b>{plan.risk_summary?.level}</b> · {plan.command_status} · Nước: <b>{plan.primary_water?.name}</b> ({plan.primary_water?.priority}) · Trạm: <b>{plan.primary_station?.station_name || '—'}</b> · Tuyến: <b>{plan.primary_route?.route_name || '—'}</b></div>
+              <div>CẤP <b>{plan.risk_summary?.level}</b> · {plan.command_status} · Nước: <b>{plan.primary_water?.name}</b> ({plan.primary_water?.priority}) · Trạm: <b>{plan.primary_station?.station_name || 'MISSING'}</b> · Tuyến: <b>{plan.primary_route?.route_name || 'MISSING'}</b></div>
               <div>🌐 {(plan.analyst_bulletin?.hinh_anh_hien_truong || []).join(' · ')}</div>
               {plan.earth_intelligence && <div>🧠 {plan.earth_intelligence.recommended_action}</div>}
               {(plan.deployment_plan || []).length > 0 && (

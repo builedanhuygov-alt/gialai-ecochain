@@ -44,6 +44,7 @@ export const api = {
   weatherNow: (lat = 13.9, lon = 108.3)=> req(`/api/weather/current?lat=${lat}&lon=${lon}`).catch(()=> null),
   firmsLive: (lat = 13.9, lon = 108.3)=> req(`/api/fire/hotspots?lat=${lat}&lon=${lon}`).catch(()=> null),
   fireBrief: (name:string, lat:number, lon:number)=> req(`/api/fire/brief?administrative_unit_id=${encodeURIComponent(name)}&lat=${lat}&lon=${lon}`).catch(()=> null),
+  forecastRating: (name:string, lat:number, lon:number, scope:'commune'|'district'|'province'='commune')=> req(`/api/fire/forecast-rating?administrative_unit_id=${encodeURIComponent(name)}&lat=${lat}&lon=${lon}&scope=${scope}`).catch(()=> null),
   responsePlan: (body:Record<string, unknown>)=> req('/api/v1/fires/response-plan', { method:'POST', body: JSON.stringify(body) }),
   firesim: (body:Record<string, unknown>)=> req('/api/simulate/fire', { method:'POST', body: JSON.stringify(body) }),
   stationsNearest: (lat:number, lon:number)=> req(`/api/stations/nearest?lat=${lat}&lon=${lon}`).catch(()=> null),

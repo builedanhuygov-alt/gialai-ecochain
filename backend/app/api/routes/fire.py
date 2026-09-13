@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.fire import OfficialFireWarning, AIFirePrediction
 from app.services.fire_risk_engine import fire_risk_engine, score_to_level
+from app.services import forecast_rating as frating
 from app.core.enums import FireWarningLevel, FIRE_WARNING_LABELS
 from app.core.demo_mode import tag_data_origin
 from app.core.security import get_current_user
@@ -75,14 +76,51 @@ async def fire_risk(administrative_unit_id: str = Query(...), lat: float = Query
     except: terrain={}  # flagged missing by analyze()
     # FIRMS
     hotspots=[]
+    firms_ok=False
     try:
         from app.services.firms_service import fetch_firms
         f=await fetch_firms(lat, lon)
+        firms_ok = f.get("status") in ("LIVE", "CACHED")
         hotspots=f.get("fires",[])[:3]
     except: hotspots=[]
     # community reports count (0 = unknown; only real confirmations raise confidence)
     community=0
     result=fire_risk_engine.analyze(administrative_unit_id, satellite=sat, weather=weather, terrain=terrain, hotspots=hotspots, community=community)
+    # Additive CẤP forecast (measured inputs only — terrain mock/seeded is
+    # EXCLUDED by honesty policy). Never alters analyze()/score/confidence.
+    try:
+        from app.services.weather_service import fetch_history as _fh
+        _hist = await _fh(lat, lon)
+        _rok = _hist.get("status") in ("LIVE", "CACHED")
+        _dry = _hist.get("dry_days") if _rok else None
+        _rain14 = _hist.get("rain_mm") if _rok else None
+    except Exception:
+        _dry, _rain14, _rok = None, None, False
+    try:
+        from app.services.firms_service import _haversine_km as _hav
+        from app.models.ops import OperationalAsset as _OA
+        _bw, _bd = None, None
+        for _a in db.query(_OA).filter(_OA.status == "active").all():
+            try:
+                _d = _hav(lon, lat, _a.longitude, _a.latitude)
+            except Exception:
+                continue
+            if _a.asset_type == "water" and (_bd is None or _d < _bd):
+                _bw, _bd = _a, _d
+        _water = {"name": _bw.name, "distance_km": round(_bd, 2)} if _bw is not None and _bd is not None and _bd <= 25 else None
+    except Exception:
+        _water = None
+    try:
+        _ndvi = sat.get("ndvi") if isinstance(sat.get("ndvi"), (int, float)) else None
+        _rating = frating.rate_forecast(
+            weather=weather,
+            weather_available=(weather.get("temperature") is not None or weather.get("humidity") is not None),
+            hotspot_count=len([h for h in hotspots if not h.get("suspect_artificial")]),
+            firms_available=firms_ok, terrain=None, ndvi=_ndvi, gee_configured=_ndvi is not None,
+            dry_days=_dry, rain_14d_mm=_rain14, rain_available=_rok,
+            water=_water, recent_fire=False, history_available=False)
+    except Exception:
+        _rating = frating.rate_forecast()
     # best-effort persistence: serverless FS may be read-only → never 500 the read path
     official = None
     try:
@@ -94,7 +132,7 @@ async def fire_risk(administrative_unit_id: str = Query(...), lat: float = Query
     except Exception:
         try: db.rollback()
         except Exception: pass
-    base = {**result,
+    base = {**result, "forecast_rating": _rating,
             "evidence": {"satellite": sat, "weather": weather, "terrain": terrain, "hotspots": hotspots, "community": community},
             "timestamp": time.time(), "status": "LIVE" if result["confidence"]>60 else "CACHED"}
     if official is not None:
@@ -112,6 +150,126 @@ async def fire_forecast(administrative_unit_id: str = Query(...), lat: float = Q
     except:
         fc={"forecast":{"6h":45,"12h":52,"24h":67,"48h":74,"72h":81}}
     return {"administrative_unit_id": administrative_unit_id, **fc, "status":"LIVE"}
+
+@router.get("/fire/forecast-rating")
+async def fire_forecast_rating(administrative_unit_id: str = Query(...), lat: float = Query(default=13.9), lon: float = Query(default=108.3), scope: str = Query(default="commune"), db: Session = Depends(get_db)):
+    """CẤP dự báo cháy I–V cho từng xã / huyện / toàn tỉnh.
+
+    Chỉ dùng số liệu ĐO ĐƯỢC (weather, FIRMS, mưa lịch sử, NDVI, nước,
+    lịch sử cháy). Thiếu nguồn nào ghi MISSING/NOT_CONFIGURED và hạ độ
+    phủ — không xác suất %, không jitter, deterministic tuyệt đối."""
+    from app.services.weather_service import fetch_current, current_summary, fetch_history
+    from app.services.firms_service import fetch_firms, _haversine_km
+    scope = scope if scope in ("commune", "district", "province") else "commune"
+    radius = {"commune": 10.0, "district": 25.0, "province": 50.0}[scope]
+    scope_vi = {"commune": "xã", "district": "huyện", "province": "tỉnh"}[scope]
+    # weather (measured only)
+    weather, wx_ok = {}, False
+    try:
+        s = current_summary(await fetch_current(lat, lon))
+        weather = {k: v for k, v in {
+            "temperature": s["temperature"], "humidity": s["humidity"],
+            "rainfall": s["rainfall"], "wind_speed": s["wind_speed"],
+            "wind_direction": s.get("wind_direction")}.items() if v is not None}
+        wx_ok = weather.get("temperature") is not None or weather.get("humidity") is not None
+    except Exception:
+        pass
+    # FIRMS real hotspots within scope radius (artificial heat excluded)
+    hotspots, firms_ok = [], False
+    try:
+        f = await fetch_firms(lat, lon)
+        firms_ok = f.get("status") in ("LIVE", "CACHED")
+        if firms_ok:
+            for h in (f.get("fires", []) or []):
+                try:
+                    d = _haversine_km(lon, lat, float(h.get("longitude") or 0), float(h.get("latitude") or 0))
+                except Exception:
+                    continue
+                if d < radius and not h.get("suspect_artificial"):
+                    hotspots.append(h)
+    except Exception:
+        pass
+    # rain history (LIVE/CACHED only — DEMO fallback must not feed the rating)
+    dry, rain14, rain_ok = None, None, False
+    try:
+        hist = await fetch_history(lat, lon)
+        if hist.get("status") in ("LIVE", "CACHED"):
+            dry, rain14, rain_ok = hist.get("dry_days"), hist.get("rain_mm"), True
+    except Exception:
+        pass
+    # vegetation (measured NDVI only — GEE connected)
+    ndvi, gee_on = None, False
+    try:
+        from app.services.earth_engine.service import EEQueryParams, get_earth_engine_service
+        from app.core.enums import SatelliteSource
+        svc = get_earth_engine_service()
+        gee_on = svc.get_status().value == "CONNECTED"
+        if gee_on:
+            params = EEQueryParams(administrative_unit_id=administrative_unit_id, geometry={"type": "Point", "coordinates": [lon, lat]}, start_date="2026-08-01", end_date="2026-09-01", dataset=SatelliteSource.SENTINEL2)
+            v = getattr(svc.calculate_ndvi(params), "mean", None)
+            ndvi = float(v) if isinstance(v, (int, float)) else None
+    except Exception:
+        pass
+    # nearest active water asset (measured DB rows only)
+    water = None
+    try:
+        from app.models.ops import OperationalAsset
+        best, bd = None, None
+        for a in db.query(OperationalAsset).filter(OperationalAsset.status == "active").all():
+            try:
+                d = _haversine_km(lon, lat, a.longitude, a.latitude)
+            except Exception:
+                continue
+            if a.asset_type == "water" and (bd is None or d < bd):
+                best, bd = a, d
+        if best is not None and bd is not None and bd <= 25:
+            water = {"name": best.name, "distance_km": round(bd, 2)}
+    except Exception:
+        pass
+    # recent fire history for this unit (measured DB rows only)
+    recent, hist_ok = False, False
+    try:
+        from datetime import timedelta
+        from app.core.time import utcnow as _utcnow
+        since = _utcnow() - timedelta(days=30)
+        recent = db.query(AIFirePrediction).filter(
+            AIFirePrediction.administrative_unit_id == administrative_unit_id,
+            AIFirePrediction.created_at >= since).limit(5).count() > 0
+        hist_ok = True
+    except Exception:
+        pass
+    # NOTE: terrain stays MISSING here — the route-level DEM is a seeded
+    # mock, and honesty policy forbids feeding mock data into the rating.
+    rating = frating.rate_forecast(
+        weather=weather, weather_available=wx_ok,
+        hotspot_count=len(hotspots), firms_available=firms_ok,
+        terrain=None, ndvi=ndvi, gee_configured=gee_on,
+        dry_days=dry, rain_14d_mm=rain14, rain_available=rain_ok,
+        water=water, recent_fire=recent, history_available=hist_ok)
+    cond_parts = []
+    if isinstance(dry, int):
+        cond_parts.append("Thiếu mưa kéo dài" if dry >= 7 else ("Ít mưa" if dry >= 3 else "Mưa gần đây"))
+    if weather.get("humidity") is not None and weather["humidity"] < 40:
+        cond_parts.append("Khô")
+    if weather.get("temperature") is not None and weather["temperature"] >= 35:
+        cond_parts.append("Nóng")
+    try:
+        from app.core.time import utcnow as _now
+        from datetime import timedelta as _td
+        hhmm = (_now() + _td(hours=7)).strftime("%H:%M")
+    except Exception:
+        hhmm = "--:--"
+    bulletin = frating.build_bulletin(
+        administrative_unit_id, scope_vi, rating,
+        {"temperature": weather.get("temperature"),
+         "condition": " · ".join(cond_parts) if cond_parts else frating.MISSING},
+        hhmm)
+    return {"scope": scope, "area": {"name": administrative_unit_id, "lat": lat, "lon": lon},
+            "firms_hotspot_count": len(hotspots),
+            "measured": {"temperature": weather.get("temperature"),
+                         "condition": " · ".join(cond_parts) if cond_parts else frating.MISSING},
+            "rating": rating, "bulletin": bulletin,
+            "updated_at": hhmm, "status": "LIVE", "origin": tag_data_origin()}
 
 @router.get("/fire/hotspots")
 async def fire_hotspots(lat: float = Query(default=13.9), lon: float = Query(default=108.3)):
@@ -159,12 +317,15 @@ async def commune_levels(body: dict):
         pass
     # shared FIRMS hotspots once
     hotspots = []
+    firms_ok = False
     try:
         from app.services.firms_service import fetch_firms
         f = await fetch_firms(13.9, 108.3)
+        firms_ok = f.get("status") in ("LIVE", "CACHED")
         hotspots = f.get("fires", [])[:50]
     except Exception:
         pass
+    wx_ok = bool(weather) and (weather.get("temperature") is not None or weather.get("humidity") is not None)
     out = []
     failed = 0
     for u in units:
@@ -182,9 +343,17 @@ async def commune_levels(body: dict):
             result = fire_risk_engine.analyze(name, satellite={},
                                               weather=weather, terrain={},
                                               hotspots=near, community=0)
+            # Light CẤP rating from the SAME shared inputs (no extra I/O):
+            # driver + coverage + action for the map popup (additive only).
+            _lr = frating.rate_forecast(
+                weather=weather, weather_available=wx_ok,
+                hotspot_count=len(near), firms_available=firms_ok)
             out.append({"key": str(u.get("id") or name), "name": name, "lat": lat, "lon": lon,
                         "level": result["warning_level"], "score": result["risk_score"],
-                        "confidence": result["confidence"]})
+                        "confidence": result["confidence"],
+                        "driver": _lr["major_risk_driver"],
+                        "coverage": _lr["data_coverage_status"],
+                        "action": _lr["recommended_action"][0] if _lr["recommended_action"] else ""})
         except Exception:
             failed += 1
             continue

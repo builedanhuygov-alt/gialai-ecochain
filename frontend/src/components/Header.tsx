@@ -93,7 +93,7 @@ export default function Header({ onMenu }: { onMenu: ()=>void }) {
         <span title="Giao diện tiếng Việt" style={{display:'flex', gap:4, alignItems:'center'}}>
           <span style={{border:'1px solid #0F766E', background:'#0F766E', color:'#fff', borderRadius:999, padding:'4px 8px', fontSize:11, fontWeight:700}}>VI</span>
         </span>
-        <button className="icon-btn" aria-label={t('hdr.notif')} onClick={()=> nav('/notifications')}><Bell size={18}/>{activeCount > 0 && <span className="badge">{activeCount}</span>}</button>
+        <button className="icon-btn" aria-label={t('hdr.notif')} onClick={()=> nav('/notifications')}><Bell size={18}/>{activeCount > 0 && <span key={activeCount} className="badge badge-pop">{activeCount}</span>}</button>
         <button className="assistant" aria-label={t('hdr.assistant')} onClick={()=> window.dispatchEvent(new CustomEvent('ecochain-open-ai', { detail:{} }))}><Bot size={16}/> {t('hdr.assistant')}</button>
         {user ? (
           <button className="user" title={`${user.username} (${user.role}) — bấm để đăng xuất`}
@@ -109,6 +109,8 @@ export default function Header({ onMenu }: { onMenu: ()=>void }) {
 
       <style>{`
         .header{ height:64px; background:#FFFFFF; border-bottom:1px solid #E2E8E5; display:flex; align-items:center; gap:16px; padding:0 20px; position:sticky; top:0; z-index:10; }
+        .hdr-search{ transition:box-shadow 200ms cubic-bezier(0.4,0,0.2,1), border-color 200ms cubic-bezier(0.4,0,0.2,1); }
+        .hdr-search:focus-within{ box-shadow:0 0 0 3px rgba(15,118,110,0.15); border-color:#0F766E !important; }
         .menu{ display:none; background:#fff; border:1px solid #E2E8E5; border-radius:10px; padding:8px; }
         .scope{ display:flex; gap:8px; align-items:center; }
         .scope select{ background:#F8FAF9; border:1px solid #E2E8E5; border-radius:10px; padding:8px 10px; font-size:13px; font-weight:600; }

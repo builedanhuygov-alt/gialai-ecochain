@@ -28,18 +28,18 @@ export default function Disaster(){
         <MapView />
         <div style={{display:'flex', flexDirection:'column', gap:12}}>
           {tab === 'Cháy' ? (
-            <FireWarningCard level={fire?.warning_level || 'IV'} risk={fire?.risk_score ?? 82} confidence={fire?.confidence ?? 91} temp={fire?.elevation ? 35 : 35} />
+            <FireWarningCard level={fire?.warning_level || 'IV'} temp={fire?.elevation ? 35 : 35} />
           ) : (
             <div className="card" style={{borderLeft:`4px solid ${sig && sig.score > 60 ? '#DC2626' : '#0F766E'}`}}>
-              <b>{TYPE_VI[sig?.risk_type] || tab}: {sig ? `${sig.score}/100` : 'đang tải...'}</b>
-              <div style={{fontSize:12, color:'#64748B', marginTop:4}}>DisasterGuard · {summary ? 'LIVE' : 'đang tải...'}</div>
+              <b>{TYPE_VI[sig?.risk_type] || tab}: {sig ? (sig.level || 'MISSING') : 'MISSING'}</b>
+              <div style={{fontSize:12, color:'#64748B', marginTop:4}}>DisasterGuard · {summary ? 'LIVE' : 'MISSING'}</div>
             </div>
           )}
           <FireIntelligencePanel official={official} ai={fire} discrepancy={!!(fire && official && fire.warning_level!==official.level)} />
         </div>
       </div>
       <div className="grid">
-        <div className="card"><b>Đa thiên tai Gia Lai</b> — {(summary?.signals || []).map((s:any)=> `${TYPE_VI[s.risk_type] || s.risk_type} ${s.score}`).join(' · ') || 'đang tải...'} <br/><small>Nguồn: DisasterGuard · {summary?.status || '…'}</small></div>
+        <div className="card"><b>Đa thiên tai Gia Lai</b> — {(summary?.signals || []).map((s:any)=> `${TYPE_VI[s.risk_type] || s.risk_type} ${s.level || 'MISSING'}`).join(' · ') || 'MISSING'} <br/><small>Nguồn: DisasterGuard · {summary?.status || 'MISSING'}</small></div>
         <div className="card">Forecast + AI Recommendations — Early warning 72h</div>
       </div>
       <style>{`.tabs{display:flex; gap:8px} .tabs span{padding:6px 10px; border-radius:999px; background:#F1F5F3; font-size:13px} .tabs .active{background:#0B1412; color:#fff} .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px} .card{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:16px} @media (max-width: 900px){ .dis-grid{ grid-template-columns:1fr !important; } .grid{ grid-template-columns:1fr; } }`}</style>

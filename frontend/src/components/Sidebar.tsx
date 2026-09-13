@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { Map, Flame, FileCheck, Truck, Layers, Users, Settings, HelpCircle, X, Radio } from 'lucide-react'
 import FireRiskGauge from './FireRiskGauge'
 import { useLang } from '../i18n'
@@ -42,8 +43,13 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
               {g.items.map(it=>{
                 const Icon = it.icon
                 return (
-                  <NavLink key={it.to} to={it.to} className={({isActive})=> isActive?'nav-link active':'nav-link'} onClick={onClose}>
-                    <Icon size={18} strokeWidth={1.7} /> {it.label}
+                  <NavLink key={it.to} to={it.to} onClick={onClose}>
+                    {({isActive})=> (
+                      <span className={isActive?'nav-link active':'nav-link'}>
+                        {isActive && <motion.span layoutId="nav-active-pill" transition={{duration:0.22, ease:[0.32,0.72,0,1]}} style={{position:'absolute', inset:0, background:'#132E2A', border:'1px solid #1E4A44', borderRadius:10}} />}
+                        <Icon size={18} strokeWidth={1.7} /><span>{it.label}</span>
+                      </span>
+                    )}
                   </NavLink>
                 )
               })}
@@ -69,9 +75,12 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
         .nav{ padding:12px 10px; flex:1; }
         .group{ margin:14px 0; }
         .group-label{ font-size:11px; letter-spacing:0.8px; color:#6B7280; padding:6px 10px; }
-        .nav-link{ display:flex; gap:10px; align-items:center; padding:9px 10px; border-radius:10px; color:#CBD5D1; text-decoration:none; font-size:14px; font-weight:500; }
+        .nav-link{ position:relative; display:flex; gap:10px; align-items:center; padding:9px 10px; border-radius:10px; color:#CBD5D1; text-decoration:none; font-size:14px; font-weight:500; transition:background-color 150ms cubic-bezier(0.4,0,0.2,1), color 150ms cubic-bezier(0.4,0,0.2,1), border-color 150ms cubic-bezier(0.4,0,0.2,1); border:1px solid transparent; }
+        .nav-link > svg{ transition:transform 150ms cubic-bezier(0.4,0,0.2,1); flex:none; }
         .nav-link:hover{ background:#13201D; color:#fff; }
-        .nav-link.active{ background:#132E2A; color:#fff; border:1px solid #1E4A44; }
+        .nav-link:hover > svg{ transform:scale(1.05); }
+        .nav-link.active{ color:#fff; border:1px solid transparent; }
+        .nav-link > svg, .nav-link > :last-child{ position:relative; z-index:1; }
         .sidebar-foot{ padding:14px 12px; border-top:1px solid #1E3A36; display:flex; flex-direction:column; gap:10px; font-size:13px;}
         .sidebar-foot a{ display:flex; gap:8px; align-items:center; color:#94A3B8; }
         .profile{ display:flex; gap:10px; align-items:center; margin-top:4px; }

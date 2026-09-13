@@ -32,7 +32,7 @@ export function MetricCard({ label, value, unit, trend, dir, icon }: any) {
 export function AIInsightCard() {
   return (
     <div className="ai-card">
-      <div className="ai-head">GỢI Ý AI <span className="conf">Tin cậy 89%</span></div>
+      <div className="ai-head">GỢI Ý AI <span className="conf">FIELD_VERIFICATION_REQUIRED</span></div>
       <div className="ai-title">Nguy cơ cháy rừng tăng trong khu vực đã chọn.</div>
       <div className="ai-why">
         <div>Nguyên nhân chính:</div>
