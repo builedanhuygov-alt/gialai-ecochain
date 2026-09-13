@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { API_BASE } from '../services/api'
 
 export type EcoMode = 'live' | 'demo'
@@ -27,7 +28,10 @@ export default function ModeSwitch() {
   return (
     <div title={mode === 'demo' ? 'Bản DEMO: kịch bản tutorial đầy đủ hiện tượng' : 'Bản LIVE: dữ liệu thật GEE/FIRMS/Gemini'} style={{ display: 'flex', background: '#F1F5F9', borderRadius: 999, padding: 3, gap: 3 }}>
       {([['live', '● LIVE'], ['demo', '◆ DEMO']] as [EcoMode, string][]).map(([v, label]) => (
-        <button key={v} onClick={() => pick(v)} style={{ border: 0, borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer', background: mode === v ? (v === 'live' ? '#0F766E' : '#F59E0B') : 'transparent', color: mode === v ? '#fff' : '#64748B' }}>{label}</button>
+        <button key={v} onClick={() => pick(v)} style={{ position: 'relative', border: 0, borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer', background: 'transparent', color: mode === v ? '#fff' : '#64748B' }}>
+          {mode === v && <motion.span layoutId="eco-mode-pill" transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }} style={{ position: 'absolute', inset: 0, borderRadius: 999, background: v === 'live' ? '#0F766E' : '#F59E0B' }} />}
+          <span style={{ position: 'relative', zIndex: 1 }}>{label}</span>
+        </button>
       ))}
     </div>
   )

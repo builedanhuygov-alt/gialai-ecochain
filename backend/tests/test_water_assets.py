@@ -89,3 +89,43 @@ def test_response_plan_uses_spec_ranking():
     assert wr["weights"]["distance"] == 0.40
     assert all(s["priority"] in ("A", "B", "C") for s in wr["ranked"])
     assert d["nearest_water"] is None or "priority" in d["nearest_water"]
+
+
+def test_threatened_water_bands():
+    c = setup()
+    # fire right on top of Hoi Son reservoir -> CRITICAL, far fire -> SAFE for most
+    r = c.get("/api/water/threatened?lat=14.062&lon=109.02&wind_speed_kmh=15&wind_direction_deg=90").json()
+    assert "threats" in r and "summary" in r
+    assert len(r["threats"]) == 16
+    by_name = {t["name"]: t for t in r["threats"]}
+    assert by_name["Hội Sơn"]["band"] == "CRITICAL"
+    assert by_name["Hội Sơn"]["eta_hours"] is not None
+    assert by_name["Hội Sơn"]["in_1h"] is True
+    assert all(t["band"] in ("SAFE", "WATCH", "THREATENED", "CRITICAL") for t in r["threats"])
+    assert sum(r["summary"].values()) == 16
+
+
+def test_water_threat_unit_severity_order():
+    from app.services import spread as spread_svc
+    from app.services import twin_ops as ops
+    lon, lat = 109.02, 14.062
+    sim = spread_svc.simulate(lon, lat, 15, 90, 12, [1.0, 3.0, 6.0])
+    ros = sim["steps"][0]["ros_kmh"]
+    waters = [
+        {"name": "Near", "longitude": lon, "latitude": lat,
+         "capacity_m3": 1000000, "road_access": True, "status": "verified"},
+        {"name": "Far", "longitude": 107.0, "latitude": 12.0,
+         "capacity_m3": 1000000, "road_access": True, "status": "verified"},
+    ]
+    out = ops.assess_water_threat(lon, lat, ros, waters, sim["steps"])
+    by_name = {t["name"]: t for t in out}
+    assert by_name["Near"]["band"] == "CRITICAL"
+    assert by_name["Far"]["band"] == "SAFE"
+
+
+def test_response_plan_includes_water_threats():
+    c = setup()
+    d = c.post("/api/v1/fires/response-plan", json={"lon": 109.02, "lat": 14.06}).json()
+    assert "water_threats" in d
+    assert len(d["water_threats"]) == 16
+    assert any(t["band"] in ("CRITICAL", "THREATENED") for t in d["water_threats"])

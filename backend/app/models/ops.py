@@ -88,8 +88,18 @@ class QuotaLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-ASSET_TYPES = ("watchtower", "camera", "water", "firetruck", "pump", "team", "station", "route")
+ASSET_TYPES = ("watchtower", "camera", "water", "firetruck", "pump", "team", "station", "route",
+               "community_hall", "risk_point")
 ASSET_STATUS = ("active", "inactive", "maintenance")
+# Module B — canonical survey enums. NULL = chưa khảo sát (MISSING).
+# Giá trị ngoài enum bị API từ chối 400 — không chuẩn hóa ngầm.
+ROAD_CONDITIONS = ("GOOD", "FAIR", "POOR", "BLOCKED")
+SURFACE_TYPES = ("PAVED", "GRAVEL", "FOREST_ROAD", "TRAIL")
+# A3 canonical seasonal access. Legacy free-text (dry-season-only, year-round…)
+# normalized on write — never stored raw.
+SEASONAL_ACCESS = ("DRY_ONLY", "YEAR_ROUND")
+# Module E — viewer fallback chain (tính toán, không lưu DB).
+VIEWER_TYPES = ("streetview", "photos", "panoee", "satellite", "none")
 
 
 class OperationalAsset(Base):
@@ -115,6 +125,31 @@ class OperationalAsset(Base):
     # to code until then. Routes (tuyến tiếp cận) store LineString GeoJSON here.
     viewer_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     geometry: Mapped[str | None] = mapped_column(Text, nullable=True)  # GeoJSON LineString/Polygon
+    # Tactical ops (M1/M2): operator-entered, NULL until rangers supply real
+    # values — NEVER seeded with fake phone numbers or road grades.
+    contact: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    route_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    road_condition: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Field-data completion (Module A/B/D/E): all NULL until surveyed.
+    # gps_status is DERIVED (lat/lon NOT NULL → VERIFIED), never stored.
+    district: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    commune: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    manager: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_person: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    organization: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    verification_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    surface_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    max_vehicle_tons: Mapped[float | None] = mapped_column(Float, nullable=True)
+    seasonal_access: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # True=xem được streetview (đã kiểm chứng), False=đã kiểm tra-không có,
+    # NULL=chưa kiểm tra (MISSING).
+    has_streetview: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Module 360 (M1/M5): viewer metadata — NULL until rangers upload real media.
+    preview_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    capture_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    capture_source: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -134,10 +134,10 @@ export default function Dashboard() {
 
       {selected && (
         <div className="panel">
-          <h3>{selected}{selectedInfo ? ` — Điểm rủi ro ${selectedInfo.overall_score ?? '?'}/100 (${selectedInfo.overall_level ?? ''})` : ' — chưa có dữ liệu'}</h3>
+          <h3>{selected}{selectedInfo ? ` · CẤP ${selectedInfo.overall_level ?? 'MISSING'}` : ' · MISSING'}</h3>
           <div className="panel-grid">
-            <div>Mức: {selectedInfo?.overall_level || '—'}</div>
-            <div>Độ tin cậy: {selectedInfo?.confidence ?? '—'}%</div>
+            <div>Mức: {selectedInfo?.overall_level || 'MISSING'}</div>
+            <div>Trạng thái dữ liệu: {selectedInfo ? 'LIVE' : 'MISSING'}</div>
             <div>Yếu tố: {selectedInfo?.breakdown ? Object.keys(selectedInfo.breakdown).length : 0}</div>
             <div>Nguồn: API trực tiếp</div>
           </div>
@@ -163,8 +163,8 @@ export default function Dashboard() {
         <div className="chart-card">
           <div className="card-title">Xu hướng rủi ro</div>
           <div style={{height:160}}>
-            {trend === null && <div style={{fontSize:13, color:'#64748B'}}>Đang tải…</div>}
-            {trend !== null && trend.length === 0 && <div style={{fontSize:13, color:'#64748B'}}>Chưa có dữ liệu lịch sử — chạy phân tích để tạo bản ghi.</div>}
+            {trend === null && <div style={{fontSize:13, color:'#64748B'}}>Đang tải</div>}
+            {trend !== null && trend.length === 0 && <div style={{fontSize:13, color:'#64748B'}}>MISSING: chưa có dữ liệu lịch sử. Chạy phân tích để tạo bản ghi.</div>}
             {trend !== null && trend.length > 0 && (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trend}>

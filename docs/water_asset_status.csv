@@ -1,0 +1,17 @@
+name,asset_type,latitude,longitude,gps_status,capacity_m3,manager,contact_phone,verification_date,contact_status,photos_1km,viewer_360,commune_code,status
+An Khê,hydro,13.985,108.665,VERIFIED,5600000,EVN,MISSING,MISSING,MISSING,0,satellite,GL-22,verified
+Ayun Hạ,reservoir,13.565,108.243,VERIFIED,253000000,Cty TNHH MTV Khai thác CTTL,MISSING,MISSING,MISSING,0,satellite,GL-50,verified
+Biển Hồ (T'Nưng),lake,14.053,108.0,VERIFIED,40000000,UBND TP Pleiku,MISSING,MISSING,MISSING,0,streetview,GL-37,verified
+Hồ Bầu Cạn,lake,13.801,107.925,VERIFIED,MISSING,UBND Xã Bàu Cạn,MISSING,MISSING,MISSING,0,satellite,GL-53,cần xác minh
+Hồ Ia Hrung,lake,13.992,107.881,VERIFIED,MISSING,UBND Xã Ia Hrung,MISSING,MISSING,MISSING,0,satellite,GL-85,cần xác minh
+Hội Sơn,reservoir,14.062,109.02,VERIFIED,44000000,Chi cục Thủy lợi,MISSING,MISSING,MISSING,0,satellite,GL-66,verified
+Ia Mơr,reservoir,13.25,107.65,VERIFIED,177000000,Ban QLDA Thủy lợi 8,MISSING,MISSING,MISSING,0,satellite,MISSING,verified
+Ia Ring (Vòng Ia),irrigation,13.722,108.106,VERIFIED,10000000,Chi cục Thủy lợi,MISSING,MISSING,MISSING,0,satellite,GL-XA-A,verified
+Ialy,hydro,14.225,107.828,VERIFIED,1037000000,EVN,MISSING,MISSING,MISSING,0,streetview,GL-92,verified
+Ka Nak,hydro,14.238,108.563,VERIFIED,313000000,EVN,MISSING,MISSING,MISSING,0,satellite,GL-106,verified
+Núi Một,reservoir,13.84,108.965,VERIFIED,110000000,Chi cục Thủy lợi,MISSING,MISSING,MISSING,0,satellite,GL-136,verified
+Plei Krông,hydro,14.408,107.868,VERIFIED,1040000000,EVN,MISSING,MISSING,MISSING,0,streetview,MISSING,verified
+Thuận Ninh,reservoir,13.91,108.835,VERIFIED,35000000,Chi cục Thủy lợi,MISSING,MISSING,MISSING,0,satellite,GL-43,verified
+Vạn Hội,reservoir,14.288,108.972,VERIFIED,14000000,Chi cục Thủy lợi,MISSING,MISSING,MISSING,0,satellite,GL-67,verified
+Định Bình,reservoir,14.032,108.79,VERIFIED,226000000,Ban QLDA Thủy lợi 7,MISSING,MISSING,MISSING,0,satellite,GL-42,verified
+Đồng Mít,reservoir,14.398,108.875,VERIFIED,90000000,Ban QLDA Thủy lợi 8,MISSING,MISSING,MISSING,0,satellite,GL-145,verified

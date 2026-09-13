@@ -12,6 +12,7 @@ const MapPage = lazy(()=> import('./pages/MapPage'))
 const EventIntelligence = lazy(()=> import('./pages/EventIntelligence'))
 const EventsList = lazy(()=> import('./pages/EventIntelligence').then(m=> ({ default: m.EventsList })))
 const WhatIfLab = lazy(()=> import('./pages/WhatIfLab'))
+const FireSim = lazy(()=> import('./pages/FireSim'))
 const Missions = lazy(()=> import('./pages/Missions'))
 const Forest = lazy(()=> import('./pages/Forest'))
 const Disaster = lazy(()=> import('./pages/Disaster'))
@@ -29,16 +30,17 @@ const Admin = lazy(()=> import('./pages/Admin'))
 const Audit = lazy(()=> import('./pages/Audit'))
 const Login = lazy(()=> import('./pages/Login'))
 const Command = lazy(()=> import('./pages/Command'))
+const Viewer = lazy(()=> import('./pages/Viewer'))
 
 const TITLES: Record<string,string> = {
   '/': 'Bản đồ cháy rừng Gia Lai',
-  '/events': 'Sự kiện', '/what-if': 'What-if Lab', '/missions': 'Nhiệm vụ',
+  '/events': 'Sự kiện', '/what-if': 'What-if Lab', '/firesim': 'Mô phỏng cháy 3D', '/missions': 'Nhiệm vụ',
   '/map': 'Bản đồ', '/forest': 'Rừng', '/disaster': 'Thiên tai',
   '/agriculture': 'Nông nghiệp', '/carbon': 'Carbon', '/eudr': 'EUDR',
   '/logistics': 'Logistics', '/twin': 'Bản sao số', '/community': 'Cộng đồng',
   '/actions': 'Điều hành', '/leaderboard': 'Xếp hạng', '/reports': 'Báo cáo',
   '/admin': 'Quản trị', '/notifications': 'Thông báo', '/audit': 'Nhật ký', '/login': 'Đăng nhập',
-  '/command': 'Chỉ huy',
+  '/command': 'Chỉ huy', '/viewer': 'Hiện trường 360°',
 }
 
 function NotFound(){
@@ -150,6 +152,38 @@ function AIAssistant(){
     }finally{ setLoading(false) }
   }
 
+  // Puter.js path (optional): user-pays DeepSeek via the viewer's own Puter
+  // account (popup auth on first use). Never touches backend keys. Failure
+  // leaves all backend options intact.
+  const ensurePuter = ()=> new Promise<any>((resolve, reject)=>{
+    const w = window as any
+    if(w.puter?.ai?.chat) return resolve(w.puter)
+    const s = document.createElement('script')
+    s.src = 'https://js.puter.com/v2/'
+    s.async = true
+    s.onload = ()=> (window as any).puter?.ai?.chat ? resolve((window as any).puter) : reject(new Error('Puter SDK chưa sẵn sàng'))
+    s.onerror = ()=> reject(new Error('Không tải được Puter SDK (mạng/CSP)'))
+    document.head.appendChild(s)
+    setTimeout(()=> reject(new Error('Puter SDK quá lâu')), 15000)
+  })
+  const askPuter = async ()=>{
+    const qq = q.trim(); if(!qq || loading) return
+    setLoading(true); setPhase('PUTER'); setStream(''); setResult(null)
+    try{
+      const puter = await ensurePuter()
+      const r = await puter.ai.chat(
+        `Bạn là chuyên gia PCCC Gia Lai. Trả lời ngắn gọn, evidence-based: ${qq}`,
+        { model: 'deepseek/deepseek-v4.1-flash' })
+      const text = r?.message?.content || (typeof r === 'string' ? r : JSON.stringify(r).slice(0, 800))
+      setStream(String(text).slice(0, 1200))
+      setResult({ provider: 'Puter', model: 'deepseek/deepseek-v4.1-flash', billing: 'user-pays (tài khoản Puter của bạn)', risk: null })
+      setPhase('COMPLETE')
+    }catch(e:any){
+      setStream('Puter AI chưa dùng được (' + String(e?.message || e).slice(0, 160) + '). Hãy đăng nhập Puter ở popup, hoặc dùng Phân tích/Stream (backend).')
+      setPhase('ERROR')
+    }finally{ setLoading(false) }
+  }
+
   const askStream = async ()=>{
     const qq = q.trim(); if(!qq) return
     setLoading(true); setPhase('THINKING'); setStream(''); setResult(null)
@@ -204,6 +238,7 @@ function AIAssistant(){
             <button onClick={()=> runAiAction('fire-risk')} disabled={loading} style={{fontSize:11, padding:'4px 10px', borderRadius:999, border:'1px solid #0F766E', background:'#fff', color:'#0F766E'}}>🔥 Nguy cơ cháy AI</button>
             <button onClick={()=> runAiAction('what-if')} disabled={loading} style={{fontSize:11, padding:'4px 10px', borderRadius:999, border:'1px solid #0F766E', background:'#fff', color:'#0F766E'}}>🧪 Kịch bản What-if</button>
             <button onClick={()=> runAiAction('pccc')} disabled={loading} style={{fontSize:11, padding:'4px 10px', borderRadius:999, border:'1px solid #0F766E', background:'#fff', color:'#0F766E'}}>🚒 Tổng hợp PCCC</button>
+            <button onClick={()=> askPuter()} disabled={loading} title="Chat qua Puter.js (deepseek-v4.1-flash) — tính vào tài khoản Puter của bạn, không dùng key backend" style={{fontSize:11, padding:'4px 10px', borderRadius:999, border:'1px solid #7C3AED', background:'#fff', color:'#7C3AED'}}>✦ Hỏi Puter AI</button>
           </div>
           <textarea value={q} onChange={e=>setQ(e.target.value)} placeholder="Gia Lai hiện tại có khu vực nào nguy cơ cháy rừng cao?" aria-label="Hỏi AI" />
           <div style={{display:'flex', gap:8, marginTop:8}}>
@@ -215,6 +250,7 @@ function AIAssistant(){
           {result && (
             <div style={{marginTop:10, border:'1px solid #E2E8E5', borderRadius:12, padding:10, background:'#F8FAF9'}}>
               <div style={{fontWeight:700, fontSize:12}}>FIRE INTELLIGENCE</div>
+              {result.provider === 'Puter' && <div style={{fontSize:11, color:'#7C3AED', marginBottom:4}}>Nguồn: Puter · {result.model} · {result.billing}</div>}
               <div style={{fontSize:13}}>Risk: <b>{result.risk?.score ?? result.structured_output?.risk?.score ?? '--'} / 100</b> · Band <b>{result.risk?.band ?? '--'}</b></div>
               <div style={{fontSize:12}}>Confidence: <b>{Math.round((result.risk?.confidence ?? result.model_confidence ?? 0)*100) || result.risk?.confidence || '--'}%</b> · Data completeness: {result.data_completeness ?? '--'}%</div>
               <div style={{fontSize:11, color:'#334155', marginTop:4}}>Tín hiệu: {Object.keys(result.factors || {}).join(', ') || 'fuel dryness, weather, FIRMS'}</div>
@@ -280,6 +316,7 @@ function AnimatedRoutes(){
           <Route path="/events" element={<PageTransition><EventsList/></PageTransition>} />
           <Route path="/events/:id" element={<PageTransition><EventIntelligence/></PageTransition>} />
           <Route path="/what-if" element={<PageTransition><WhatIfLab/></PageTransition>} />
+          <Route path="/firesim" element={<PageTransition><FireSim/></PageTransition>} />
           <Route path="/missions" element={<PageTransition><Missions/></PageTransition>} />
           {/* Legacy intelligence kept as hidden capabilities, not primary nav */}
           <Route path="/map" element={<PageTransition><MapPage/></PageTransition>} />
@@ -299,6 +336,7 @@ function AnimatedRoutes(){
           <Route path="/audit" element={<PageTransition><Audit/></PageTransition>} />
           <Route path="/login" element={<PageTransition><Login/></PageTransition>} />
           <Route path="/command" element={<PageTransition><Command/></PageTransition>} />
+          <Route path="/viewer/:assetId" element={<PageTransition><Viewer/></PageTransition>} />
           <Route path="*" element={<PageTransition><NotFound/></PageTransition>} />
         </Routes>
       </AnimatePresence>

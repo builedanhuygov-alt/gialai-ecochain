@@ -97,9 +97,10 @@ def test_phase6():
     assert r.status_code==200
     assert c.get("/api/model/drift/FireRisk").status_code==200
 
-    # Investment
-    assert len(c.get("/api/investment/priorities").json())>=2
-    assert c.get("/api/investment/map").status_code==200
+    # Investment — Module E: no pipeline exists, honest NOT_CONFIGURED (no Area A/B fakes)
+    r=c.get("/api/investment/priorities").json()
+    assert r["status"]=="NOT_CONFIGURED" and r["priorities"]==[]
+    assert c.get("/api/investment/map").json()["status"]=="NOT_CONFIGURED"
 
     # Open data / research / uncertainty
     assert c.get("/api/public/open-data").status_code==200

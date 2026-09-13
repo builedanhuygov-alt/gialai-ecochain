@@ -209,4 +209,10 @@ describe('api client', () => {
     mockFetch(true, { risk_summary: { level: 'IV' }, tactical_recommendations: ['x'] })
     await expect(api.responsePlan({ lat: 13.9, lon: 108.3 })).resolves.toEqual({ risk_summary: { level: 'IV' }, tactical_recommendations: ['x'] })
   })
+
+  it('firesim posts scenario sliders and returns ellipses + impact', async () => {
+    const sim = { ros: { ros_kmh: 1.2 }, spread: { steps: [{ hour: 1.0 }] }, impact: { area_affected_ha: 10 } }
+    mockFetch(true, sim)
+    await expect(api.firesim({ lon: 109.02, lat: 14.06, wind_speed_kmh: 20 })).resolves.toEqual(sim)
+  })
 })

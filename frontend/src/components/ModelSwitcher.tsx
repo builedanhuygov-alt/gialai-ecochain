@@ -4,7 +4,7 @@ const API = API_BASE
 
 // where each agent's output is actually surfaced (honest mapping)
 const POWERS: Record<string, { map?: string; pages: [string, string][] }> = {
-  ForestGuard: { map: 'popup NDVI + vùng rừng trên Bản đồ', pages: [['/forest', 'Forest'], ['/map', 'Bản đồ']] },
+  ForestGuard: { map: 'CẤP cháy + vùng rừng trên Bản đồ', pages: [['/forest', 'Forest'], ['/map', 'Bản đồ']] },
   FireRisk: { map: 'CẤP cháy popup xã + trạm quan trắc', pages: [['/disaster', 'Disaster'], ['/map', 'Bản đồ']] },
   DisasterGuard: { pages: [['/disaster', 'Disaster (đa thiên tai)']] },
   CarbonGuard: { pages: [['/carbon', 'Carbon']] },

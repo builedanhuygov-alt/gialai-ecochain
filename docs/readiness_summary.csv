@@ -1,0 +1,14 @@
+phase,metric,verified,total,status
+PH1-GPS,assets with field GPS,0,44,FIELD_WORK
+PH2-WATER,water contact dated,0,16,FIELD_WORK
+PH2-WATER,water with capacity,14,16,PARTIAL
+PH3-COMMUNE,communes with leader+office,130,134,NEARLY_DONE
+PH4-EVAC,communes with evacuation plan,0,134,NOT_STARTED
+PH5-RESPONSE,communes with assigned response unit,0,134,BLOCKED_ON_GPS
+PH6-ROAD,surveyed pilot corridors,0,5,NOT_STARTED
+PH7-PHOTO,assets with verification photo,0,44,NOT_STARTED
+PH8-360,panoee pilots live,0,3,NOT_STARTED
+PH9-EO,FIRMS,1,1,READY
+PH9-EO,LLM/weather,1,1,READY
+PH9-EO,Sentinel runtime,0,1,FAILED_RUNTIME
+PH9-EO,GEE runtime,1,1,READY

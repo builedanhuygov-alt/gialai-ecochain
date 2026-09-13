@@ -38,7 +38,7 @@ export function FireWarningGauge({ level = 'IV', onSelect, adminOnly = true }: {
   )
 }
 
-export function FireWarningCard({ level='IV', risk=82, confidence=91, temp=35, humidity=31, rainfall=0, wind=21, vegetation='VERY DRY', hotspots=2 }:{ level?:string; risk?:number; confidence?:number; temp?:number; humidity?:number; rainfall?:number; wind?:number; vegetation?:string; hotspots?:number }){
+export function FireWarningCard({ level='IV', temp=35, humidity=31, rainfall=0, wind=21, vegetation='VERY DRY', hotspots=2 }:{ level?:string; risk?:number; confidence?:number; temp?:number; humidity?:number; rainfall?:number; wind?:number; vegetation?:string; hotspots?:number }){
   const info = LEVELS.find(l=> l.lv===level) || LEVELS[3]
   return (
     <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:16, padding:16, boxShadow:'0 4px 16px rgba(15,30,26,0.06)'}}>
@@ -46,15 +46,16 @@ export function FireWarningCard({ level='IV', risk=82, confidence=91, temp=35, h
         <div style={{width:48, height:48, borderRadius:12, background:info.color, display:'grid', placeItems:'center', fontSize:20}}>🔥</div>
         <div>
           <div style={{fontSize:12, letterSpacing:0.6, fontWeight:800, color:'#DC2626'}}>FOREST FIRE WARNING</div>
-          <div style={{fontSize:22, fontWeight:800}}>{level} · {info.label}</div>
+          <div style={{fontSize:22, fontWeight:800}}>CẤP {level} · {info.label}</div>
         </div>
         {level==='IV' || level==='V' ? <span style={{marginLeft:'auto', background:'#FEE2E2', color:'#991B1B', padding:'4px 8px', borderRadius:999, fontSize:11, fontWeight:700}}>HIGH PRIORITY</span> : null}
       </div>
+      {/* RC: không Risk/100, không Tin cậy % — chỉ CẤP + số đo thật. */}
       <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:12, fontSize:13}}>
-        <div>AI Risk <b>{risk}/100</b></div><div>Tin cậy <b>{confidence}%</b></div>
+        <div>CẤP <b>{level}</b></div><div>FIRMS <b>{hotspots} điểm</b></div>
         <div>Nhiệt độ <b>{temp}°C</b></div><div>Ẩm <b>{humidity}%</b></div>
         <div>Mưa <b>{rainfall} mm</b></div><div>Gió <b>{wind} km/h</b></div>
-        <div>Thực bì <b>{vegetation}</b></div><div>FIRMS <b>{hotspots} điểm</b></div>
+        <div>Thực bì <b>{vegetation}</b></div><div>Chi tiết: <b>Mở drawer xã</b></div>
       </div>
       <div style={{display:'flex', gap:8, marginTop:12}}>
         <button style={{flex:1, background:'#0F766E', color:'#fff', border:0, padding:'8px', borderRadius:999, fontSize:13, fontWeight:600}}>Phân tích AI</button>
@@ -68,7 +69,7 @@ export function FireWarningCard({ level='IV', risk=82, confidence=91, temp=35, h
 export function FireIntelligencePanel({ official, ai, discrepancy }:{ official?:any; ai?:any; discrepancy?:boolean }){
   const [level, setLevel] = useState('IV')
   const [detail, setDetail] = useState<any>(null)
-  useEffect(()=>{ if(level==='IV') setDetail({meaning:'Rừng dễ cháy, thời tiết khô nóng, gió mạnh', conditions:'Nhiệt cao, ẩm thấp, NDMI giảm 29%', actions:['Tăng giám sát','Kiểm tra điểm nóng','Chuẩn bị nhiệm vụ']}) },[level])
+  useEffect(()=>{ if(level==='IV') setDetail({meaning:'Rừng dễ cháy, thời tiết khô nóng, gió mạnh', conditions:'Nhiệt cao, ẩm thấp, NDMI giảm (xem tab Sức khỏe)', actions:['Tăng giám sát','Kiểm tra điểm nóng','Chuẩn bị nhiệm vụ']}) },[level])
   return (
     <div style={{display:'flex', flexDirection:'column', gap:12}}>
       <FireWarningGauge level={level} onSelect={setLevel} />
