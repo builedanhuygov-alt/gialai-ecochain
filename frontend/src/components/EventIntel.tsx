@@ -38,7 +38,12 @@ export function severityOf(level: unknown, score: unknown): Severity {
 export function parseCoords(text: unknown): { lat: number; lon: number } | null {
   if (typeof text !== 'string') return null
   const m = text.match(/(\d+)[°](\d+)[′']([\d.]+)[″"]?([NS])\s+(\d+)[°](\d+)[′']([\d.]+)[″"]?([EW])/)
-  if (!m) return null
+  if (!m) {
+    const decimal = text.match(/(-?\d+(?:\.\d+)?)\s*[,;]\s*(-?\d+(?:\.\d+)?)/)
+    if (!decimal) return null
+    const lat = Number(decimal[1]); const lon = Number(decimal[2])
+    return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null
+  }
   const lat = (+m[1] + +m[2] / 60 + +m[3] / 3600) * (m[4] === 'S' ? -1 : 1)
   const lon = (+m[5] + +m[6] / 60 + +m[7] / 3600) * (m[8] === 'W' ? -1 : 1)
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
@@ -147,8 +152,26 @@ export function EiStyles() {
     .ei-dsec p, .ei-dsec div.r{ font-size:13px; color:#C4D2E0; line-height:1.55; }
     .ei-q{ display:flex; gap:10px; align-items:center; padding:8px 0; border-top:1px solid var(--ei-line); font-size:13px; }
     .ei-q .rank{ font-size:18px; font-weight:800; color:var(--ei-faint); min-width:30px; font-variant-numeric:tabular-nums; }
+    .ei-verification-summary{ margin-top:12px; }
+    .ei-summary-grid{ display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; margin-top:10px; }
+    .ei-summary-grid div{ background:rgba(148,163,184,0.08); border:1px solid var(--ei-line); border-radius:10px; padding:10px; min-width:0; }
+    .ei-summary-grid b{ display:block; font-size:21px; font-variant-numeric:tabular-nums; }
+    .ei-summary-grid span{ display:block; color:var(--ei-mut); font-size:11px; margin-top:3px; line-height:1.3; }
+    .fire-verify{ margin-top:12px; background:rgba(16,28,46,0.72); }
+    .fire-verify-grid{ display:grid; grid-template-columns:minmax(0,1.4fr) minmax(150px,0.8fr); gap:12px; margin-top:10px; align-items:start; }
+    .fire-satellite{ width:100%; aspect-ratio:16/10; object-fit:cover; border-radius:10px; border:1px solid var(--ei-line); display:block; }
+    .fire-verify-location{ display:flex; flex-direction:column; gap:8px; font-size:12px; color:#C4D2E0; }
+    .fire-verify-stats{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; padding:9px; border-radius:10px; background:rgba(59,130,246,0.08); color:#C4D2E0; font-size:11px; }
+    .fire-verify-stats span{ color:var(--ei-mut); }
+    .fire-verify-form{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+    .fire-verify-form label{ display:flex; flex-direction:column; gap:5px; color:var(--ei-mut); font-size:11px; font-weight:700; }
+    .fire-verify-form select,.fire-verify-form textarea,.fire-verify-form input[type=file]{ width:100%; box-sizing:border-box; border:1px solid var(--ei-line); border-radius:9px; background:var(--ei-panel2); color:var(--ei-text); padding:8px; font:inherit; }
+    .fire-verify-form textarea{ resize:vertical; line-height:1.45; }
+    .fire-verify-wide{ grid-column:1/-1; }
+    .fire-upload input{ padding:7px; }
+    .fire-upload-preview{ width:100%; max-height:260px; object-fit:cover; border-radius:10px; border:1px solid var(--ei-line); }
     .ei-mapwrap{ height:560px; border-radius:14px; overflow:hidden; border:1px solid var(--ei-line); position:relative; }
-    @media (max-width:640px){ .ei{ padding:14px; } .ei-title{ font-size:24px; } .ei-thumb{ width:120px; } .ei-mapwrap{ height:400px; } }
+    @media (max-width:640px){ .ei{ padding:12px; border-radius:12px; } .ei-title{ font-size:24px; } .ei-thumb{ width:120px; } .ei-mapwrap{ height:400px; } .ei-summary-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } .ei-summary-grid div:first-child{ grid-column:1/-1; } .fire-verify-grid,.fire-verify-form{ grid-template-columns:1fr; } .fire-verify-wide{ grid-column:auto; } .ei-drawer{ padding:14px; width:calc(100vw - 10px); } .ei-dtabs{ overflow-x:auto; scrollbar-width:none; } .ei-dtab{ flex:none; padding:8px 9px; } .ei-sysbox{ width:100%; flex-wrap:wrap; gap:8px; } .ei-filters{ overflow-x:auto; flex-wrap:nowrap; } .ei-fbtn{ flex:none; } }
     @media (prefers-reduced-motion: reduce){ .ei *{ animation:none !important; transition:none !important; } }
     button:focus-visible, a:focus-visible{ outline:2px solid #3B82F6; outline-offset:2px; }
     `}</style>

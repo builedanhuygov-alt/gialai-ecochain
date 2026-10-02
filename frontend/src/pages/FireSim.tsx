@@ -59,7 +59,7 @@ export default function FireSim(){
   const [show, setShow] = useState({ ellipses:true, assets:true, routes:true, communities:true, wind:true })
   // M7: mặc định gọn — fire/water/communities/stations; WHY + terrain
   // analysis tắt để bản đồ đọc được trong 5 giây.
-  const [show3d, setShow3d] = useState({ ellipses:true, canopy:true, front:true, wind:true, assets:true, routes:true, communities:true, water:true, plan:true, terrain:false, why:false })
+  const [show3d, setShow3d] = useState({ ellipses:true, canopy:true, front:true, wind:true, assets:true, routes:true, communities:true, water:true, plan:true, terrain:true, why:false })
   const [terrainStats, setTerrainStats] = useState<any>(null)
   // Module 7 compare: second scenario overlaid dashed on 2D + delta panel
   const [simB, setSimB] = useState<any>(null)
@@ -213,12 +213,11 @@ export default function FireSim(){
     return ()=> clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[playing])
-  // simView: timeline filters ellipses/front/communities/story (routes/waters
-  // stay full-horizon "expected" panels — labeled in UI).
+  // Keep all forecast rings so the selected time can show faint context.
   const simView = (()=> {
     if(!data || untilHour === null) return data
     return { ...data,
-      spread: { ...data.spread, steps: (data.spread?.steps || []).filter((s: any)=> s.hour <= untilHour) },
+      render_hour: untilHour,
       communities: (data.communities || []).filter((c: any)=> (c.first_hour ?? 99) <= untilHour),
       story: (data.story || []).filter((e: any)=> (e.t_hour ?? 99) <= untilHour),
     }
@@ -383,7 +382,7 @@ export default function FireSim(){
           </div>
           {mode === '2d' && map && mapReady && data && (
             <>
-              <FireSimulationLayer map={map} data={simView} show={show} communeFc={communeFc} isMobile={isMobile} />
+              <FireSimulationLayer map={map} data={simView} show={show} communeFc={communeFc} isMobile={isMobile} selectedHour={untilHour} />
               <FireFrontCanvas map={map} steps={simView?.spread?.steps} on={particles} />
             </>
           )}
@@ -399,6 +398,12 @@ export default function FireSim(){
                 <div style={{fontSize:12, color:'#FDE68A', marginTop:6}}>{demError}. Không dùng mặt phẳng giả thay thế.</div>
                 <button onClick={()=> setMode('2d')} style={{marginTop:10, background:'#0F766E', color:'#fff', border:0, borderRadius:999, padding:'8px 18px', fontWeight:700, cursor:'pointer'}}>Về 2D</button>
               </div>
+            </div>
+          )}
+          {data?.wind_layer && (
+            <div style={{position:'absolute', top:52, right:8, zIndex:7, display:'flex', alignItems:'center', gap:8, background:'rgba(255,255,255,0.94)', border:'1px solid rgba(14,165,233,0.35)', borderRadius:8, padding:'5px 8px', boxShadow:'0 2px 8px rgba(15,23,42,0.14)'}} aria-label={`Gió ${data.wind_layer.direction_deg} độ, ${data.wind_layer.speed_kmh} km/h`}>
+              <span style={{display:'inline-block', fontSize:18, lineHeight:1, color:'#0369A1', transform:`rotate(${data.wind_layer.direction_deg}deg)`}}>↑</span>
+              <span style={{fontSize:10, lineHeight:1.25, color:'#0F172A'}}><b>GIÓ TỚI</b><br />{Math.round(data.wind_layer.speed_kmh)} km/h · {Math.round(data.wind_layer.direction_deg)}°</span>
             </div>
           )}
           {/* M5 legend — icon + label khớp lớp đang bật (không chỉ màu) */}
@@ -423,6 +428,8 @@ export default function FireSim(){
               ))}
               <button onClick={()=> setPlaying(p=> !p)} style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'2px 10px', background: playing ? '#DC2626' : '#fff', color: playing ? '#fff' : '#0B1412', cursor:'pointer', transition:'background-color 200ms cubic-bezier(0.16,1,0.3,1), color 200ms cubic-bezier(0.16,1,0.3,1)'}}>{playing ? '⏸' : '▶'} Playback</button>
               <button onClick={()=> { setUntilHour(null); setPlaying(false) }} title="Reset timeline về toàn kịch bản" style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'2px 10px', background:'#fff', cursor:'pointer'}}>↺ Reset</button>
+              <input type="range" min={0} max={Math.max(...data.spread.steps.map((s: any)=> s.hour))} step={1} value={untilHour ?? Math.max(...data.spread.steps.map((s: any)=> s.hour))} onChange={e=> { setUntilHour(Number(e.target.value)); setPlaying(false) }} aria-label="Mốc thời gian lan cháy" style={{flex:'1 1 150px', minWidth:130, accentColor:'#DC2626'}} />
+              <span style={{fontSize:10, fontWeight:800, color:'#991B1B', minWidth:42}}>{untilHour === null ? 'TẤT CẢ' : `T+${untilHour}h`}</span>
               <span style={{fontSize:10, color:'#64748B'}}>timeline lọc ellipse + xã + story (tuyến/nước theo toàn kịch bản){mode === '3d' && ' · cây = proxy tán ESTIMATED · kéo xoay / lăn zoom / chuột phải nghiêng'}</span>
             </div>
           )}

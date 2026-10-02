@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, photoUrl, uploadProposalPhoto } from '../services/api'
 import { useLang } from '../i18n'
+import CommunityFireReportForm from '../components/CommunityFireReportForm'
 import {
   AlertTriangle, Clock, Eye, Flame, Image as ImageIcon, MapPin, Radio,
   RefreshCw, Search, ShieldCheck,
@@ -39,24 +40,6 @@ export function sevOfConfidence(conf?: number): Sev {
   return 'LOW'
 }
 
-export type TrustInput = {
-  status: string; confirmations: number; hasPhoto: boolean; source?: string;
-}
-// Report trust score (0–98): transparent heuristic, labeled as report
-// confidence — NOT a scientific probability.
-export function trustOf(t: TrustInput): number {
-  let s = 45
-  if (t.status === 'OFFICIAL_VERIFIED' || t.status === 'VERIFIED') s += 15
-  else if (t.status === 'COMMUNITY_VERIFIED') s += 12
-  if (t.hasPhoto) s += 10
-  s += Math.min(15, t.confirmations * 5)
-  const src = (t.source || '').toLowerCase()
-  if (/kiểm lâm|đội hiện trường|hat kiem lam/.test(src)) s += 10
-  else if (/camera/.test(src)) s += 5
-  else if (/cộng đồng|cong dong|community/.test(src)) s += 3
-  return Math.min(98, s)
-}
-
 const avatarColor = (name?: string)=>{
   const colors = ['#0F766E','#6366F1','#F59E0B','#EC4899','#0EA5E9','#84CC16']
   let h = 0
@@ -74,33 +57,6 @@ function timeAgo(s?: string){  if(!s) return ''
   if(h < 24) return `${h} giờ trước`
   return `${Math.round(h / 24)} ngày trước`
 }
-
-// ── Demo field reports (DỮ LIỆU MINH HỌA — shown ONLY when the live feed
-// is empty; verify actions are disabled for these rows) ──────────────────────
-export type DemoReport = {
-  id: string; title: string; desc: string; area: string; minsAgo: number;
-  source: string; sev: Sev; status: VStatus;
-  flags: { smoke?: boolean; fire?: boolean; spread?: boolean; support?: boolean };
-  yes: number; no: number; photos: number;
-}
-export const DEMO_REPORTS: DemoReport[] = [
-  { id: 'FR-0926-014', title: 'Phát hiện khói dày phía Bắc khu vực rừng phòng hộ',
-    desc: 'Quan sát thấy cột khói lớn từ khu vực rừng phía Bắc, gió đang thổi về NE. Tầm nhìn giảm, cần kiểm tra hiện trường trước khi gió đổi hướng.',
-    area: 'Xã Sơn, Gia Lai', minsAgo: 2, source: 'Đội hiện trường', sev: 'HIGH', status: 'CHỜ XÁC MINH',
-    flags: { smoke: true, spread: true }, yes: 2, no: 0, photos: 2 },
-  { id: 'FR-0926-011', title: 'Có dấu hiệu cháy thực bì gần tuyến đường',
-    desc: 'Vệt khói mỏng dọc tuyến đường tuần tra, mùi khét nhẹ. Chưa thấy lửa hở, đề nghị tổ gần nhất kiểm tra.',
-    area: 'Ia Mơr, Chư Prông', minsAgo: 26, source: 'Cộng đồng', sev: 'MEDIUM', status: 'ĐANG XÁC MINH',
-    flags: { smoke: true }, yes: 1, no: 0, photos: 1 },
-  { id: 'FR-0926-009', title: 'Camera hiện trường ghi nhận vùng nhiệt bất thường',
-    desc: 'Camera tháp canh ghi nhận vùng nhiệt tăng đột biến lúc rạng sáng. Đang đối chiếu ảnh vệ tinh, chưa điều động.',
-    area: 'Kbang, Gia Lai', minsAgo: 58, source: 'Camera', sev: 'MEDIUM', status: 'CHỜ XÁC MINH',
-    flags: { fire: true }, yes: 0, no: 0, photos: 0 },
-  { id: 'FR-0926-007', title: 'Đội tuần tra xác nhận không còn lửa',
-    desc: 'Kiểm tra thực địa điểm báo cháy hôm qua: không còn lửa hở, còn âm ỉ gốc cây đã xử lý. Đề xuất đóng báo cáo.',
-    area: 'An Khê, Gia Lai', minsAgo: 180, source: 'Kiểm lâm', sev: 'LOW', status: 'ĐÃ XÁC MINH',
-    flags: {}, yes: 3, no: 0, photos: 1 },
-]
 
 function Gallery(){
   const [open, setOpen] = useState<string | null>(null)
@@ -209,7 +165,7 @@ function SuggestedMissions(){
 
 export default function Community(){
   const { t } = useLang()
-  const [nick, setNick] = useState(()=> localStorage.getItem('ecogl_nick') || `ban-${Math.floor(1000 + Math.random() * 9000)}`)
+  const [nick, setNick] = useState(()=> localStorage.getItem('ecogl_nick') || '')
   const [posts, setPosts] = useState<Post[]>([])
   const [q, setQ] = useState('')
   const [fStatus, setFStatus] = useState<'ALL'|VStatus>('ALL')
@@ -221,15 +177,6 @@ export default function Community(){
   const [openId, setOpenId] = useState<string | null>(null)
   const [detail, setDetail] = useState<Detail | null>(null)
   const [comment, setComment] = useState('')
-  const [report, setReport] = useState('')
-  const [reportArea, setReportArea] = useState('')
-  const [reportSource, setReportSource] = useState('Cộng đồng')
-  const [reportSev, setReportSev] = useState<Sev>('MEDIUM')
-  const [flagSmoke, setFlagSmoke] = useState(false)
-  const [flagFire, setFlagFire] = useState(false)
-  const [flagSpread, setFlagSpread] = useState(false)
-  const [flagSupport, setFlagSupport] = useState(false)
-  const [reportSent, setReportSent] = useState('')
   const [toast, setToast] = useState('')
   const [preview, setPreview] = useState<{ src: string; meta: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -256,19 +203,17 @@ export default function Community(){
     return ()=> window.removeEventListener('keydown', h)
   },[])
 
-  const liveMode = posts.length > 0
   const openDetail = openId ? detail : null
   const openConfs = openDetail?.confirmations ?? []
   const openYes = openConfs.filter(c=> c.confirmed).length
   const openHasPhoto = (openDetail?.photos?.length ?? 0) > 0
 
-  // Unified feed: live API rows, or labeled demo rows when the feed is empty.
+  // Proposal feed stays empty when the API has no persisted proposals.
   const feed = useMemo(()=>{
-    if(liveMode){
       return posts.map(p=> {
         const confs = openId === p.id ? openConfs : []
         return {
-          key: p.id, apiId: p.id, demo: false,
+          key: p.id, apiId: p.id,
           title: p.title || p.data_type || 'Báo cáo hiện trường',
           desc: '', area: p.administrative_unit_id || '', createdAt: p.created_at || null,
           source: p.source || (p as any).proposed_by || 'Cộng đồng',
@@ -277,22 +222,10 @@ export default function Community(){
           yes: openId === p.id ? openYes : 0, no: 0,
           photos: openId === p.id && openHasPhoto ? (openDetail?.photos?.length ?? 0) : 0,
           hasPhoto: openId === p.id && openHasPhoto,
-          trust: trustOf({ status: p.status, confirmations: openId === p.id ? openYes : 0, hasPhoto: openId === p.id && openHasPhoto, source: p.source }),
-          by: (p as any).proposed_by || 'AI ForestGuard', rawStatus: p.status,
+          by: (p as any).proposed_by || 'Chưa có người gửi', rawStatus: p.status,
         }
       })
-    }
-    return DEMO_REPORTS.map(d=> ({
-      key: d.id, apiId: null as string | null, demo: true,
-      title: d.title, desc: d.desc, area: d.area,
-      createdAt: new Date(Date.now() - d.minsAgo * 60000).toISOString(),
-      source: d.source, sev: d.sev, status: d.status,
-      flags: { smoke: d.flags.smoke, fire: d.flags.fire, spread: d.flags.spread, support: d.flags.support },
-      yes: d.yes, no: d.no, photos: d.photos, hasPhoto: d.photos > 0,
-      trust: trustOf({ status: d.status === 'ĐÃ XÁC MINH' ? 'COMMUNITY_VERIFIED' : 'PENDING', confirmations: d.yes, hasPhoto: d.photos > 0, source: d.source }),
-      by: d.source, rawStatus: d.status,
-    }))
-  }, [posts, liveMode, openId, openDetail, openConfs, openYes, openHasPhoto])
+  }, [posts, openId, openDetail, openConfs, openYes, openHasPhoto])
 
   const sources = useMemo(()=> [...new Set(feed.map(f=> f.source))], [feed])
   const filtered = useMemo(()=>{
@@ -303,7 +236,7 @@ export default function Community(){
       (fSource === 'ALL' || f.source === fSource) &&
       (!query || f.title.toLowerCase().includes(query) || f.area.toLowerCase().includes(query) || f.key.toLowerCase().includes(query)))
     const sevRank: Record<Sev, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
-    if(sort === 'priority') rows = [...rows].sort((a, b)=> sevRank[a.sev] - sevRank[b.sev] || b.trust - a.trust)
+    if(sort === 'priority') rows = [...rows].sort((a, b)=> sevRank[a.sev] - sevRank[b.sev])
     else if(sort === 'unverified') rows = [...rows].sort((a, b)=> (a.status === 'CHỜ XÁC MINH' ? 0 : 1) - (b.status === 'CHỜ XÁC MINH' ? 0 : 1))
     else rows = [...rows].sort((a, b)=> +new Date(b.createdAt || 0) - +new Date(a.createdAt || 0))
     return rows
@@ -332,23 +265,6 @@ export default function Community(){
       const d: any = await api.proposalDetail(id).catch(()=> null)
       if(d) setDetail(d)
       setToast(confirmed ? 'Đã ghi nhận xác minh' : 'Đã ghi nhận phản đối')
-    }catch(e:any){ setError(String(e.message || e).slice(0, 200)) }
-  }
-
-  const sendReport = async ()=>{
-    if(!report.trim()) return
-    try{
-      const tags = [`nguồn: ${reportSource}`, `mức: ${SEV_VI[reportSev]}`]
-      const marks: string[] = []
-      if(flagSmoke) marks.push('có khói')
-      if(flagFire) marks.push('có lửa')
-      if(flagSpread) marks.push('có nguy cơ lan')
-      if(flagSupport) marks.push('cần hỗ trợ')
-      if(marks.length) tags.push(`dấu hiệu: ${marks.join(', ')}`)
-      const r: any = await api.mobileReport({ user_id: nick.trim() || 'anon', description: `${report.trim()} [${tags.join(' | ')}]`, area: reportArea.trim() || undefined })
-      setReportSent(`Đã gửi · mã ${r.report_id}`)
-      setReport(''); setReportArea(''); setFlagSmoke(false); setFlagFire(false); setFlagSpread(false); setFlagSupport(false)
-      setToast('Đã gửi báo cáo hiện trường')
     }catch(e:any){ setError(String(e.message || e).slice(0, 200)) }
   }
 
@@ -436,7 +352,7 @@ export default function Community(){
           <h1 className="cmn-title">Thông tin hiện trường</h1>
           <div className="cmn-sub">Mạng lưới báo cáo và xác minh tình hình cháy rừng</div>
         </div>
-        <span className="cmn-live"><span className="cmn-dot" />MẠNG LƯỚI ĐANG HOẠT ĐỘNG</span>
+        <span className="cmn-live"><span className="cmn-dot" />BÁO CÁO ĐỀ XUẤT</span>
         <input value={nick} onChange={e=> setNick(e.target.value)} aria-label="Biệt danh" title="Biệt danh của bạn (dùng khi xác minh)"
           style={{border:'1px solid #E2E8E5', borderRadius:10, padding:'8px 12px', fontSize:13, width:150}} />
       </div>
@@ -456,39 +372,7 @@ export default function Community(){
         {/* MAIN */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
           {/* COMPOSER */}
-          <section className="cmn-panel" aria-label="Báo cáo hiện trường">
-            <div className="cmn-kicker">BÁO CÁO HIỆN TRƯỜNG</div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <div style={{width:36, height:36, borderRadius:999, background: avatarColor(nick), color:'#fff', display:'grid', placeItems:'center', fontWeight:800, flex:'none'}}>{(nick[0] || 'E').toUpperCase()}</div>
-              <input value={report} onChange={e=> setReport(e.target.value)} placeholder="Bạn đang quan sát điều gì?" aria-label="Mô tả hiện trường"
-                style={{flex:1, border:0, outline:'none', fontSize:14, background:'#F8FAF9', borderRadius:10, padding:'8px 14px', minWidth:0}}
-                onKeyDown={e=> { if(e.key === 'Enter') sendReport() }} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-              <div className="cmn-field"><label htmlFor="cmn-area">KHU VỰC</label>
-                <input id="cmn-area" value={reportArea} onChange={e=> setReportArea(e.target.value)} placeholder="📍 Xã / huyện / khu vực" aria-label="Khu vực" /></div>
-              <div className="cmn-field"><label htmlFor="cmn-src">NGUỒN BÁO CÁO</label>
-                <select id="cmn-src" value={reportSource} onChange={e=> setReportSource(e.target.value)}>
-                  {['Kiểm lâm', 'Đội hiện trường', 'Cộng đồng', 'Camera', 'Khác'].map(s=> <option key={s} value={s}>{s}</option>)}
-                </select></div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-              <div className="cmn-field"><label htmlFor="cmn-sev">MỨC ĐỘ</label>
-                <select id="cmn-sev" value={reportSev} onChange={e=> setReportSev(e.target.value as Sev)}>
-                  {(Object.keys(SEV_VI) as Sev[]).map(s=> <option key={s} value={s}>{SEV_VI[s]}</option>)}
-                </select></div>
-              <div className="cmn-field"><label>DẤU HIỆU (TÙY CHỌN)</label>
-                <div className="cmn-checks" style={{ marginTop: 0 }}>
-                  {([[ 'smoke', 'Có khói', flagSmoke, setFlagSmoke ], [ 'fire', 'Có lửa', flagFire, setFlagFire ], [ 'spread', 'Lan', flagSpread, setFlagSpread ], [ 'support', 'Cần hỗ trợ', flagSupport, setFlagSupport ]] as const).map(([k, label, v, set])=> (
-                    <button key={k} type="button" className={`cmn-check${v ? ' on' : ''}`} aria-pressed={v} onClick={()=> set(!v)}>{label}</button>
-                  ))}
-                </div></div>
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              <button onClick={sendReport} className="cmn-btn primary" style={{ flex: 1 }}>GỬI BÁO CÁO</button>
-            </div>
-            {reportSent && <div style={{marginTop:8, fontSize:12, color:'#0F766E'}}>{reportSent} · kênh mobile (beta), bài AI sẽ lên feed sau khi quét</div>}
-          </section>
+          <CommunityFireReportForm />
 
           {/* TOOLBAR */}
           <div className="cmn-toolbar" role="toolbar" aria-label="Lọc báo cáo" style={{ background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:'10px 12px' }}>
@@ -518,7 +402,7 @@ export default function Community(){
 
           {/* FEED */}
           <div role="list" aria-label="Báo cáo hiện trường" style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            <div className="cmn-kicker">FIELD REPORTS · {filtered.length}</div>
+            <div className="cmn-kicker">ĐỀ XUẤT HIỆN TRƯỜNG · {filtered.length}</div>
             {loading && <div className="cmn-panel">Đang tải feed...</div>}
             {error && <div className="cmn-panel" style={{borderColor:'#F59E0B'}}>⚠ {error}</div>}
             {!loading && filtered.length === 0 && (
@@ -527,18 +411,12 @@ export default function Community(){
                   <Radio size={22} style={{ color:'#94A3B8' }} />
                   <b>CHƯA CÓ BÁO CÁO HIỆN TRƯỜNG</b>
                   <p>Thông tin từ mạng lưới hiện trường sẽ xuất hiện tại đây.</p>
-                  <p style={{ marginTop: 6 }}><span className="cmn-live" style={{ justifyContent:'center' }}><span className="cmn-dot" />Mạng lưới đang hoạt động</span></p>
+                  <p style={{ marginTop: 6 }}>Danh sách chỉ hiển thị bản ghi máy chủ đã trả về.</p>
                 </div>
               </div>
             )}
-            {!liveMode && !loading && (
-              <div className="cmn-panel" style={{ borderStyle:'dashed' }}>
-                <span className="cmn-badge-demo">DỮ LIỆU MINH HỌA</span>
-                <div className="cmn-sub" style={{ marginTop: 4 }}>Feed trực tiếp trống — hiển thị báo cáo mẫu để minh họa luồng xác minh.</div>
-              </div>
-            )}
             {filtered.map(f=> {
-              const isOpen = openId === f.key && !f.demo
+              const isOpen = openId === f.key
               const confs = isOpen ? openConfs : []
               return (
                 <article key={f.key} role="listitem" className="cmn-card" style={{ borderLeftColor: SEV_COLOR[f.sev] }}>
@@ -547,8 +425,7 @@ export default function Community(){
                       {f.sev === 'CRITICAL' ? <AlertTriangle size={12} /> : f.sev === 'HIGH' ? <Flame size={12} /> : f.sev === 'MEDIUM' ? <Eye size={12} /> : <ShieldCheck size={12} />}
                       {f.status}
                     </span>
-                    <span className="cmn-code">{f.demo ? f.key : `FW-${String(f.key).slice(0, 6).toUpperCase()}`}</span>
-                    {f.demo && <span className="cmn-badge-demo">MINH HỌA</span>}
+                    <span className="cmn-code">FW-{String(f.key).slice(0, 6).toUpperCase()}</span>
                     <span style={{ flex: 1 }} />
                     <span className="cmn-meta" style={{ marginTop: 0 }}><Clock size={12} />{f.createdAt ? timeAgo(f.createdAt) : ''}</span>
                   </div>
@@ -563,10 +440,6 @@ export default function Community(){
                       {f.flags.support && <span className="cmn-flag">Cần hỗ trợ</span>}
                     </div>
                   )}
-                  <div className="cmn-trust">
-                    <span className="cmn-meta" style={{ marginTop: 0, whiteSpace:'nowrap' }}>Độ tin cậy báo cáo <b>{f.trust}%</b></span>
-                    <span className="cmn-bar" role="progressbar" aria-valuenow={f.trust} aria-valuemin={0} aria-valuemax={100} aria-label={`Độ tin cậy ${f.trust}%`}><i style={{ width:`${f.trust}%` }} /></span>
-                  </div>
                   <div className="cmn-meta">
                     <span>Nguồn: <b>{f.source}</b></span>
                     <span>·</span><span>Xác minh: <b>{f.yes} 👍 / {f.no} 👎</b></span>
@@ -574,16 +447,8 @@ export default function Community(){
                     {f.photos > 0 && <span>📷 {f.photos} ảnh</span>}
                   </div>
                   <div className="cmn-actions">
-                    {f.demo ? (
-                      <button className="cmn-btn primary" disabled title="Dữ liệu minh họa — không thể xác minh">XÁC MINH</button>
-                    ) : (
-                      <button className="cmn-btn primary" onClick={()=> vote(f.apiId!, true)}>XÁC MINH{f.yes > 0 ? ` (${f.yes})` : ''}</button>
-                    )}
-                    {f.demo ? (
-                      <button className="cmn-btn" disabled title="Dữ liệu minh họa">CHI TIẾT</button>
-                    ) : (
-                      <button className="cmn-btn" onClick={()=> open(f.apiId!)} aria-expanded={openId === f.key}>CHI TIẾT</button>
-                    )}
+                    <button className="cmn-btn primary" onClick={()=> vote(f.apiId!, true)}>XÁC MINH{f.yes > 0 ? ` (${f.yes})` : ''}</button>
+                    <button className="cmn-btn" onClick={()=> open(f.apiId!)} aria-expanded={openId === f.key}>CHI TIẾT</button>
                   </div>
                   {isOpen && openDetail && (
                     <div style={{marginTop:10, borderTop:'1px solid #F1F5F9', paddingTop:10, fontSize:13}}>
@@ -629,8 +494,7 @@ export default function Community(){
         {/* SIDEBAR */}
         <aside className="cmn-side" aria-label="Thông tin tình báo">
           <section className="cmn-panel" aria-label="Trạng thái cộng đồng">
-            <div className="cmn-kicker">COMMUNITY STATUS</div>
-            <div className="cmn-live" style={{ marginTop: 6 }}><span className="cmn-dot" />NETWORK ONLINE</div>
+            <div className="cmn-kicker">THỐNG KÊ ĐỀ XUẤT</div>
             <div className="cmn-telemetry">
               <div className="cmn-tele"><div className="n">{feed.length}</div><div className="l">BÁO CÁO</div></div>
               <div className="cmn-tele"><div className="n">{needCount}</div><div className="l">CHỜ XÁC MINH</div></div>
@@ -640,7 +504,7 @@ export default function Community(){
           </section>
 
           <section className="cmn-panel" aria-label="Hàng chờ xác minh">
-            <div className="cmn-kicker">VERIFICATION QUEUE</div>
+            <div className="cmn-kicker">HÀNG CHỜ XÁC MINH</div>
             <div className="cmn-sub">{needCount} cần xử lý</div>
             {queue.length === 0 && <div className="cmn-sub" style={{ marginTop: 6 }}>Hàng chờ trống — mọi báo cáo đã được xử lý.</div>}
             {queue.map(f=> (
@@ -651,15 +515,13 @@ export default function Community(){
                   <b style={{ display:'block', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{f.title}</b>
                   <span style={{ fontSize: 11, color: '#64748B' }}>{f.area}{f.createdAt ? ` · ${timeAgo(f.createdAt)}` : ''}</span>
                 </span>
-                {f.demo
-                  ? <span className="cmn-badge-demo">MINH HỌA</span>
-                  : <button className="cmn-btn" style={{ flex: 'none', padding: '6px 12px' }} onClick={()=> open(f.apiId!)}>XEM</button>}
+                <button className="cmn-btn" style={{ flex: 'none', padding: '6px 12px' }} onClick={()=> open(f.apiId!)}>XEM</button>
               </div>
             ))}
           </section>
 
           <section className="cmn-panel" aria-label="Hoạt động gần đây">
-            <div className="cmn-kicker">FIELD ACTIVITY</div>
+            <div className="cmn-kicker">HOẠT ĐỘNG HIỆN TRƯỜNG</div>
             {[...filtered].slice(0, 6).map(f=> (
               <div key={f.key} className="cmn-trow">
                 <span style={{ color:'#94A3B8', fontSize:11, minWidth:64 }}>{f.createdAt ? timeAgo(f.createdAt) : ''}</span>

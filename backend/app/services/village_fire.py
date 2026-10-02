@@ -7,6 +7,10 @@ commune (verified by point-in-polygon over gialai_communes.geojson), so
 alerts join real geography instead of pre-merger district names.
 """
 import math
+import hashlib
+import json
+import os
+from functools import lru_cache
 from typing import List, Dict
 
 # Gia Lai mới: 15,536 km2 — từ biên Campuchia (107.0) đến Biển Đông (109.6), 12.9-15.0N
@@ -44,30 +48,249 @@ def haversine(lon1, lat1, lon2, lat2):
     c=2*math.asin(math.sqrt(a))
     return R*c
 
-def check_villages_within_20km(fires: List[Dict]) -> List[Dict]:
-    alerts=[]
-    for v in VILLAGES:
-        vlon, vlat = v["coords"]
-        for f in fires:
-            # Artificial-heat suspects (runways, industrial zones) never
-            # raise village alerts — they are flagged, not trusted.
-            if f.get("suspect_artificial"):
+
+def _positions(node):
+    if isinstance(node, (list, tuple)) and len(node) >= 2 and all(
+        isinstance(value, (int, float)) for value in node[:2]
+    ):
+        yield float(node[0]), float(node[1])
+    elif isinstance(node, (list, tuple)):
+        for child in node:
+            yield from _positions(child)
+
+
+def _point_on_segment(lon, lat, start, end):
+    x1, y1 = start[:2]
+    x2, y2 = end[:2]
+    cross = (lon - x1) * (y2 - y1) - (lat - y1) * (x2 - x1)
+    if abs(cross) > 1e-10:
+        return False
+    return min(x1, x2) - 1e-10 <= lon <= max(x1, x2) + 1e-10 and min(y1, y2) - 1e-10 <= lat <= max(y1, y2) + 1e-10
+
+
+def _point_in_ring(lon, lat, ring):
+    inside = False
+    for index, start in enumerate(ring):
+        end = ring[(index + 1) % len(ring)]
+        if _point_on_segment(lon, lat, start, end):
+            return True
+        x1, y1 = start[:2]
+        x2, y2 = end[:2]
+        if (y1 > lat) != (y2 > lat) and lon < (x2 - x1) * (lat - y1) / (y2 - y1) + x1:
+            inside = not inside
+    return inside
+
+
+def _polygon_contains(lon, lat, polygon):
+    if not polygon or not _point_in_ring(lon, lat, polygon[0]):
+        return False
+    return not any(_point_in_ring(lon, lat, ring) for ring in polygon[1:])
+
+
+@lru_cache(maxsize=1)
+def _commune_boundary_index():
+    from app.services.spread import load_commune_shapes
+
+    index = []
+    for commune in load_commune_shapes():
+        geometry = commune.get("geometry") or {}
+        coordinates = geometry.get("coordinates") or []
+        positions = list(_positions(coordinates))
+        if not positions:
+            continue
+        index.append((
+            min(point[0] for point in positions), max(point[0] for point in positions),
+            min(point[1] for point in positions), max(point[1] for point in positions),
+            commune, geometry,
+        ))
+    return index
+
+
+@lru_cache(maxsize=1)
+def _province_boundary():
+    path = os.path.join(os.path.dirname(__file__), "..", "data", "gialai_province.geojson")
+    try:
+        with open(path, encoding="utf-8") as source:
+            collection = json.load(source)
+        feature = (collection.get("features") or [])[0]
+        return feature.get("properties", {}).get("name"), feature.get("geometry")
+    except (OSError, ValueError, IndexError, AttributeError):
+        return None, None
+
+
+def _geometry_contains(lon, lat, geometry):
+    if not geometry:
+        return False
+    coordinates = geometry.get("coordinates") or []
+    polygons = [coordinates] if geometry.get("type") == "Polygon" else coordinates
+    return any(_polygon_contains(lon, lat, polygon) for polygon in polygons)
+
+
+@lru_cache(maxsize=4096)
+def resolve_commune_by_boundary(lon: float, lat: float):
+    """Return a commune only when the FIRMS point falls inside its cached polygon."""
+    for min_lon, max_lon, min_lat, max_lat, commune, geometry in _commune_boundary_index():
+        if not (min_lon <= lon <= max_lon and min_lat <= lat <= max_lat):
+            continue
+        coordinates = geometry.get("coordinates") or []
+        polygons = [coordinates] if geometry.get("type") == "Polygon" else coordinates
+        if any(_polygon_contains(lon, lat, polygon) for polygon in polygons):
+            return {"code": commune.get("code"), "commune": commune.get("name")}
+    return None
+
+
+@lru_cache(maxsize=4096)
+def resolve_admin_location(lon: float, lat: float):
+    commune = resolve_commune_by_boundary(lon, lat)
+    province_name, province_geometry = _province_boundary()
+    inside_province = _geometry_contains(lon, lat, province_geometry)
+    return {
+        "province": province_name if inside_province else None,
+        "province_verified_by_boundary": inside_province,
+        "district": None,
+        "commune": commune["commune"] if commune else None,
+        "verified_by_boundary": commune is not None,
+        "commune_code": commune["code"] if commune else None,
+    }
+
+
+def hotspot_identity(fire: Dict, lat: float, lon: float) -> str:
+    hotspot_id = fire.get("id") or fire.get("hotspot_id")
+    if hotspot_id:
+        return str(hotspot_id)
+    identity = f"{lat:.6f}:{lon:.6f}:{fire.get('acq_date') or ''}:{fire.get('acq_time') or ''}"
+    return "firms-" + hashlib.sha1(identity.encode()).hexdigest()[:16]
+
+
+def nearest_village_reference(lon: float, lat: float):
+    distance, village = min(
+        ((haversine(v["coords"][0], v["coords"][1], lon, lat), v) for v in VILLAGES),
+        key=lambda pair: pair[0],
+    )
+    if distance > 20:
+        return None
+    return {
+        "name": village["village"],
+        "commune": village["commune"],
+        "coordinates": list(village["coords"]),
+        "distance_km": round(distance, 1),
+        "origin": village.get("origin", "reference-sample"),
+    }
+
+
+def fire_event_contract(fire: Dict, lat: float, lon: float, source_status: str,
+                        location: Dict, village_reference: Dict | None) -> Dict:
+    acq_date = fire.get("acq_date")
+    acq_time = fire.get("acq_time")
+    timeline = []
+    if isinstance(acq_date, str) and isinstance(acq_time, str) and len(acq_time) == 4 and acq_time.isdigit():
+        timeline.append({
+            "time": f"{acq_date}T{acq_time[:2]}:{acq_time[2:]}:00Z",
+            "event": "NASA FIRMS phát hiện điểm nhiệt",
+            "source": "NASA FIRMS",
+        })
+    hotspot_id = hotspot_identity(fire, lat, lon)
+    return {
+        "event_id": hotspot_id,
+        "hotspot_id": hotspot_id,
+        "status": "NGHI_NGO",
+        "detection": {
+            "source": "NASA FIRMS",
+            "source_status": source_status,
+            "latitude": lat,
+            "longitude": lon,
+            "acq_date": acq_date,
+            "acq_time": acq_time,
+            "confidence": fire.get("confidence"),
+            "satellite": fire.get("satellite"),
+            "instrument": fire.get("instrument"),
+        },
+        "location": location,
+        "village_reference": village_reference,
+        "evidence": {
+            "firms": source_status in ("LIVE", "CACHED", "STALE"),
+            "sentinel2": None,
+            "sentinel1": None,
+            "weather": None,
+            "field_photo": None,
+            "community_report": None,
+        },
+        "ai_analysis": None,
+        "verification": {"verified": False, "verified_by": None, "verified_at": None, "method": None},
+        "timeline": timeline,
+    }
+
+
+def attach_admin_locations(fires: List[Dict], source_status: str | None) -> List[Dict]:
+    if source_status not in ("LIVE", "CACHED", "STALE"):
+        return [dict(fire) for fire in fires]
+    out = []
+    for fire in fires:
+        try:
+            lat = float(fire.get("latitude", fire.get("lat")))
+            lon = float(fire.get("longitude", fire.get("lon")))
+            if not (math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180):
                 continue
-            flon = f.get("longitude") or f.get("lon") or 108.3
-            flat = f.get("latitude") or f.get("lat") or 13.9
-            dist = haversine(vlon, vlat, flon, flat)
-            if dist <= 20:
-                alerts.append({
-                    "village": v["village"],
-                    "commune": v["commune"],
-                    "village_coords": v["coords"],
-                    "fire_coords": [flon, flat],
-                    "distance_km": round(dist,1),
-                    "acq_date": f.get("acq_date"),
-                    "confidence": f.get("confidence"),
-                    "level": "CẢNH BÁO" if dist <= 5 else "THEO DÕI",
-                })
-                break
+        except (TypeError, ValueError):
+            continue
+        location = resolve_admin_location(lon, lat)
+        village_reference = nearest_village_reference(lon, lat)
+        event = fire_event_contract(fire, lat, lon, source_status, location, village_reference)
+        out.append({
+            **fire,
+            "hotspot_id": hotspot_identity(fire, lat, lon),
+            "location": location,
+            "village_reference": village_reference,
+            "event": event,
+        })
+    return out
+
+
+def check_villages_within_20km(fires: List[Dict], source_status: str | None = None) -> List[Dict]:
+    if source_status is not None and source_status not in ("LIVE", "CACHED", "STALE"):
+        return []
+    alerts = []
+    for fire in fires:
+        if fire.get("suspect_artificial"):
+            continue
+        try:
+            flat = float(fire.get("latitude", fire.get("lat")))
+            flon = float(fire.get("longitude", fire.get("lon")))
+            if not (math.isfinite(flat) and math.isfinite(flon) and -90 <= flat <= 90 and -180 <= flon <= 180):
+                continue
+        except (TypeError, ValueError):
+            continue
+
+        village_reference = nearest_village_reference(flon, flat)
+        if village_reference is None:
+            continue
+
+        hotspot_id = hotspot_identity(fire, flat, flon)
+        location = resolve_admin_location(flon, flat)
+        distance = village_reference["distance_km"]
+        acq_date = fire.get("acq_date")
+        acq_time = fire.get("acq_time")
+        event = fire_event_contract(fire, flat, flon, source_status or "UNKNOWN", location, village_reference)
+        alerts.append({
+            "event": event,
+            "hotspot_id": hotspot_id,
+            "latitude": flat,
+            "longitude": flon,
+            "fire_coords": [flon, flat],
+            "village_reference": village_reference,
+            "location": location,
+            "source_details": {"provider": "NASA FIRMS", "status": source_status},
+            # Legacy fields remain for API compatibility. `commune` is now
+            # polygon-resolved; `village` explicitly refers to a sample point.
+            "village": village_reference["name"],
+            "commune": location["commune"],
+            "village_coords": village_reference["coordinates"],
+            "distance_km": round(distance, 1),
+            "acq_date": acq_date,
+            "acq_time": acq_time,
+            "confidence": fire.get("confidence"),
+            "level": "CẢNH BÁO" if distance <= 5 else "THEO DÕI",
+        })
     return alerts
 
 def get_villages():

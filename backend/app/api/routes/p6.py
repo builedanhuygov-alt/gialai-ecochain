@@ -296,6 +296,132 @@ def citizen_report(body:dict, db:Session=Depends(get_db)):
                             f"source_id={rep.id}, uploader_id, lat, lng)",
             "note": "Report persisted; attach a real photo to get evidence URLs"}
 
+
+COMMUNITY_EVENT_MATCH_RADIUS_KM = 5.0
+
+
+async def _match_community_report_to_firms(lat: float, lon: float):
+    """Link only to a real FIRMS point within the documented distance threshold."""
+    try:
+        from app.services.firms_service import fetch_firms_gialai
+        from app.services.village_fire import haversine, hotspot_identity
+        data = await fetch_firms_gialai(day_range=1)
+    except Exception:
+        return None, None
+    if not isinstance(data, dict):
+        return None, None
+    if data.get("status") not in ("LIVE", "CACHED", "STALE"):
+        return None, None
+
+    best = None
+    for fire in data.get("fires", []):
+        if fire.get("suspect_artificial"):
+            continue
+        try:
+            fire_lat = float(fire.get("latitude"))
+            fire_lon = float(fire.get("longitude"))
+        except (TypeError, ValueError):
+            continue
+        if not (-90 <= fire_lat <= 90 and -180 <= fire_lon <= 180):
+            continue
+        distance = haversine(lon, lat, fire_lon, fire_lat)
+        if distance <= COMMUNITY_EVENT_MATCH_RADIUS_KM and (best is None or distance < best[0]):
+            best = (distance, hotspot_identity(fire, fire_lat, fire_lon))
+    if best is None:
+        return None, None
+    return best[1], round(best[0], 2)
+
+
+def _shape_community_fire_report(report, photos):
+    from app.services.evidence import shape as shape_photo
+    shaped_photos = []
+    for photo in photos:
+        if not photo.data:
+            continue
+        data = shape_photo(photo)
+        shaped_photos.append({
+            "photo_id": data["id"],
+            "url": data["storage_url"],
+            "gps": data["gps"],
+            "uploaded_at": data["created_at"],
+            "verification_status": data["verification_status"],
+        })
+    return {
+        "report_id": report.id,
+        "location": {"latitude": report.latitude, "longitude": report.longitude},
+        "reported_at": report.created_at.isoformat() if report.created_at else None,
+        "description": report.note,
+        "photo": {"available": bool(shaped_photos), "url": shaped_photos[0]["url"] if shaped_photos else None},
+        "photos": shaped_photos,
+        "source": "COMMUNITY",
+        "status": report.status,
+        "linked_event_id": report.linked_event_id,
+        "match_distance_km": report.match_distance_km,
+    }
+
+
+@router.post("/citizen/fire-report")
+async def submit_community_fire_report(body: dict, db: Session = Depends(get_db)):
+    """Persist an observation and optionally link it to a nearby real FIRMS detection."""
+    from app.models.community import CitizenReport
+    description = str(body.get("description") or "").strip()
+    if not description:
+        raise HTTPException(400, "description is required")
+    try:
+        lat = float(body.get("latitude"))
+        lon = float(body.get("longitude"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "latitude and longitude are required")
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise HTTPException(400, "coordinates out of range")
+
+    event_id, distance = await _match_community_report_to_firms(lat, lon)
+    report = CitizenReport(
+        user_id=str(body.get("reporter") or "anonymous")[:100],
+        report_type="FIRE_SUSPICION",
+        latitude=lat,
+        longitude=lon,
+        note=description[:2000],
+        linked_event_id=event_id,
+        match_distance_km=distance,
+        status="COMMUNITY_REPORT_RECEIVED" if event_id else "SUBMITTED",
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return _shape_community_fire_report(report, [])
+
+
+@router.get("/citizen/fire-reports")
+def list_community_fire_reports(
+    event_id: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    from app.models.community import CitizenReport, PhotoEvidence
+    query = db.query(CitizenReport).filter(CitizenReport.report_type == "FIRE_SUSPICION")
+    if event_id:
+        query = query.filter(CitizenReport.linked_event_id == event_id)
+    total = query.count()
+    reports = query.order_by(CitizenReport.created_at.desc()).limit(limit).all()
+    report_ids = [report.id for report in reports]
+    photos = db.query(PhotoEvidence).filter(PhotoEvidence.report_id.in_(report_ids)).all() if report_ids else []
+    photos_by_report: dict[str, list] = {}
+    for photo in photos:
+        photos_by_report.setdefault(photo.report_id, []).append(photo)
+    shaped = [_shape_community_fire_report(report, photos_by_report.get(report.id, [])) for report in reports]
+    return {"reports": shaped, "count": total}
+
+
+@router.get("/citizen/fire-reports/{report_id}")
+def get_community_fire_report(report_id: str, db: Session = Depends(get_db)):
+    from app.models.community import CitizenReport, PhotoEvidence
+    report = db.query(CitizenReport).filter_by(id=report_id, report_type="FIRE_SUSPICION").first()
+    if report is None:
+        raise HTTPException(404, "Community fire report not found")
+    photos = db.query(PhotoEvidence).filter_by(report_id=report.id).all()
+    return _shape_community_fire_report(report, photos)
+
 @router.get("/contributor/{user_id}")
 def contributor_rep(user_id:str, db:Session=Depends(get_db)):
     return get_reputation(db, user_id)

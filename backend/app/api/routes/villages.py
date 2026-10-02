@@ -39,18 +39,76 @@ def list_villages(commune: Optional[str] = Query(default=None)):
         return [v for v in VILLAGES if v["commune"]==commune]
     return VILLAGES
 
+def _attach_community_reports(events: list[dict], db: Session) -> None:
+    from app.models.community import CitizenReport, PhotoEvidence
+    from app.services.evidence import shape as shape_photo
+
+    event_ids = [event.get("event_id") for event in events if event.get("event_id")]
+    try:
+        reports = db.query(CitizenReport).filter(CitizenReport.linked_event_id.in_(event_ids)).order_by(CitizenReport.created_at.asc()).all() if event_ids else []
+        report_ids = [report.id for report in reports]
+        photos = db.query(PhotoEvidence).filter(PhotoEvidence.report_id.in_(report_ids)).all() if report_ids else []
+    except Exception:
+        for event in events:
+            event["community_reports"] = None
+            event["community_report_count"] = None
+            event["evidence"]["community_report"] = None
+            event["evidence"]["field_photo"] = None
+        return
+    photos_by_report: dict[str, list] = {}
+    for photo in photos:
+        photos_by_report.setdefault(photo.report_id, []).append(photo)
+    reports_by_event: dict[str, list] = {}
+    for report in reports:
+        evidence_photos = []
+        for photo in photos_by_report.get(report.id, []):
+            data = shape_photo(photo)
+            evidence_photos.append({
+                "photo_id": data["id"],
+                "url": data["storage_url"],
+                "gps": data["gps"],
+                "uploaded_at": data["created_at"],
+                "verification_status": data["verification_status"],
+            })
+        reports_by_event.setdefault(report.linked_event_id, []).append({
+            "report_id": report.id,
+            "location": {"latitude": report.latitude, "longitude": report.longitude},
+            "description": report.note,
+            "reported_at": report.created_at.isoformat() if report.created_at else None,
+            "match_distance_km": report.match_distance_km,
+            "photos": evidence_photos,
+        })
+
+    for event in events:
+        linked = reports_by_event.get(event.get("event_id"), [])
+        has_photos = any(report["photos"] for report in linked)
+        event["community_reports"] = linked
+        event["community_report_count"] = len(linked)
+        event["evidence"]["community_report"] = bool(linked)
+        event["evidence"]["field_photo"] = has_photos
+        if linked:
+            event["status"] = "DANG_XAC_MINH"
+
+
 @router.get("/villages/fire-alert")
-async def villages_fire_alert():
+async def villages_fire_alert(db: Session = Depends(get_db)):
     from app.services.firms_service import fetch_firms_gialai
+    from app.services.village_fire import attach_admin_locations
     data = await fetch_firms_gialai(day_range=1)
-    fires = data.get("fires", [])
-    alerts = check_villages_within_20km(fires)
+    source_status = data.get("status")
+    fires = data.get("fires", []) if source_status in ("LIVE", "CACHED", "STALE") else []
+    enriched_fires = attach_admin_locations(fires, source_status)
+    events = [fire["event"] for fire in enriched_fires if not fire.get("suspect_artificial") and fire.get("event")]
+    _attach_community_reports(events, db)
+    alerts = check_villages_within_20km(fires, source_status=source_status)
     return {
-        "status": data.get("status"),
-        "source": "NASA FIRMS + Village delineation",
+        "status": source_status,
+        "source": "NASA FIRMS + commune boundary lookup",
         "timestamp": time.time(),
         "villages_total": len(VILLAGES),
         "fires": len(fires),
+        "events": events,
+        "event_count": len(events),
         "alerts": alerts,
         "alert_count": len(alerts),
         "radius_km": 20,

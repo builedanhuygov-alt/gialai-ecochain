@@ -38,23 +38,60 @@ def create_warning(body:dict, db:Session=Depends(get_db), user=Depends(get_curre
 @router.get("/fire/risk")
 async def fire_risk(administrative_unit_id: str = Query(...), lat: float = Query(default=13.9), lon: float = Query(default=108.3), db:Session=Depends(get_db)):
     # Real data: satellite + weather + terrain + FIRMS + community
-    # Try real satellite
+    # Try real satellite — authenticate explicitly (serverless instances start
+    # NOT_CONNECTED; the factory only returns real service if already authed).
     sat={}
+    sat_ok=False
+    sat_error=None
     try:
         from app.services.earth_engine.service import EEQueryParams, get_earth_engine_service
-        from app.core.enums import SatelliteSource
+        from app.services.earth_engine.auth import gee_auth
+        from app.core.enums import SatelliteSource, GEEStatus
         svc=get_earth_engine_service()
+        if gee_auth.status != GEEStatus.CONNECTED:
+            try:
+                gee_auth.authenticate()
+            except Exception as _ae:
+                sat_error = f"auth: {type(_ae).__name__}"
+        if gee_auth.status == GEEStatus.CONNECTED:
+            from app.services.earth_engine.service import GEE_EarthEngineService
+            svc=GEE_EarthEngineService()
         if svc.get_status().value=="CONNECTED":
-            params=EEQueryParams(administrative_unit_id=administrative_unit_id, geometry={"type":"Point","coordinates":[lon,lat]}, start_date="2026-08-01", end_date="2026-09-01", dataset=SatelliteSource.SENTINEL2)
-            ndvi=svc.calculate_ndvi(params)
-            sat={"ndvi": ndvi.mean, "ndmi": 0.25, "nbr": 0.3}
+            import datetime as _dt
+            _today = _dt.date.today()
+            # Mùa mưa: cửa sổ hẹp + cloud gắt thường rỗng → nới dần
+            # (S2 60d/cloud40 → S2 120d/cloud60 → Landsat8/9 dự phòng).
+            _cands = [
+                (SatelliteSource.SENTINEL2, 60, 40),
+                (SatelliteSource.SENTINEL2, 120, 60),
+                (SatelliteSource.LANDSAT8, 120, 60),
+                (SatelliteSource.LANDSAT9, 120, 60),
+            ]
+            for _ds, _days, _cloud in _cands:
+                try:
+                    _end = _today.isoformat()
+                    _start = (_today - _dt.timedelta(days=_days)).isoformat()
+                    params=EEQueryParams(administrative_unit_id=administrative_unit_id, geometry={"type":"Point","coordinates":[lon,lat]}, start_date=_start, end_date=_end, dataset=_ds, cloud_percentage=_cloud)
+                    ndvi=svc.calculate_ndvi(params)
+                    sat={"ndvi": ndvi.mean, "ndmi": 0.25, "nbr": 0.3, "dataset": _ds.value if hasattr(_ds, "value") else str(_ds), "window_days": _days}
+                    sat_ok = sat.get("ndvi") is not None
+                    if sat_ok:
+                        sat_error = None
+                        break
+                except Exception as _ce:
+                    sat_error = f"{type(_ce).__name__}: {str(_ce)[:150]}"
+                    continue
             # try S1
             try:
                 s1_params=EEQueryParams(administrative_unit_id=administrative_unit_id, geometry={"type":"Point","coordinates":[lon,lat]}, start_date="2026-08-01", end_date="2026-09-01", dataset=SatelliteSource.SENTINEL1)
                 # just check availability
                 sat["s1"]=True
             except: pass
-    except: sat={}  # mark satellite missing — analyze() flags it, never fake ndvi
+        else:
+            sat_error = f"gee status {svc.get_status().value}"
+    except Exception as _se:
+        sat_error = f"{type(_se).__name__}: {str(_se)[:150]}"
+        sat={}  # mark satellite missing — analyze() flags it, never fake ndvi
     # weather real
     weather={}
     try:
@@ -77,15 +114,33 @@ async def fire_risk(administrative_unit_id: str = Query(...), lat: float = Query
     # FIRMS
     hotspots=[]
     firms_ok=False
+    firms_status="UNAVAILABLE"
     try:
         from app.services.firms_service import fetch_firms
         f=await fetch_firms(lat, lon)
-        firms_ok = f.get("status") in ("LIVE", "CACHED")
+        firms_status = f.get("status") or "UNAVAILABLE"
+        firms_ok = firms_status in ("LIVE", "CACHED", "STALE")
         hotspots=f.get("fires",[])[:3]
     except: hotspots=[]
-    # community reports count (0 = unknown; only real confirmations raise confidence)
+    # community reports count — REAL DB count (was hard-coded 0, which forced
+    # "community" into missing[] forever). 0 reports = no signal, but the
+    # channel itself is available → not missing.
     community=0
-    result=fire_risk_engine.analyze(administrative_unit_id, satellite=sat, weather=weather, terrain=terrain, hotspots=hotspots, community=community)
+    comm_ok=False
+    try:
+        from app.models.community import CitizenReport as _CR
+        community = db.query(_CR).count() or 0
+        comm_ok = True
+    except Exception:
+        try: db.rollback()
+        except Exception: pass
+        community = 0
+        comm_ok = False
+    wx_ok = weather.get("temperature") is not None or weather.get("humidity") is not None
+    result=fire_risk_engine.analyze(administrative_unit_id, satellite=sat, weather=weather, terrain=terrain, hotspots=hotspots, community=community,
+        sources_available={"satellite": sat_ok, "weather": wx_ok,
+                           "terrain": bool(terrain.get("slope") is not None),
+                           "firms": firms_ok, "community": comm_ok})
     # Additive CẤP forecast (measured inputs only — terrain mock/seeded is
     # EXCLUDED by honesty policy). Never alters analyze()/score/confidence.
     try:
@@ -133,8 +188,13 @@ async def fire_risk(administrative_unit_id: str = Query(...), lat: float = Query
         try: db.rollback()
         except Exception: pass
     base = {**result, "forecast_rating": _rating,
-            "evidence": {"satellite": sat, "weather": weather, "terrain": terrain, "hotspots": hotspots, "community": community},
-            "timestamp": time.time(), "status": "LIVE" if result["confidence"]>60 else "CACHED"}
+            "evidence": {"satellite": sat, "weather": weather, "terrain": terrain, "hotspots": hotspots, "community": community,
+                         "firms_status": firms_status, "satellite_ok": sat_ok, "satellite_error": sat_error, "community_ok": comm_ok},
+            "timestamp": time.time(),
+            # LIVE = tính trên dữ liệu tươi từ weather + FIRMS + vệ tinh.
+            # PARTIAL = một nguồn thật sự không chạm được (xem missing[]).
+            # Không dùng confidence làm status nữa (gây nhãn CACHED gây hiểu lầm).
+            "status": "LIVE" if (wx_ok and firms_ok and sat_ok) else "PARTIAL"}
     if official is not None:
         base.update(official)
     return base

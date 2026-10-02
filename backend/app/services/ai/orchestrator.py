@@ -1,5 +1,5 @@
 """Master Agent orchestrated workflow — true AI integration"""
-import time, uuid, json, re
+import asyncio, time, uuid, json, re
 from typing import Dict, List, Optional
 from app.services.llm.provider import get_llm_provider
 from app.services.rag.vector_store import get_vector_store
@@ -64,26 +64,27 @@ async def orchestrate(query: str, lat: float=13.9, lon: float=108.3, conversatio
     vs = get_vector_store()
     rag_results = vs.search(query, top_k=4)
     
-    # 2. Tool execution
-    tool_results = []
-    for name in tool_names[:5]:  # limit 5 tool calls
+    # 2. Tool execution. These calls are independent, so running them together
+    # keeps the serverless request within its time budget.
+    async def run_tool(name: str) -> Dict:
         fn = TOOL_MAP.get(name)
-        if fn:
-            try:
-                # pass lat/lon where applicable
-                if "weather" in name or "terrain" in name or "ndvi" in name:
-                    res = await fn(lat=lat, lon=lon) if "lat" in fn.__code__.co_varnames else await fn()
-                elif name == "get_firms_hotspots":
-                    res = await fn()
-                elif name == "get_fire_risk":
-                    res = await fn(administrative_unit_id="Gia Lai", lat=lat, lon=lon)
-                else:
-                    res = await fn()
-                tool_results.append(res)
-            except Exception as e:
-                from app.core.secrets_guard import scrub_secrets
+        if not fn:
+            return {"tool": name, "status": "UNAVAILABLE", "error": "Tool not registered"}
+        try:
+            # pass lat/lon where applicable
+            if "weather" in name or "terrain" in name or "ndvi" in name:
+                return await fn(lat=lat, lon=lon) if "lat" in fn.__code__.co_varnames else await fn()
+            if name == "get_fire_risk":
+                return await fn(administrative_unit_id="Gia Lai", lat=lat, lon=lon)
+            return await fn()
+        except Exception as e:
+            from app.core.secrets_guard import scrub_secrets
 
-                tool_results.append({"tool": name, "status": "UNAVAILABLE", "error": scrub_secrets(str(e))})
+            return {"tool": name, "status": "UNAVAILABLE", "error": scrub_secrets(str(e))}
+
+    tool_results = await asyncio.gather(
+        *(run_tool(name) for name in tool_names[:5])
+    )
     
     # 3. Data validation & deterministic calculation (FireRiskEngine) already in tool get_fire_risk
     fire_risk = next((t for t in tool_results if t.get("tool")=="get_fire_risk"), None)
@@ -100,7 +101,6 @@ async def orchestrate(query: str, lat: float=13.9, lon: float=108.3, conversatio
         # Serverless functions die ~10s (Vercel Hobby) while the provider's own
         # HTTP timeout is 30s — cap the LLM call so we ALWAYS answer gracefully
         # instead of being gateway-killed mid-stream.
-        import asyncio
         llm_res = await asyncio.wait_for(provider.generate(system, user_msg, schema={"type":"object"}), timeout=8)
         content = llm_res.get("content","")
         # Try parse JSON

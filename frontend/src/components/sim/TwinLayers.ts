@@ -9,6 +9,11 @@ import { isCanopyPixel, valueNoise } from './twinMath'
 
 type Ctx = any
 
+function polygonRing(step: any): number[][] | null {
+  const ring = step?.polygon?.coordinates?.[0]
+  return Array.isArray(ring) && ring.length >= 3 ? ring : null
+}
+
 function textSprite(text: string, bg = 'rgba(11,20,18,0.9)'){
   const cv = document.createElement('canvas')
   const ctx = cv.getContext('2d')!
@@ -229,10 +234,10 @@ export async function TerrainMesh(origin: { lon: number; lat: number }, quality:
   }
   tg.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   tg.computeVertexNormals()
-  const tex3 = new THREE.CanvasTexture(texCanvas)
-  tex3.colorSpace = THREE.SRGBColorSpace
-  tex3.anisotropy = 4 // crisper ground at grazing angles (no extra downloads)
-  const mesh = new THREE.Mesh(tg, new THREE.MeshStandardMaterial({ map: tex3, vertexColors: true, roughness: 1 }))
+  const mesh = new THREE.Mesh(tg, new THREE.MeshLambertMaterial({
+    color: '#718565',
+    vertexColors: true,
+  }))
   mesh.receiveShadow = quality === 'high'
   // M6/M12 visual hierarchy: terrain render trước (0, đục); fire sau (2–3);
   // overlay thứ ba (1, 4–5, trong suốt) — núi đọc trước, lửa sau, phủ sau.
@@ -261,6 +266,7 @@ export function FireEllipseMesh(g: THREE.Group, c: Ctx, sim: any){
   // shape space: +x east, +y north → downwind unit (sin, cos)
   const wx = Math.sin(wdir), wy = Math.cos(wdir)
   const steps = [{ hour: 0, polygon: null }, ...(sim.spread?.steps || [])]
+  const selectedStep = sim.render_hour === 0 ? 0 : (sim.render_hour ?? null)
   const NPTS = c.quality === 'high' ? 200 : 128
   steps.forEach((s: any, idx: number)=>{
     let pts2d: Array<{ x: number; y: number }>
@@ -271,7 +277,8 @@ export function FireEllipseMesh(g: THREE.Group, c: Ctx, sim: any){
         pts2d.push({ x: Math.cos(a) * 60, y: Math.sin(a) * 60 })
       }
     } else {
-      const ring = s.polygon.coordinates[0]
+      const ring = polygonRing(s)
+      if(!ring) return
       pts2d = ring.map((p: number[])=>{
         const q = toLocal(p[0], p[1], c.origin)
         return { x: q.x, y: -q.z }
@@ -304,16 +311,17 @@ export function FireEllipseMesh(g: THREE.Group, c: Ctx, sim: any){
       return geo
     }
     const color = STEP_COLORS_3D[s.hour] || '#F97316'
-    // M6: Current Fire = fill (+pulse). Forecast = outline + fill mờ 12%,
-    // không glow chồng — terrain luôn đọc được bên dưới.
+    // Selected time is the visual focus; other rings remain as faint context.
     const isCurrent = s.hour === 0
+    const isSelected = selectedStep === null ? isCurrent : s.hour === selectedStep
+    const coreOpacity = selectedStep === null ? (isCurrent ? 0.8 : 0.2) : (isSelected ? 0.84 : 0.07)
     const core = new THREE.Mesh(drape(new THREE.ShapeGeometry(shape), 0),
       new THREE.MeshBasicMaterial({ color, transparent: true,
-        opacity: isCurrent ? 0.8 : 0.12,
+        opacity: coreOpacity,
         side: THREE.DoubleSide, depthWrite: false }))
-    core.renderOrder = isCurrent ? 2 : 1
+    core.renderOrder = isSelected ? 2 : 1
     g.add(core)
-    if(isCurrent){
+    if(isSelected){
       const glow = new THREE.Mesh(drape(new THREE.ShapeGeometry(shape), 6),
         new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.1,
           side: THREE.DoubleSide, depthWrite: false }))
@@ -325,14 +333,40 @@ export function FireEllipseMesh(g: THREE.Group, c: Ctx, sim: any){
     const edgeGeo = new THREE.BufferGeometry().setFromPoints(
       edge.map(v=> new THREE.Vector3(v.x, H(v.x, v.z) + lift + 2, v.z)))
     const edgeLine = new THREE.LineLoop(edgeGeo, new THREE.LineBasicMaterial({
-      color, transparent: true, opacity: isCurrent ? 0.95 : 1 }))
-    edgeLine.renderOrder = 3
+      color, transparent: true, opacity: isSelected ? 0.95 : (selectedStep === null ? 0.65 : 0.18) }))
+    edgeLine.renderOrder = isSelected ? 3 : 1
     g.add(edgeLine)
-    if(isCurrent){
+    if(isSelected){
       const m = core.material as THREE.MeshBasicMaterial
       c.updaters.push((t: number)=>{ m.opacity = 0.62 + 0.22 * Math.sin(t * 3) })
     }
   })
+
+  // A single screen-readable downwind arrow makes the forecast direction
+  // legible even when the forecast rings overlap on the terrain.
+  const polygonSteps = steps.filter((step: any) => polygonRing(step))
+  if(polygonSteps.length > 1){
+    const centroid = (ring: number[][]) => {
+      let x = 0, y = 0
+      for(const p of ring){ x += p[0]; y += p[1] }
+      return { x: x / ring.length, y: y / ring.length }
+    }
+    const a = centroid(polygonRing(polygonSteps[0])!)
+    const b = centroid(polygonRing(polygonSteps[polygonSteps.length - 1])!)
+    const qa = toLocal(a.x, a.y, c.origin), qb = toLocal(b.x, b.y, c.origin)
+    const start = new THREE.Vector3(qa.x, H(qa.x, qa.z) + 42, qa.z)
+    const delta = new THREE.Vector3(qb.x - qa.x, 0, qb.z - qa.z)
+    if(delta.length() > 1){
+      const arrow = new THREE.ArrowHelper(delta.normalize(), start, Math.min(900, Math.max(240, delta.length())), 0xB91C1C, 100, 55)
+      ;(arrow.line.material as THREE.LineBasicMaterial).transparent = true
+      ;(arrow.line.material as THREE.LineBasicMaterial).opacity = selectedStep === null ? 0.85 : 0.72
+      ;(arrow.cone.material as THREE.MeshBasicMaterial).transparent = true
+      ;(arrow.cone.material as THREE.MeshBasicMaterial).opacity = selectedStep === null ? 0.92 : 0.8
+      arrow.line.renderOrder = 5
+      arrow.cone.renderOrder = 5
+      g.add(arrow)
+    }
+  }
 }
 
 // <ThreatenedAssetLayer /> — M7 water spheres / station boxes / tower cylinders.
@@ -537,8 +571,8 @@ const DRIVER_COLORS: Record<string, string> = {
 }
 export function RiskDriverLayer(g: THREE.Group, c: Ctx, sim: any, plan: any){
   const driver = plan?.earth_intelligence?.major_risk_driver
-  if(!driver || !sim.spread?.steps?.length) return null
-  const ring = sim.spread.steps[0].polygon.coordinates[0]
+  const ring = polygonRing(sim.spread?.steps?.find((step: any) => polygonRing(step)))
+  if(!driver || !ring) return null
   const pts = ring.map((p: number[])=>{
     const q = toLocal(p[0], p[1], c.origin)
     return new THREE.Vector3(q.x, c.sampler(q.x, q.z) + 26, q.z)
@@ -633,10 +667,11 @@ export function WindFieldLayer(g: THREE.Group, c: Ctx, sim: any){
 
 // Fire front points (M5) — THREE.Points ring1→ringN loop.
 export function FireFrontPoints(g: THREE.Group, c: Ctx, sim: any){
-  if(!sim.spread?.steps?.length) return
+  const polygonSteps = (sim.spread?.steps || []).filter((step: any) => polygonRing(step))
+  if(polygonSteps.length < 2) return
   const H = c.sampler
-  const ring1 = sim.spread.steps[0].polygon.coordinates[0]
-  const ringN = sim.spread.steps[sim.spread.steps.length - 1].polygon.coordinates[0]
+  const ring1 = polygonRing(polygonSteps[0])!
+  const ringN = polygonRing(polygonSteps[polygonSteps.length - 1])!
   const NPT = c.quality === 'high' ? 1500 : 400
   const positions = new Float32Array(NPT * 3)
   const colors = new Float32Array(NPT * 3)

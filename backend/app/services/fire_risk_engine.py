@@ -19,7 +19,7 @@ def _seed(uid:str, extra:str="")->random.Random:
     return random.Random(int(h[:8],16))
 
 class FireRiskEngine:
-    def analyze(self, administrative_unit_id:str, satellite:Dict|None=None, weather:Dict|None=None, terrain:Dict|None=None, hotspots:List[Dict]|None=None, community:int=0, historical:Dict|None=None)->Dict[str,Any]:
+    def analyze(self, administrative_unit_id:str, satellite:Dict|None=None, weather:Dict|None=None, terrain:Dict|None=None, hotspots:List[Dict]|None=None, community:int=0, historical:Dict|None=None, sources_available:Dict[str,bool]|None=None)->Dict[str,Any]:
         from app.services.fire_risk_config import WEIGHTS
         satellite=satellite or {}
         weather=weather or {}
@@ -37,9 +37,16 @@ class FireRiskEngine:
         has_terr = terrain.get("slope") is not None
         has_firms = bool(hotspots)
         has_comm = community > 0
-        missing = [k for k, ok in (("satellite", has_sat), ("weather", has_wx),
-                                   ("terrain", has_terr), ("firms", has_firms),
-                                   ("community", has_comm)) if not ok]
+        # sources_available: nguồn nào caller đã chạm API thành công (kể cả trả
+        # 0 cháy / 0 report — đó là tín hiệu thật, KHÔNG phải thiếu nguồn).
+        # None = suy từ nội dung như cũ (giữ tương thích unit tests).
+        if sources_available is None:
+            missing = [k for k, ok in (("satellite", has_sat), ("weather", has_wx),
+                                       ("terrain", has_terr), ("firms", has_firms),
+                                       ("community", has_comm)) if not ok]
+        else:
+            missing = [k for k in ("satellite", "weather", "terrain", "firms", "community")
+                       if not sources_available.get(k, False)]
         ndvi=satellite.get("ndvi", 0.6) if has_sat else 0.6
         ndmi=satellite.get("ndmi", 0.3); nbr=satellite.get("nbr", 0.2)
         temp=weather.get("temperature", 30) if has_wx else 30

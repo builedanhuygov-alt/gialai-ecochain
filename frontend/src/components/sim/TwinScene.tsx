@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { useEffect, useRef, useState } from 'react'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { aoiRadiusKm } from './twinMath'
 import { canopyKey as canopyOf, TerrainMesh, updateDynamic } from './TwinLayers'
@@ -274,10 +275,10 @@ async function buildScene(div: HTMLDivElement, sim: any, waters: any[], opsAsset
   div.appendChild(renderer.domElement)
 
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color(0xdfe9f0)
+  scene.background = new THREE.Color(0x9fb8c1)
   // M9 aerial perspective scaled to AOI (subtle depth cue, not cinematic)
   const aoiKmB = aoiKmProp || 3
-  scene.fog = new THREE.Fog(0xdfe9f0, aoiKmB * 1000 * 1.4, aoiKmB * 1000 * 3.5)
+  scene.fog = new THREE.Fog(0x9fb8c1, aoiKmB * 1000 * 1.4, aoiKmB * 1000 * 3.5)
   const camera = new THREE.PerspectiveCamera(55, W / H, 10, 60000)
   const controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true

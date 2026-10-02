@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, MotionConfig } from 'framer-motion'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import AppShell from './components/AppShell'
@@ -9,8 +9,8 @@ import { API_BASE, api } from './services/api'
 import { useScope } from './store/useScope'
 const EcoMap = lazy(()=> import('./pages/EcoMap'))
 const MapPage = lazy(()=> import('./pages/MapPage'))
-const EventIntelligence = lazy(()=> import('./pages/EventIntelligence'))
-const EventsList = lazy(()=> import('./pages/EventIntelligence').then(m=> ({ default: m.EventsList })))
+const EventIntelligence = lazy(()=> import('./pages/FireEventIntelligence'))
+const EventsList = lazy(()=> import('./pages/FireEventIntelligence').then(m=> ({ default: m.EventsList })))
 const WhatIfLab = lazy(()=> import('./pages/WhatIfLab'))
 const FireSim = lazy(()=> import('./pages/FireSim'))
 const Missions = lazy(()=> import('./pages/Missions'))
@@ -22,6 +22,7 @@ const EUDR = lazy(()=> import('./pages/EUDR'))
 const Logistics = lazy(()=> import('./pages/Logistics'))
 const Twin = lazy(()=> import('./pages/Twin'))
 const Community = lazy(()=> import('./pages/Community'))
+const CommunityReportDetail = lazy(()=> import('./pages/CommunityReportDetail'))
 const Notifications = lazy(()=> import('./pages/Notifications'))
 const Governance = lazy(()=> import('./pages/Governance'))
 const Leaderboard = lazy(()=> import('./pages/Leaderboard'))
@@ -62,6 +63,7 @@ function AIAssistant(){
   const [stream, setStream] = useState<string>('')
   const [result, setResult] = useState<any>(null)
   const [showInspector, setShowInspector] = useState(false)
+  const [showFullAnswer, setShowFullAnswer] = useState(false)
   const [aiStatus, setAiStatus] = useState<any>(null)
   const API = API_BASE
 
@@ -72,7 +74,7 @@ function AIAssistant(){
   },[open])
 
   const runAiAction = async (kind: 'fire-risk'|'what-if'|'pccc')=>{
-    setLoading(true); setPhase('THINKING'); setStream(''); setResult(null)
+    setLoading(true); setPhase('THINKING'); setStream(''); setResult(null); setShowFullAnswer(false)
     try{
       let j: any
       if(kind === 'fire-risk'){
@@ -120,7 +122,7 @@ function AIAssistant(){
     const qq = (query || q).trim()
     if(!qq) return
     setQ(qq)
-    setLoading(true); setPhase('THINKING'); setStream(''); setResult(null)
+    setLoading(true); setPhase('THINKING'); setStream(''); setResult(null); setShowFullAnswer(false)
     try{
       setPhase('RETRIEVING DATA')
       // Serverless functions time out — fail fast with a clear message instead
@@ -168,7 +170,7 @@ function AIAssistant(){
   })
   const askPuter = async ()=>{
     const qq = q.trim(); if(!qq || loading) return
-    setLoading(true); setPhase('PUTER'); setStream(''); setResult(null)
+    setLoading(true); setPhase('PUTER'); setStream(''); setResult(null); setShowFullAnswer(false)
     try{
       const puter = await ensurePuter()
       const r = await puter.ai.chat(
@@ -186,7 +188,7 @@ function AIAssistant(){
 
   const askStream = async ()=>{
     const qq = q.trim(); if(!qq) return
-    setLoading(true); setPhase('THINKING'); setStream(''); setResult(null)
+    setLoading(true); setPhase('THINKING'); setStream(''); setResult(null); setShowFullAnswer(false)
     try{
       const r = await fetch(`${API}/api/ai/chat/stream`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ query: qq, lat:13.9, lon:108.3 }) })
       if(!r.ok || !r.body) throw new Error('Stream failed, falling back')
@@ -246,12 +248,15 @@ function AIAssistant(){
             <button className="ask" onClick={askStream} disabled={loading} style={{background:'#0B1412'}}>{loading? '...' : 'Stream'}</button>
           </div>
           {loading && <div style={{marginTop:8, fontSize:12, background:'#FEF3C7', padding:'6px 10px', borderRadius:8}}>{phase}... <span className="dot" style={{display:'inline-block', width:8, height:8, background:'#F59E0B', borderRadius:999, animation:'pulse 1s infinite'}}/></div>}
-          {stream && <div className="answer" style={{whiteSpace:'pre-wrap', maxHeight:200, overflow:'auto'}}>{stream.slice(0,1200)}</div>}
+          {stream && <div className="answer-wrap">
+            <div className="answer" style={{whiteSpace:'pre-wrap', maxHeight:showFullAnswer ? 420 : 180, overflow:'auto'}}>{stream.slice(0, showFullAnswer ? 6000 : 1200)}</div>
+            {stream.length > 1200 && <button className="answer-toggle" onClick={()=> setShowFullAnswer(v=>!v)}>{showFullAnswer ? 'Thu gọn kết quả' : 'Xem đầy đủ kết quả'}</button>}
+          </div>}
           {result && (
-            <div style={{marginTop:10, border:'1px solid #E2E8E5', borderRadius:12, padding:10, background:'#F8FAF9'}}>
-              <div style={{fontWeight:700, fontSize:12}}>FIRE INTELLIGENCE</div>
+            <div className="ai-result-card">
+              <div className="ai-result-head"><div style={{fontWeight:800, fontSize:12, letterSpacing:0.4}}>FIRE INTELLIGENCE</div><span>AI · {phase === 'COMPLETE' ? 'LIVE' : phase}</span></div>
               {result.provider === 'Puter' && <div style={{fontSize:11, color:'#7C3AED', marginBottom:4}}>Nguồn: Puter · {result.model} · {result.billing}</div>}
-              <div style={{fontSize:13}}>Risk: <b>{result.risk?.score ?? result.structured_output?.risk?.score ?? '--'} / 100</b> · Band <b>{result.risk?.band ?? '--'}</b></div>
+              <div className="ai-risk-line">Risk: <b>{result.risk?.score ?? result.structured_output?.risk?.score ?? '--'} / 100</b> · Band <b>{result.risk?.band ?? '--'}</b></div>
               <div style={{fontSize:12}}>Confidence: <b>{Math.round((result.risk?.confidence ?? result.model_confidence ?? 0)*100) || result.risk?.confidence || '--'}%</b> · Data completeness: {result.data_completeness ?? '--'}%</div>
               <div style={{fontSize:11, color:'#334155', marginTop:4}}>Tín hiệu: {Object.keys(result.factors || {}).join(', ') || 'fuel dryness, weather, FIRMS'}</div>
               <div style={{fontSize:11, marginTop:6}}>Evidence: {result.evidence?.length ?? 0} sources · RAG: {result.rag?.retrieved_documents ?? 0} docs</div>
@@ -296,6 +301,12 @@ function AIAssistant(){
         textarea{ width:100%; height:80px; border:1px solid #E2E8E5; border-radius:12px; padding:10px; font-size:13px; }
         .ask{ margin-top:8px; background:#0F766E; color:#fff; border:0; padding:8px 12px; border-radius:999px; flex:1; }
         .answer{ margin-top:10px; background:#F8FAF9; border:1px solid #E2E8E5; border-radius:12px; padding:10px; font-size:13px; }
+        .answer-wrap{ position:relative; }
+        .answer-toggle{ margin-top:5px; border:0; background:transparent; color:#0F766E; font-size:11px; font-weight:800; cursor:pointer; padding:2px 0; }
+        .ai-result-card{ margin-top:10px; border:1px solid #CBD5E1; border-radius:12px; padding:11px; background:#F8FAFC; color:#0F172A; }
+        .ai-result-head{ display:flex; justify-content:space-between; gap:8px; align-items:center; margin-bottom:6px; color:#0F172A; }
+        .ai-result-head span{ font-size:10px; color:#047857; background:#D1FAE5; border-radius:999px; padding:2px 7px; font-weight:800; }
+        .ai-risk-line{ margin:4px 0; font-size:14px; color:#0F172A; }
       `}</style>
     </>
   )
@@ -303,6 +314,23 @@ function AIAssistant(){
 
 function AnimatedRoutes(){
   const location = useLocation()
+  const navigate = useNavigate()
+  useEffect(()=>{
+    const openFireEvent = (event: Event)=>{
+      const eventId = (event as CustomEvent).detail?.eventId
+      if(typeof eventId === 'string' && eventId) navigate(`/events/${encodeURIComponent(eventId)}`)
+    }
+    const openCommunityReport = (event: Event)=>{
+      const reportId = (event as CustomEvent).detail?.reportId
+      if(typeof reportId === 'string' && reportId) navigate(`/community/reports/${encodeURIComponent(reportId)}`)
+    }
+    window.addEventListener('ecochain-open-fire-event', openFireEvent)
+    window.addEventListener('ecochain-open-community-report', openCommunityReport)
+    return ()=> {
+      window.removeEventListener('ecochain-open-fire-event', openFireEvent)
+      window.removeEventListener('ecochain-open-community-report', openCommunityReport)
+    }
+  },[navigate])
   useEffect(()=>{
     const base = Object.keys(TITLES).sort((a,b)=> b.length - a.length)
       .find(p=> p === '/' ? location.pathname === '/' : location.pathname.startsWith(p))
@@ -328,6 +356,7 @@ function AnimatedRoutes(){
           <Route path="/logistics" element={<PageTransition><Logistics/></PageTransition>} />
           <Route path="/twin" element={<PageTransition><Twin/></PageTransition>} />
           <Route path="/community" element={<PageTransition><Community/></PageTransition>} />
+          <Route path="/community/reports/:reportId" element={<PageTransition><CommunityReportDetail/></PageTransition>} />
           <Route path="/actions" element={<PageTransition><Governance/></PageTransition>} />
           <Route path="/leaderboard" element={<PageTransition><Leaderboard/></PageTransition>} />
           <Route path="/reports" element={<PageTransition><Reports/></PageTransition>} />

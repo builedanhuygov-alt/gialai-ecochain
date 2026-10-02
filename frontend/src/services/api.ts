@@ -9,10 +9,50 @@ const BASE = API_BASE
 // <img> tags need the absolute backend URL.
 export const photoUrl = (rel?: string | null)=> rel ? `${API_BASE}${rel}` : ''
 
-async function req(path: string, init?: RequestInit) {
-  const r = await fetch(`${BASE}${path}`, { headers: { 'Content-Type': 'application/json', ...(init?.headers||{}) }, ...init })
-  if(!r.ok) throw new Error(`${r.status} ${await r.text()}`)
-  return r.json()
+// Backend chạy serverless (Vercel) nên cold-start khi idle.
+// warmBackend(): bắn fire-and-forget /api/ping ngay khi app load để đánh thức backend.
+export function warmBackend() {
+  try {
+    fetch(`${API_BASE}/api/ping`, { method: 'GET', keepalive: true }).catch(() => {})
+  } catch { /* ignore */ }
+}
+// Tự warm ngay khi module được import (mọi trang dùng api đều được hưởng).
+if (typeof window !== 'undefined') {
+  try { warmBackend() } catch { /* ignore */ }
+}
+
+async function req(path: string, init?: RequestInit, retries = 2) {
+  let lastErr: unknown = null
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ctrl = new AbortController()
+    // Cold-start Vercel có thể mất 10-20s lần đầu -> timeout 25s/lượt.
+    const timer = setTimeout(() => ctrl.abort(), 25000)
+    try {
+      const r = await fetch(`${BASE}${path}`, { headers: { 'Content-Type': 'application/json', ...(init?.headers||{}) }, signal: ctrl.signal, ...init })
+      clearTimeout(timer)
+      // Chỉ retry khi lỗi retryable: 502/503/504 (cold-start / instance đang tỉnh).
+      // 4xx/500 throw ngay để UI báo lỗi nhanh + test không bị chậm.
+      if ((r.status === 502 || r.status === 503 || r.status === 504) && attempt < retries) {
+        await new Promise(res => setTimeout(res, 800 * (attempt + 1)))
+        continue
+      }
+      if(!r.ok) throw new Error(`${r.status} ${await r.text()}`)
+      return r.json()
+    } catch (e) {
+      clearTimeout(timer)
+      lastErr = e
+      // Retry network error / abort (cold-start timeout), không retry lỗi HTTP thường.
+      const msg = String((e as Error)?.message || '')
+      const retryable = msg.startsWith('502') || msg.startsWith('503') || msg.startsWith('504')
+        || (e as Error)?.name === 'AbortError' || msg.includes('Failed to fetch') || msg.includes('Network')
+      if (retryable && attempt < retries) {
+        await new Promise(res => setTimeout(res, 800 * (attempt + 1)))
+        continue
+      }
+      throw e
+    }
+  }
+  throw lastErr
 }
 
 export const api = {

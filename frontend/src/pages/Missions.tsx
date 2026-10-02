@@ -324,25 +324,33 @@ export default function Missions(){
       )}
 
       {mainTab === 'field' && (
-        <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:16, padding:16, marginTop:12}}>
-          <h3>NHIỆM VỤ #042 — Xác minh bất thường rừng {started && <span style={{fontSize:11, background:'#DCFCE7', padding:'2px 8px', borderRadius:999}}>ĐANG THỰC HIỆN</span>}</h3>
-          <div>📍 Gia Lai · Ưu tiên CAO · checklist lưu trên máy này</div>
-          <div style={{marginTop:8, display:'grid', gap:6, fontSize:13}}>
+        <div style={{background:'#fff', color:'#0A111C', border:'1px solid #CBD5E1', borderRadius:16, padding:16, marginTop:12, boxShadow:'0 8px 24px rgba(15,23,42,0.12)'}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap'}}>
+            <div>
+              <h3 style={{margin:'0 0 4px', color:'#0A111C'}}>NHIỆM VỤ #042 — Xác minh bất thường rừng {started && <span style={{fontSize:11, background:'#DCFCE7', color:'#166534', padding:'2px 8px', borderRadius:999}}>ĐANG THỰC HIỆN</span>}</h3>
+              <div style={{fontSize:13, color:'#475569'}}>📍 Gia Lai · Ưu tiên CAO · checklist lưu trên máy này</div>
+            </div>
+            <span style={{fontSize:11, fontWeight:800, color:'#1D4ED8', background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:999, padding:'5px 9px'}}>AI ĐÃ PHÂN CÔNG</span>
+          </div>
+          <div style={{marginTop:12, background:'#F8FAFC', border:'1px solid #E2E8F0', borderRadius:10, padding:'9px 11px', fontSize:12, color:'#334155'}}>
+            <b style={{color:'#0F172A'}}>Khuyến nghị AI:</b> xác minh tại hiện trường trước khi phát hành cảnh báo chính thức; ưu tiên ảnh, tọa độ và bằng chứng lửa/khói.
+          </div>
+          <div style={{marginTop:12, display:'grid', gap:7, fontSize:13}}>
             {['Đến vị trí','Chụp ảnh','Thu thập bằng chứng','Xác minh'].map((s, i)=> (
-              <label key={s}><input type="checkbox" checked={steps[i]} onChange={()=> { setSteps(x => x.map((v, j)=> j === i ? !v : v)); pushLog(`${steps[i] ? 'Bỏ tick' : 'Xong'}: ${s}`) }} /> {s}</label>
+              <label key={s} style={{display:'flex', alignItems:'center', gap:8, color:'#1E293B', cursor:'pointer'}}><input type="checkbox" checked={steps[i]} onChange={()=> { setSteps(x => x.map((v, j) => j === i ? !v : v)); pushLog(`${steps[i] ? 'Bỏ tick' : 'Xong'}: ${s}`) }} /> <span style={{fontWeight:steps[i] ? 700 : 500, textDecoration:steps[i] ? 'line-through' : 'none'}}>{s}</span></label>
             ))}
           </div>
-          <button onClick={()=> { setStarted(true); pushLog('Bắt đầu nhiệm vụ') }} disabled={started} style={{marginTop:10, background:'#0B1412', color:'#fff', padding:'8px 12px', borderRadius:999, border:0, width:'100%'}}>{started ? 'ĐANG THỰC HIỆN...' : 'BẮT ĐẦU NHIỆM VỤ'}</button>
+          <button onClick={()=> { setStarted(true); pushLog('Bắt đầu nhiệm vụ') }} disabled={started} style={{marginTop:12, background:started ? '#64748B' : '#0F766E', color:'#fff', padding:'10px 12px', borderRadius:10, border:0, width:'100%', fontWeight:800, cursor:started ? 'default' : 'pointer'}}>{started ? 'ĐANG THỰC HIỆN...' : 'BẮT ĐẦU NHIỆM VỤ'}</button>
           <div style={{marginTop:10, display:'flex', gap:6, flexWrap:'wrap'}}>
-            <button onClick={()=> pushLog('Đã chụp ảnh bằng chứng')}>📷 Ảnh</button>
-            <button onClick={()=> pushLog('Đã quay video hiện trường')}>🎥 Video</button>
-            <button onClick={()=> {
+            <button style={fieldAction} onClick={()=> pushLog('Đã chụp ảnh bằng chứng')}>📷 Ảnh</button>
+            <button style={fieldAction} onClick={()=> pushLog('Đã quay video hiện trường')}>🎥 Video</button>
+            <button style={fieldAction} onClick={()=> {
               if(!navigator.geolocation){ pushLog('Trình duyệt không hỗ trợ vị trí'); return }
               navigator.geolocation.getCurrentPosition(()=> pushLog('Đã gắn vị trí hiện tại'), ()=> pushLog('Bị từ chối quyền vị trí'))
             }}>📍 Vị trí</button>
-            <button onClick={()=> pushLog('🚨 Đã gửi tín hiệu khẩn cấp')}>🚨 Khẩn cấp</button>
+            <button style={{...fieldAction, color:'#B91C1C', borderColor:'#FECACA', background:'#FEF2F2'}} onClick={()=> pushLog('🚨 Đã gửi tín hiệu khẩn cấp')}>🚨 Khẩn cấp</button>
           </div>
-          {log.length > 0 && <div style={{marginTop:10, fontSize:12, background:'#F8FAF9', borderRadius:8, padding:8}}>{log.map((l, i)=> <div key={i}>{l}</div>)}</div>}
+          {log.length > 0 && <div style={{marginTop:12, fontSize:12, color:'#475569', background:'#F8FAF9', border:'1px solid #E2E8F0', borderRadius:8, padding:8}}>{log.map((l, i)=> <div key={i}>{l}</div>)}</div>}
         </div>
       )}
 
@@ -352,3 +360,4 @@ export default function Missions(){
 }
 
 const btn = { fontSize:12, padding:'6px 12px', borderRadius:999, border:'1px solid #E2E8E5', background:'#fff' } as const
+const fieldAction = { fontSize:12, padding:'7px 10px', borderRadius:8, border:'1px solid #CBD5E1', background:'#fff', color:'#334155', cursor:'pointer' } as const

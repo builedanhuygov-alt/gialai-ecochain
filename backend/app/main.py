@@ -127,6 +127,7 @@ def create_app() -> FastAPI:
     from app.api.routes.simulate_fire import router as firesim_router
     from app.api.routes.evidence import router as evidence_router
     from app.api.routes.communes import router as communes_router
+    from app.api.routes.operations import router as operations_router
 
     app.include_router(health_router, prefix="/api", tags=["Health"])
     app.include_router(admin_router, prefix="/api", tags=["Administrative"])
@@ -152,6 +153,7 @@ def create_app() -> FastAPI:
     app.include_router(firesim_router, prefix="/api", tags=["FireSim"])
     app.include_router(evidence_router, prefix="/api", tags=["Evidence"])
     app.include_router(communes_router, prefix="/api", tags=["Communes"])
+    app.include_router(operations_router, prefix="/api", tags=["Field Operations"])
     # Sec77 versioned alias
     app.include_router(geo_router, prefix="/api/v1", tags=["Geospatial-v1"])
 

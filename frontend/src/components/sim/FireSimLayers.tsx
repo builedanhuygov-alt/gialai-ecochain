@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 
 // Part C — MapLibre-native 2D tactical layers with improved visual clarity.
 // Isochrone fire spread, directional wind flow, distinct asset icons, AOI boundary, viewport legend.
@@ -7,9 +7,11 @@ export type SimData = any
 
 const IDS = [
   'fsim-ellipses-fill', 'fsim-ellipses-outline', 'fsim-ignition',
-  'fsim-spread-direction', 'fsim-wind-flow', 'fsim-wind-corridor',
-  'fsim-communities', 'fsim-assets', 'fsim-routes',
-  'fsim-aoi-boundary', 'fsim-legend'
+  'fsim-spread-direction', 'fsim-spread-direction-glow', 'fsim-wind-flow', 'fsim-wind-corridor',
+  'fsim-communities', 'fsim-communities-fill', 'fsim-communities-outline', 'fsim-communities-labels',
+  'fsim-assets', 'fsim-routes', 'fsim-routes-casing',
+  'fsim-aoi-boundary', 'fsim-aoi-fill', 'fsim-aoi-glow', 'fsim-legend',
+  'fsim-assets-station', 'fsim-assets-team', 'fsim-assets-watchtower', 'fsim-assets-water', 'fsim-assets-default'
 ]
 const SRC = (id: string) => `src-${id}`
 
@@ -20,15 +22,6 @@ const STEP_COLORS: Record<number, string> = {
   3: '#EAB308',   // +3h - amber/yellow
   6: '#525252',   // +6h - neutral gray
   12: '#1E293B',  // +12h - dark slate
-}
-
-// Opacity per time step for isochrone layering
-const STEP_OPACITY: Record<number, number> = {
-  0: 0.85,   // current: prominent
-  1: 0.55,   // +1h: clear
-  3: 0.35,   // +3h: visible
-  6: 0.22,   // +6h: subtle
-  12: 0.15,  // +12h: faint
 }
 
 // Dark outline color for fire polygons (contrast against terrain)
@@ -113,21 +106,20 @@ function createAoiBoundary(ignition: { lon: number; lat: number }, aoiKm: number
   }
 }
 
-export default function FireSimulationLayer({ map, data, show, communeFc, isMobile, aoiKm = 3 }: {
+export default function FireSimulationLayer({ map, data, show, communeFc, isMobile, aoiKm = 3, selectedHour }: {
   map: any; data: SimData | null;
   show: { ellipses: boolean; assets: boolean; routes: boolean; communities: boolean; wind: boolean };
-  communeFc?: any; isMobile?: boolean; aoiKm?: number;
+  communeFc?: any; isMobile?: boolean; aoiKm?: number; selectedHour?: number | null;
 }) {
-  const legendRef = useRef<HTMLDivElement>(null)
-  
   useEffect(() => {
     if (!map || !data) return
     clear(map)
     try {
       const ignition = data.ignition
       const windDir = data.wind_layer?.direction_deg ?? data.scenario?.wind_direction_deg ?? 90
-      const windSpeed = data.wind_layer?.speed_kmh ?? data.scenario?.wind_speed_kmh ?? 0
       const steps = data.spread?.steps || []
+      const selected = data.render_hour ?? selectedHour ?? null
+      const selectedStep = selected === 0 ? steps[0]?.hour : selected
       
       // 1. ISOCHRONE FIRE SPREAD — filled polygons with gradient opacity
       if (show.ellipses) {
@@ -166,10 +158,9 @@ export default function FireSimulationLayer({ map, data, show, communeFc, isMobi
           id: 'fsim-ellipses-fill', type: 'fill', source: SRC('fsim-ellipses-fill'),
           paint: { 
             'fill-color': ['get', 'color'],
-            'fill-opacity': [
-              'match', ['get', 'hour'],
-              0, 0.85, 1, 0.55, 3, 0.35, 6, 0.22, 12, 0.15, 0.15
-            ],
+            'fill-opacity': selectedStep === null
+              ? ['match', ['get', 'hour'], 1, 0.72, 3, 0.42, 6, 0.28, 12, 0.2, 0.32]
+              : ['case', ['==', ['get', 'hour'], selectedStep], 0.84, 0.08],
             'fill-outline-color': FIRE_OUTLINE,
             'fill-antialias': true
           } 
@@ -180,8 +171,8 @@ export default function FireSimulationLayer({ map, data, show, communeFc, isMobi
           id: 'fsim-ellipses-outline', type: 'line', source: SRC('fsim-ellipses-fill'),
           paint: { 
             'line-color': ['get', 'color'], 
-            'line-width': ['match', ['get', 'hour'], 0, 3, 1, 2.5, 3, 2, 6, 1.5, 12, 1, 1.5],
-            'line-opacity': ['match', ['get', 'hour'], 0, 1, 1, 0.9, 3, 0.8, 6, 0.7, 12, 0.6, 0.7],
+            'line-width': selectedStep === null ? ['match', ['get', 'hour'], 1, 3, 3, 2.5, 6, 2, 12, 1.5, 1.5] : ['case', ['==', ['get', 'hour'], selectedStep], 3.5, 1],
+            'line-opacity': selectedStep === null ? ['match', ['get', 'hour'], 1, 1, 3, 0.85, 6, 0.7, 12, 0.6, 0.7] : ['case', ['==', ['get', 'hour'], selectedStep], 1, 0.18],
             'line-dasharray': ['match', ['get', 'hour'], 0, [0, 0], [4, 3]] // solid current, dashed forecast
           } 
         } as any)
@@ -516,7 +507,7 @@ export default function FireSimulationLayer({ map, data, show, communeFc, isMobi
       
     } catch (e) { console.warn('firesim layers failed', e) }
     return () => { try { if (map) clear(map) } catch {} }
-  }, [map, data, communeFc, isMobile, show.ellipses, show.assets, show.routes, show.communities, show.wind, aoiKm])
+  }, [map, data, communeFc, isMobile, show.ellipses, show.assets, show.routes, show.communities, show.wind, aoiKm, selectedHour])
   
   return null
 }

@@ -13,6 +13,8 @@ import {
 } from '../components/EventIntel'
 import { countSourcesByType, getEventSources } from '../components/EventSources'
 import type { Severity } from '../components/EventIntel'
+import FireVerificationPanel, { readFireVerifications } from '../components/FireVerificationPanel'
+import { buildEventListFromAlerts } from '../utils/truthfulData'
 
 const API = API_BASE
 
@@ -23,6 +25,9 @@ export type UEvt = {
   score: number | null; sev: Severity; status: string;
   source: string; forces?: string; outcome?: string;
   lat: number | null; lon: number | null; timeISO: string | null;
+  location?: { province?: string | null; district?: string | null; commune?: string | null; verified_by_boundary: boolean };
+  villageReference?: { name: string; commune?: string | null; distance_km?: number | null } | null;
+  distanceKm?: number | null;
 }
 
 export function buildUnified(hist: any[], items: any[]): UEvt[] {
@@ -32,7 +37,7 @@ export function buildUnified(hist: any[], items: any[]): UEvt[] {
     out.push({
       key: `h-${h.id}`, kind: 'hist', id: h.id, title: h.title, place: h.place,
       dates: h.dates, level: h.level, score: typeof h.score === 'number' ? h.score : null,
-      sev: severityOf(h.level, h.score), status: 'SỰ KIỆN THẬT', source: h.source,
+      sev: severityOf(h.level, h.score), status: h.status || 'SỰ KIỆN THẬT', source: h.source,
       forces: h.forces, outcome: h.outcome,
       lat: c?.lat ?? null, lon: c?.lon ?? null, timeISO: null,
     })
@@ -40,12 +45,17 @@ export function buildUnified(hist: any[], items: any[]): UEvt[] {
   for (const e of items) {
     out.push({
       key: `l-${e.id}`, kind: 'live', id: e.id,
-      title: e.village ? `Điểm nhiệt gần ${e.village}` : `Sự kiện #${e.id}`,
-      place: e.village || '', dates: '', level: e.level || 'Theo dõi',
+      title: e.title,
+      place: e.place, dates: e.acq_date || '', level: e.level,
       score: typeof e.score === 'number' ? e.score : null,
-      sev: severityOf(e.level, e.score), status: e.status || 'MISSING',
-      source: 'FIRMS + Weather + Sentinel',
-      lat: null, lon: null, timeISO: e.time || null,
+      sev: severityOf(e.level, e.score), status: e.status,
+      source: `${e.source} · ${e.sourceStatus || 'MISSING'}`,
+      lat: typeof e.lat === 'number' ? e.lat : null,
+      lon: typeof e.lon === 'number' ? e.lon : null,
+      timeISO: e.timeISO,
+      location: e.location,
+      villageReference: e.villageReference,
+      distanceKm: e.distanceKm,
     })
   }
   return out
@@ -119,7 +129,7 @@ function useEvidence() {
 const HISTORICAL = [
   { id: 'phu-my-dong-0721', title: 'Cháy rừng dương phòng hộ ven biển TK62 (~30ha)', place: 'Thôn Tân Phụng, xã Phù Mỹ Đông', dates: '20-21/7/2026 · kiểm soát 21h ngày 21/7', level: 'CẤP V', score: 92, forces: '13h20 20/7 phát hiện → khống chế → 23h bùng lại (tàn bay qua băng); 21/7 tổng lực ~500 người: PCCC 100+ CBCS +10 xe, BCHQS tỉnh 115, Quân khu 5, kiểm lâm, dân quân; khoanh vùng + băng trắng (vật liệu khô có tinh dầu, gió đổi hướng, không dập trực tiếp được)', outcome: 'Thiệt hại ~30ha phi lao — đang điều tra nguyên nhân', source: 'Dân trí (Doãn Công), VOV Tây Nguyên 22/7/2026, Sở NN&MT Gia Lai' },
   { id: 'hoai-an-0823', title: 'Cháy rừng keo đèo Cây Cốc, thôn An Chiểu', place: 'Xã Hoài Ân', dates: '23-24/8/2026 · bùng lại trưa 24/8', level: 'CẤP III', score: 74, forces: '~100 người + quân đội hỗ trợ; túc trực xử lý phát sinh', outcome: 'Đã khống chế — nguyên nhân ban đầu: đốt thực bì', source: 'UBND xã Hoài Ân (Tiền Phong 24/8/2026)' },
-  { id: 'hoi-son-0708', title: 'Cháy thực bì + rừng trồng tiểu khu 213; núi Đầu Voi thôn Cát Lâm', place: 'Xã Hội Sơn và Hòa Hội', dates: 'Tháng 7-8/2026 · Đầu Voi khống chế tối 22/8', level: 'CẤP III', score: 68, forces: 'Lực lượng chức năng (đồi cao, hiểm trở, gió lớn)', outcome: 'Đã dập tắt — đang thống kê diện tích', source: 'Cổng TTĐT tỉnh Gia Lai + Tiền Phong 24/8/2026' },
+  { id: 'hoi-son-0708', title: 'TIN HIỆN TRƯỜNG: Cháy tại núi Đầu Voi', place: 'Xã Hội Sơn · Núi Đầu Voi · 14.09715, 108.99686', dates: 'Chiều 18/9/2026', level: 'CHỜ XÁC MINH', score: null, forces: 'Ảnh hiện trường cho thấy khói/lửa; chưa có thông tin xác nhận diện tích hoặc lực lượng triển khai.', outcome: 'Đang chờ xác minh tại hiện trường', source: 'Ảnh hiện trường do người dùng cung cấp', status: 'TIN HIỆN TRƯỜNG · CHỜ XÁC MINH' },
   { id: 'vung-chua-0827', title: 'Cháy núi Vũng Chua TK330b/330c — thiệt hại 4,23ha', place: 'P. Ghềnh Ráng (trước là Quy Nhơn Nam) · 13°44′20″N 109°11′45″E', dates: 'Cuối 8/2026 (đo đạc hiện trường 30/8)', level: 'CẤP IV', score: 84, forces: 'Thực bì dưới bạch đàn · dốc đứng xe CC không vào được · 500+ người + flycam quét băng cản lửa', outcome: 'Đã dập tắt — đang điều tra nguyên nhân', source: 'Báo Gia Lai post596298 · Cổng ĐCS Gia Lai · Vietnam.vn' },
   { id: 'cat-thanh-133ha', title: 'Cháy 133ha rừng trồng — Núi Lỗ Gáo, Mũi Đá Mỏ', place: 'Thôn Chánh Thắng, xã Cát Thành · 14°02′30″N 109°10′45″E', dates: 'Theo Báo Gia Lai (vụ trước Hè 2026)', level: 'CẤP V', score: 95, forces: 'Rừng trồng kinh tế, dốc nhiều đá, còn bom mìn sót lại', outcome: 'Thiệt hại 133ha — vùng trọng điểm theo dõi', source: 'Báo Gia Lai post520560' },
 ]
@@ -146,8 +156,10 @@ function EventCard({ e, selected, onOpen }: { e: UEvt; selected: boolean; onOpen
             <span className="ei-tag">{e.status}</span>
           </div>
           <h3>{e.title}</h3>
-          <div className="ei-meta"><MapPin size={12} />{e.place || 'Gia Lai'}</div>
-          <div className="ei-meta"><Clock size={12} />{e.dates || (e.timeISO ? ago(e.timeISO) : 'MISSING')}</div>
+          <div className="ei-meta"><MapPin size={12} />{e.kind === 'live' ? 'Địa giới: ' : ''}{e.place || 'Chưa có dữ liệu'}</div>
+          {e.kind === 'live' && e.lat != null && e.lon != null && <div className="ei-meta">VỊ TRÍ PHÁT HIỆN · {e.lat.toFixed(6)}, {e.lon.toFixed(6)}</div>}
+          {e.kind === 'live' && e.villageReference && <div className="ei-meta">Điểm tham chiếu gần nhất: {e.villageReference.name}{e.distanceKm != null ? ` · ${e.distanceKm} km` : ''}</div>}
+          <div className="ei-meta"><Clock size={12} />{e.dates || (e.timeISO ? ago(e.timeISO) : 'Chưa có dữ liệu thời gian')}</div>
           {e.kind === 'hist' && e.forces && <div className="ei-desc">{e.forces}</div>}
           {e.kind === 'hist' && e.outcome && <div style={{ fontSize: 12, color: '#7EE2A8', marginTop: 4 }}>✓ {e.outcome}</div>}
           <div className="ei-meta" style={{ marginTop: 8 }}>SOURCE · {e.kind === 'hist' ? 'Hồ sơ báo chí đã đối chiếu' : e.source}</div>
@@ -190,7 +202,7 @@ function EventDrawer({ e, weather, aiNote, initialTab, onClose }: { e: UEvt; wea
         <div>
           <div className="ei-kicker">INCIDENT · {e.sev}</div>
           <h3 style={{ margin: '6px 0 0', fontSize: 17, lineHeight: 1.4 }}>{e.title}</h3>
-          <div className="ei-meta" style={{ marginTop: 4 }}><MapPin size={12} /> {e.place || 'Gia Lai'} · {e.status}</div>
+          <div className="ei-meta" style={{ marginTop: 4 }}><MapPin size={12} /> {e.place || 'Chưa xác định được địa giới từ dữ liệu hiện có.'} · {e.status}</div>
         </div>
         <button className="ei-btn" onClick={onClose} aria-label="Đóng chi tiết"><X size={14} /></button>
       </div>
@@ -205,8 +217,11 @@ function EventDrawer({ e, weather, aiNote, initialTab, onClose }: { e: UEvt; wea
           <div>Trạng thái: <b>{e.status}</b> · Cấp: <b>{e.level}</b>{e.score != null && <> · Điểm: <b>{e.score}</b></>}</div>
           {e.dates && <div style={{ marginTop: 4 }}><CalendarClock size={13} /> {e.dates}</div>}
           {e.timeISO && <div style={{ marginTop: 4 }}><Clock size={13} /> {ago(e.timeISO)}</div>}
-          <div style={{ marginTop: 4 }}>Vị trí: {e.lat != null && e.lon != null ? <b>{e.lat.toFixed(4)}°N {e.lon.toFixed(4)}°E</b> : <b>MISSING</b>}</div>
+          <div style={{ marginTop: 4 }}>VỊ TRÍ PHÁT HIỆN: {e.lat != null && e.lon != null ? <b>{e.lat.toFixed(6)}, {e.lon.toFixed(6)}</b> : <b>Chưa có dữ liệu tọa độ</b>}</div>
+          {e.kind === 'live' && <div style={{ marginTop: 4 }}>Địa giới: <b>{e.location?.verified_by_boundary ? '✓ Xác định bằng polygon' : '⚠ Chưa xác định'}</b></div>}
+          {e.kind === 'live' && e.villageReference && <div style={{ marginTop: 4 }}>Điểm tham chiếu gần nhất: <b>{e.villageReference.name}</b>{e.distanceKm != null ? ` · ${e.distanceKm} km` : ''}</div>}
           {e.lat != null && e.lon != null && <div style={{ marginTop: 8 }}><SatThumb lat={e.lat} lon={e.lon} label={e.title} /></div>}
+          {e.kind === 'hist' && e.lat != null && e.lon != null && <FireVerificationPanel eventId={String(e.id)} lat={e.lat} lon={e.lon} />}
         </div>
       )}
       {tab === 'EVIDENCE' && (
@@ -271,24 +286,41 @@ export function EventsList() {
   const [drawerTab, setDrawerTab] = useState<DrawerTab>('OVERVIEW')
   const openDrawer = (e: UEvt, tab?: DrawerTab) => { setSelected(e); setDrawerTab(tab || 'OVERVIEW') }
   const [qdOpen, setQdOpen] = useState(false)
+  const [verificationVersion, setVerificationVersion] = useState(0)
   useEffect(() => {
-    fetch(`${API}/api/villages/fire-alert`).then(r => r.json()).then(j => {
-      const alerts = j.alerts || []
-      const mapped = [1, 2, 3].map(i => {
-        const a = alerts[i - 1]
-        return { id: i, village: a?.village || `Thôn ${i}`, score: a ? 78 + i * 3 : 62 + i * 5, time: a?.acq_date || new Date(Date.now() - i * 47 * 60000).toISOString(), status: a ? 'LIVE' : 'DEMO DATA', level: a?.level || 'Theo dõi' }
-      })
-      setItems(mapped)
-    }).catch(() => setItems([1, 2, 3].map(i => ({ id: i, village: `Thôn ${i}`, score: 60 + i * 4, time: new Date(Date.now() - i * 53 * 60000).toISOString(), status: 'DEMO DATA', level: 'Theo dõi' }))))
-      .finally(() => setItemsLoaded(true))
+    const refresh = () => setVerificationVersion(v => v + 1)
+    window.addEventListener('ecochain-fire-verification', refresh)
+    return () => window.removeEventListener('ecochain-fire-verification', refresh)
+  }, [])
+  useEffect(() => {
+    const loadLiveAlerts = async () => {
+      try {
+        const r = await fetch(`${API}/api/villages/fire-alert`)
+        const j = await r.json()
+        const mapped = buildEventListFromAlerts(j)
+        setItems(mapped)
+      } catch {
+        setItems([])
+      } finally {
+        setItemsLoaded(true)
+      }
+    }
+
+    loadLiveAlerts()
   }, [])
 
-  const unified = buildUnified(HISTORICAL, items)
+  const unified = buildUnified([], items)
   const shown = sortEvents(filterEvents(unified, sev), sort)
   const liveCount = (s: Severity) => countByHelper(unified, s)
   const queue = [...unified].filter(e => e.score != null).sort((a, b) => (b.score as number) - (a.score as number)).slice(0, 4)
   const hasS2 = !!evidence && !String(evidence.s2).includes('unavailable')
   const liveSources = evidence?.liveSources ?? 0
+  const verificationStats = Object.values(readFireVerifications()).flat().reduce((out, r) => {
+    out.total += 1
+    out[r.verdict] += 1
+    return out
+  }, { total: 0, YES: 0, NO: 0, UNSURE: 0 })
+  void verificationVersion
 
   return (
     <div className="ei rise-in">
@@ -319,6 +351,18 @@ export function EventsList() {
         <KpiCard icon={<Flame size={15} />} value={String(liveCount('CRITICAL'))} label="CRITICAL" sub="Cần ưu tiên" color="#EF4444" hot={liveCount('CRITICAL') > 0} />
         <KpiCard icon={<Thermometer size={15} />} value={String(liveCount('HIGH'))} label="HIGH RISK" sub="Mức cao" color="#F97316" />
         <KpiCard icon={<Satellite size={15} />} value={evLoaded ? String(liveSources) : '…'} label="LIVE SOURCES" sub="FIRMS · Weather · Sentinel" color="#22C55E" />
+      </div>
+
+      <div className="ei-panel ei-verification-summary" aria-label="Thống kê xác minh cộng đồng">
+        <div className="ei-kicker">ĐÁNH GIÁ TÍN HIỆU CHÁY · CỘNG ĐỒNG</div>
+        <div className="ei-summary-grid">
+          <div><b>{unified.filter(e => e.kind === 'live').length}</b><span>Nghi ngờ đang theo dõi</span></div>
+          <div><b>{verificationStats.total}</b><span>Đã đánh giá</span></div>
+          <div><b>{verificationStats.YES}</b><span>Có cháy</span></div>
+          <div><b>{verificationStats.NO}</b><span>Không thấy cháy</span></div>
+          <div><b>{verificationStats.UNSURE}</b><span>Chưa chắc</span></div>
+        </div>
+        <div className="ei-meta" style={{ marginTop: 8 }}>Kết luận thật/không thật chỉ được nâng cấp sau khi có đủ bằng chứng hiện trường hoặc xác nhận cơ quan chức năng.</div>
       </div>
 
       {/* AI BRIEF */}
@@ -517,6 +561,7 @@ export default function EventIntelligence() {
                 )
               })()}
             </div>
+            {c && <FireVerificationPanel eventId={String(h.id)} lat={c.lat} lon={c.lon} />}
             <div className="ei-panel">
               <div className="ei-kicker">TẠI SAO AI PHÁT HIỆN? — CHUỖI BẰNG CHỨNG</div>
               {!loaded ? <div className="ei-skel" style={{ height: 90, marginTop: 8 }} /> : !evidence ? (

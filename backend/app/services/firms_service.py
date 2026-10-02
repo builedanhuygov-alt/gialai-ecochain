@@ -115,9 +115,13 @@ async def fetch_firms(lat:float, lon:float, area: str="world", day_range:int=2)-
     if cache_key in CACHE:
         age=now-CACHE[cache_key]["ts"]
         if age < TTL:
+            # Cache còn tươi (trong TTL) = dữ liệu tươi: status LIVE cho hiển
+            # thị, cache_status giữ provenance + cache_age_s để kiểm chứng.
+            # (FIRMS NRT trễ hàng giờ — cache vài phút vẫn là số liệu mới nhất.)
             d=CACHE[cache_key]["data"].copy()
-            d["status"]="CACHED"
+            d["status"]="LIVE"
             d["cache_status"]="CACHED"
+            d["cache_age_s"]=int(age)
             d["timestamp"]=now
             d["date"]=date_str
             d["acquired"]=date_str
@@ -175,9 +179,11 @@ async def fetch_firms_gialai(day_range:int=1, source:str="VIIRS_SNPP_NRT")->Dict
     if cache_key in CACHE:
         age=now-CACHE[cache_key]["ts"]
         if age < TTL:
+            # Như fetch_firms: cache tươi = LIVE + provenance cache_status.
             d=CACHE[cache_key]["data"].copy()
-            d["status"]="CACHED"
+            d["status"]="LIVE"
             d["cache_status"]="CACHED"
+            d["cache_age_s"]=int(age)
             d["timestamp"]=now
             d["date"]=date_str
             d["acquired"]=date_str

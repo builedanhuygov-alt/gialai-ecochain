@@ -125,6 +125,16 @@ export default function Command(){
   const wxMeta = wx?.metadata?.status || wx?.status || null
   const liveish = (s: unknown): SourceRow['status'] =>
     s === 'LIVE' || s === 'CACHED' || s === 'DEMO' || s === 'STALE' ? (s as SourceRow['status']) : 'UNAVAILABLE'
+  const observedAt = (source: any): string | null => {
+    const raw = source?.acquired_at ?? source?.timestamp ?? source?.acquired
+    if (raw == null) return null
+    const date = typeof raw === 'number' ? new Date(raw * 1000) : new Date(String(raw))
+    if (Number.isNaN(date.getTime())) return null
+    return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+  }
+  const firmsFreshness = firms?.status === 'CACHED' && observedAt(firms)
+    ? `CACHED · dữ liệu lúc ${observedAt(firms)}`
+    : firms?.status || null
   const ndviMean = typeof ndvi?.ndvi?.mean === 'number' ? ndvi.ndvi.mean : null
   const wxWind = cur.wind_speed_10m ?? cur.windspeed ?? null
   const signals = buildRiskSignals({
@@ -141,7 +151,7 @@ export default function Command(){
     { key:'NDVI', label:'NDVI Sentinel-2', status: ndvi ? liveish(ndvi.status) : 'UNAVAILABLE',
       detail: ndviMean != null ? ndviMean.toFixed(2) : undefined },
     { key:'FIRMS', label:'FIRMS hotspots', status: firms ? liveish(firms.status) : 'UNAVAILABLE',
-      detail: firms ? `${hotspots.length} điểm` : undefined },
+      detail: firms ? `${hotspots.length} điểm${firmsFreshness ? ` · ${firmsFreshness}` : ''}` : undefined },
     { key:'WEATHER', label:'Thời tiết', status: wx ? (wxMeta === 'LIVE' ? 'LIVE' : 'UNAVAILABLE') : 'UNAVAILABLE',
       detail: cur.temperature_2m != null || cur.temperature != null ? `${cur.temperature_2m ?? cur.temperature}°C` : undefined },
     { key:'TERRAIN', label:'Địa hình', status: plan?.earth_intelligence?.terrain_driver ? 'LIVE' : 'MISSING',
@@ -219,7 +229,7 @@ export default function Command(){
         <b style={{ fontSize: 13 }}>{backendUp ? '● COMMAND ONLINE' : '○ OFFLINE'}</b>
         <span className="cx-mut">Cập nhật {updatedAt || '…'}</span>
         {demoMode && <span className="cx-chip demo">DEMO DATA</span>}
-        {firms && firms.status !== 'LIVE' && firms.status !== 'DEMO' && <span className="cx-chip stale">{String(firms.status)}</span>}
+        {firms && firms.status !== 'LIVE' && firms.status !== 'DEMO' && <span className="cx-chip stale" title={observedAt(firms) ? `Dữ liệu FIRMS thu được lúc ${observedAt(firms)}` : 'Trạng thái do API FIRMS trả về'}>{firmsFreshness || String(firms.status)}</span>}
       </div>
       <SectionHead kicker="00 · COMMAND" title="Điều hành tác chiến" />
       <CommandStatusStrip cells={stripCells} />
@@ -261,7 +271,7 @@ export default function Command(){
       <KPIBar loading={kpiLoading} items={[
         { key:'firms', label:'FIRMS HOTSPOTS', icon:<Flame size={15} />,
           value: firms ? hotspots.length : 'MISSING',
-          sub: !firms ? 'DATA UNAVAILABLE' : firms.status !== 'LIVE' ? String(firms.status) : (hotspots.length === 0 ? 'No active detection' : `${hotspots.length} điểm`) },
+          sub: !firms ? 'DATA UNAVAILABLE' : firms.status !== 'LIVE' ? (firmsFreshness || String(firms.status)) : (hotspots.length === 0 ? 'No active detection' : `${hotspots.length} điểm`) },
         { key:'wind', label:'WIND', icon:<Wind size={15} />,
           value: (cur.wind_speed_10m ?? cur.windspeed) != null ? `${cur.wind_speed_10m ?? cur.windspeed} km/h` : 'MISSING',
           sub: windDeg != null ? windDir(windDeg) : (wx ? 'MISSING' : 'DATA UNAVAILABLE') },

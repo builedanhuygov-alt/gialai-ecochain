@@ -20,6 +20,7 @@ from app.models.water import WaterAsset
 from app.models.user import User
 from app.models.refresh_token import RefreshToken
 from app.models.feedback import Feedback
+from app.models.field_operations import OperationalWorkItem
 
 __all__ = [
     "AdministrativeUnit",
@@ -52,4 +53,5 @@ __all__ = [
     "User",
     "RefreshToken",
     "Feedback",
+    "OperationalWorkItem",
 ]

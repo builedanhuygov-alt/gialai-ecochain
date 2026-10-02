@@ -1,6 +1,29 @@
 """Smoke/Fire plume detection from satellite tile via Gemini Vision"""
-import base64, httpx, time
+import base64, httpx, time, math
 from typing import Dict
+
+UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) GiaLaiEcoChain/1.0"}
+
+
+def _latlon_to_tile(lat: float, lon: float, z: int = 12) -> tuple[int, int]:
+    """Slippy-map tile chứa điểm lat/lon (chuẩn OSM/Google/Esri)."""
+    n = 2 ** z
+    x = int((lon + 180.0) / 360.0 * n)
+    lr = math.radians(lat)
+    y = int((1.0 - math.log(math.tan(lr) + 1.0 / math.cos(lr)) / math.pi) / 2.0 * n)
+    return x, y
+
+
+async def _download_tile(url: str) -> bytes | None:
+    try:
+        async with httpx.AsyncClient(timeout=15, headers=UA, follow_redirects=True) as c:
+            r = await c.get(url)
+            ct = r.headers.get("content-type", "")
+            if r.status_code == 200 and "image" in ct and len(r.content) > 1000:
+                return r.content
+    except Exception:
+        pass
+    return None
 
 async def detect_smoke_from_tile(tile_url: str = None, lat: float=13.9, lon: float=108.3, bbox: str="107.3,13.1,109.4,14.7") -> Dict:
     # Gia Lai bbox default, tile_url e.g. https://server.arcgisonline.com/.../{z}/{y}/{x} or Sentinel
@@ -10,20 +33,28 @@ async def detect_smoke_from_tile(tile_url: str = None, lat: float=13.9, lon: flo
     import os
     has_key = bool(get_settings().gemini_api_key or os.getenv("GEMINI_API_KEY"))
     
-    # Download tile if url given (sample center tile z=12)
+    # Download tile: template {z}/{x}/{y} → tính đúng ô chứa lat/lon
+    # (KHÔNG hard-code tọa độ ô — ô cũ rơi ra biển, tile trắng 678B);
+    # URL cụ thể (không placeholder) → tải trực tiếp.
     image_b64 = None
-    if tile_url and "{z}" in tile_url:
+    if tile_url:
         try:
-            sample_url = tile_url.replace("{z}","12").replace("{x}","3340").replace("{y}","1830")
-            async with httpx.AsyncClient(timeout=10) as c:
-                r = await c.get(sample_url)
-                if r.status_code==200 and len(r.content) > 1000:
-                    image_b64 = base64.b64encode(r.content).decode()
-        except: pass
+            if "{z}" in tile_url or "{x}" in tile_url or "{y}" in tile_url:
+                tx, ty = _latlon_to_tile(lat, lon, 12)
+                sample_url = (tile_url.replace("{z}", "12").replace("{x}", str(tx)).replace("{y}", str(ty)))
+                blob = await _download_tile(sample_url)
+            else:
+                blob = await _download_tile(tile_url)
+            if blob:
+                image_b64 = base64.b64encode(blob).decode()
+        except Exception:
+            pass
     
-    # Gemini Vision multimodal
+    # Gemini Vision multimodal (sync SDK → chạy trong thread để không block loop)
     sdk_error = ""
+    used_model = None
     if has_key and image_b64:
+        import asyncio, json
         try:
             from google import genai
             client = genai.Client(api_key=os.getenv("GEMINI_API_KEY") or get_settings().gemini_api_key)
@@ -32,17 +63,30 @@ async def detect_smoke_from_tile(tile_url: str = None, lat: float=13.9, lon: flo
             - Nếu không, trả {"is_smoke": false, "confidence": 0.9}
             Chỉ trả JSON."""
             # Send image as inline data
-            resp = client.models.generate_content(
-                model="gemini-3.6-flash",
-                contents=[prompt, {"inline_data": {"mime_type": "image/jpeg", "data": image_b64[:200000]}}],
-                config={"response_mime_type": "application/json", "temperature": 0.2}
-            )
-            import json
-            data = json.loads(resp.text)
+            def _gen(model: str):
+                return client.models.generate_content(
+                    model=model,
+                    contents=[prompt, {"inline_data": {"mime_type": "image/jpeg", "data": image_b64[:200000]}}],
+                    config={"response_mime_type": "application/json", "temperature": 0.2},
+                )
+            # Fallback model khi bản chính quá tải (pattern như llm/provider.py)
+            data = None
+            for _m in ("gemini-3.6-flash", "gemini-3.5-flash"):
+                try:
+                    resp = await asyncio.to_thread(_gen, _m)
+                    data = json.loads(resp.text)
+                    used_model = _m
+                    break
+                except Exception as _me:
+                    sdk_error = str(_me)[:150]
+                    continue
+            if data is None:
+                raise RuntimeError(sdk_error or "vision failed")
             # Auto create alert if smoke
             if data.get("is_smoke"):
                 data["alert"] = {"level": "CRITICAL", "message": f"Phát hiện khói tại {lat},{lon} - {data.get('reason')}", "bbox": bbox, "timestamp": time.time(), "source": "Gemini Vision", "tile_url": tile_url}
-            return {"status": "LIVE", "provider": "Gemini Vision 2.5", "result": data, "tile_url": tile_url}
+            data["model"] = used_model
+            return {"status": "LIVE", "provider": "Gemini Vision", "model": used_model, "result": data, "tile_url": tile_url}
         except Exception as e:
             sdk_error = str(e)[:150]
     # Fallback TRUNG THỰC — không bao giờ bịa phát hiện khói.

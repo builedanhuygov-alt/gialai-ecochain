@@ -97,5 +97,7 @@ class CitizenReport(Base):
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     administrative_unit_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    linked_event_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    match_distance_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="PENDING")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

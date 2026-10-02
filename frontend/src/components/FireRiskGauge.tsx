@@ -120,14 +120,15 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
         </div>
       ) : score !== null && (
         <div className="text-[11px] text-slate-600 leading-relaxed">
-          {/* RC: fallback không Risk/100 — chỉ MISSING + nguồn thiếu. */}
-          <div>MISSING: chưa có bản tin CẤP. FIELD_VERIFICATION_REQUIRED.</div>
+          <div className="font-bold text-slate-800">AI đã tính Cấp {level}{score !== null ? ` · điểm ${score}/100` : ''}</div>
+          <div className="mt-0.5 text-amber-700">Chưa phát hành bản tin chính thức — cần bổ sung bằng chứng và xác minh thực địa.</div>
           {(factors.length > 0 || missing.length > 0) && (
             <div className="mt-0.5 break-words">
               {factors.length > 0 && <span>· {factors.join(', ')}</span>}
-              {missing.length > 0 && <span title="Nguồn thiếu"> · thiếu: {missing.join(', ')}</span>}
+              {missing.length > 0 && <span title="Nguồn thiếu"> · còn thiếu: {missing.join(', ')}</span>}
             </div>
           )}
+          <div className="mt-0.5 text-slate-500">FIELD_VERIFICATION_REQUIRED</div>
         </div>
       )}
 

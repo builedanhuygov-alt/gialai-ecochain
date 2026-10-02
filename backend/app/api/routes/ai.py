@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 import json, time, asyncio
 from app.core.config import get_settings
+from app.database import get_db
 from app.services.ai.orchestrator import orchestrate
 from app.services.llm.provider import get_llm_provider
 from app.services.rag.vector_store import get_vector_store
@@ -73,11 +74,34 @@ async def ai_analyze(req: ChatRequest):
         })
 
 @router.post("/ai/fire-risk")
-async def ai_fire_risk(req: FireRiskRequest):
+async def ai_fire_risk(req: FireRiskRequest, db=Depends(get_db)):
     t0 = time.time()
     try:
-        q = f"Gia Lai hiện tại có khu vực nào nguy cơ cháy rừng cao? lat {req.lat} lon {req.lon}"
-        return await orchestrate(q, lat=req.lat, lon=req.lon)
+        # Use the same live risk engine as /api/fire/risk. The AI drawer may
+        # explain this result, but it must never replace measured risk with a
+        # prompt default or an orchestrator estimate.
+        from app.api.routes.fire import fire_risk
+        live = await fire_risk(req.administrative_unit_id, req.lat, req.lon, db)
+        evidence = live.get("evidence") or {}
+        available = sum(bool(evidence.get(k)) for k in ("satellite", "weather", "terrain", "hotspots", "community"))
+        data_completeness = round(available / 5 * 100)
+        return {
+            "status": live.get("status", "LIVE"),
+            "source": "FireRiskEngine live",
+            "risk": {
+                "score": live.get("risk_score"),
+                "band": live.get("warning_level"),
+                "label": live.get("label"),
+                "confidence": (live.get("confidence") or 0) / 100,
+            },
+            "model_confidence": (live.get("confidence") or 0) / 100,
+            "data_completeness": data_completeness,
+            "factors": live.get("factors", {}),
+            "evidence": evidence,
+            "missing": live.get("missing", []),
+            "risk_live": live,
+            "latency_ms": int((time.time() - t0) * 1000),
+        }
     except Exception as e:
         from fastapi.responses import JSONResponse
         from app.core.secrets_guard import scrub_secrets
