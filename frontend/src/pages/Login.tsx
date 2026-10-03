@@ -61,7 +61,7 @@ export default function Login(){
   return (
     <div style={{maxWidth:400, margin:'48px auto', background:'#fff', border:'1px solid #E2E8E5', borderRadius:16, padding:24}}>
       <h1 style={{fontSize:18, fontWeight:800, marginBottom:4}}>Đăng nhập</h1>
-      <p style={{fontSize:12, color:'#64748B', marginTop:0}}>Tài khoản đầu tiên là <b>admin</b> — các tài khoản sau là viewer. Duyệt/phê duyệt chính thức cần quyền admin.</p>
+      <p style={{fontSize:12, color:'#64748B', marginTop:0}}>Tài khoản đầu tiên là <b>admin</b> — các tài khoản sau là vai trò thường. Duyệt/phê duyệt chính thức cần quyền admin.</p>
       <div style={{display:'flex', gap:8, margin:'12px 0'}}>
         {(['login','register'] as const).map(m=>(
           <button key={m} onClick={()=> setMode(m)} style={{flex:1, padding:'8px', borderRadius:999, border:'1px solid #0F766E', background: mode===m ? '#0F766E' : '#fff', color: mode===m ? '#fff' : '#0F766E', fontSize:13, fontWeight:700}}>{m === 'login' ? 'Đăng nhập' : 'Đăng ký'}</button>

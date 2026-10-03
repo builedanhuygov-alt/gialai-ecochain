@@ -11,6 +11,13 @@ depends_on = None
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
+    if inspector.has_table("missions"):
+        cols = {c["name"] for c in inspector.get_columns("missions")}
+        if "area" not in cols:
+            # Legacy phase7 agent-mission table (goal/scope/...): preserve rows
+            # under a new name, then create the field-mission table fresh.
+            op.rename_table("missions", "missions_legacy_phase7")
+            inspector = sa.inspect(bind)
     if not inspector.has_table("missions"):
         op.create_table(
             "missions",

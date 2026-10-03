@@ -13,6 +13,7 @@ import type { DrawerItem } from './AssetDrawer'
 import { getMode } from './ModeSwitch'
 import { findAlertAtExactCoordinates, findFireEventById, fireEventMapTarget, formatAdministrativeLocation, getCommunityReportCoordinates, getFireMarkerCoordinates, isLiveSourceStatus } from '../utils/truthfulData'
 import { coverageWord, dataSourceFromStatus } from '../utils/statusModel'
+import { hienThi } from '../utils/hienThi'
 
 // Icon/label asset dùng chung cho marker + drawer + legend.
 // RC B2: legend render từ đúng các hằng số này (không hardcode riêng,
@@ -22,6 +23,18 @@ const TYPE_OF: Record<string,string> = { watchtower:'Chòi canh', camera:'Camera
 // RC B2: màu CẤP xã — một nguồn duy nhất cho cả vòng tròn map lẫn legend.
 const LEVEL_COLORS: Record<string,string> = { I:'#0EA5E9', II:'#10B981', III:'#F59E0B', IV:'#F97316', V:'#DC2626' }
 const LEVEL_ORDER = ['I','II','III','IV','V']
+// Mã trạng thái nguồn (LIVE/DEMO/...) -> tiếng Việt hiển thị. Logic so sánh giữ mã gốc.
+const trangThaiNguon = (s: unknown): string => {
+  const t = String(s || '').toUpperCase()
+  if(t === 'LIVE') return 'TRỰC TIẾP'
+  if(t === 'ANALYZING') return 'ĐANG PHÂN TÍCH'
+  if(t === 'DEMO' || t === 'DEMO DATA') return 'GIẢ LẬP'
+  if(t === 'CACHED') return 'LƯU TẠM'
+  if(t === 'STALE') return 'DỮ LIỆU CŨ'
+  if(t === 'CONFIGURATION_REQUIRED') return 'CHƯA CẤU HÌNH'
+  if(t === 'UNAVAILABLE') return 'KHÔNG CÓ'
+  return hienThi(s)
+}
 const ASSET_KEYS = ['water','hydro','station','team','firetruck','pump','camera','watchtower'] as const
 
 // M9/M11: vị trí tương đối trong tỉnh Gia Lai — tính thuần từ bbox thực
@@ -71,11 +84,12 @@ const TILE_FIX = (url: string) => url.replace(/[\r\n]/g, "").trim()
 
 // (Trạm cố định đã thay bằng điểm CẤP cháy từng xã — vector, không lệch khi zoom)
 
-export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts, fireAlertsStatus: suppliedFireAlertsStatus }: {
+export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts, fireAlertsStatus: suppliedFireAlertsStatus, start3d }: {
   onSelect?: (type:string, id:string)=>void
   fill?: boolean
   fireAlerts?: any[]
   fireAlertsStatus?: string
+  start3d?: boolean
 }) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
@@ -133,7 +147,7 @@ export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts
   // M8: một Operational Status duy nhất — bấm để mở chi tiết nguồn.
   const [statusOpen, setStatusOpen] = useState(false)
   // 3D địa hình (MapLibre terrain, DEM miễn phí Terrarium — không cần key)
-  const [terrain3d, setTerrain3d] = useState(false)
+  const [terrain3d, setTerrain3d] = useState(!!start3d)
   useEffect(()=>{
     const map = mapRef.current as any
     if(!map) return
@@ -392,7 +406,7 @@ export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts
         typeLabel: 'Tín hiệu nhiệt — cần xác minh',
         lon:flon, lat:flat, status:'NGHI NGỜ · CẦN XÁC MINH',
         priority: a.distance_km != null ? `${a.distance_km} km` : undefined,
-        note: `Nguồn: NASA FIRMS · ${a.source_details?.status || 'MISSING'} · Địa giới: ${formatAdministrativeLocation(a.location)} · ${a.location?.verified_by_boundary ? 'Xác định bằng polygon' : 'Chưa xác định'}${referenceNote ? ` · ${referenceNote}` : ''}`,
+        note: `Nguồn: NASA FIRMS · ${trangThaiNguon(a.source_details?.status)} · Địa giới: ${formatAdministrativeLocation(a.location)} · ${a.location?.verified_by_boundary ? 'Xác định bằng polygon' : 'Chưa xác định'}${referenceNote ? ` · ${referenceNote}` : ''}`,
         fire:{ date: `${a.acq_date || ''} ${a.acq_time || ''}`.trim() },
       })
       openersRef.current.set(akey, { open:()=> openDrawer(buildAlertItem()), lon:flon, lat:flat })
@@ -674,9 +688,9 @@ export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts
               key:hkey, kind:'hotspot', icon: artificial ? '🌡️' : '🔥',
               name: `FIRMS HOTSPOT ${hotspotId.replace(/^firms-/, '#')}${artificial ? ' · Nghi nhân tạo' : ''}`,
               typeLabel: artificial ? 'Nhiệt nhân tạo (không tính là cháy)' : 'Tín hiệu nhiệt — cần xác minh',
-              lon:lng, lat, status:`${f.satellite || data.satellite || 'VIIRS'} · ${data.status || 'MISSING'}`,
+              lon:lng, lat, status:`${f.satellite || data.satellite || 'VIIRS'} · ${hienThi(data.status)}`,
               priority: f.frp ? `${f.frp} MW` : (f.brightness ? `${f.brightness} K` : undefined),
-              note: `${artificial ? `Gần ${f.artificial_source?.name || 'hạ tầng phát nhiệt'} (${f.artificial_source?.distance_km ?? 'MISSING'} km)` : `Nguồn: NASA FIRMS · ${data.status || 'MISSING'}. Điểm nhiệt vệ tinh, cần xác minh thực địa`} · Địa giới: ${administrativeLocation} · ${boundaryQuality}`,
+              note: `${artificial ? `Gần ${f.artificial_source?.name || 'hạ tầng phát nhiệt'} (${hienThi(f.artificial_source?.distance_km)} km)` : `Nguồn: NASA FIRMS · ${hienThi(data.status)}. Điểm nhiệt vệ tinh, cần xác minh thực địa`} · Địa giới: ${administrativeLocation} · ${boundaryQuality}`,
               fire:{ date:`${f.acq_date || ''} ${f.acq_time || ''}`.trim() },
             })
             openersRef.current.set(hkey, { open:()=> openDrawer(buildHotItem()), el, lon:lng, lat })
@@ -1495,7 +1509,7 @@ setRiskMeta(j.meta || null)
         <div title="Trạng thái vận hành — xem chi tiết ở thanh đáy" className="chip-x" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:'8px 14px', fontSize:12, display:'flex', gap:8, alignItems:'center', color:'#0B1412', whiteSpace:'nowrap', boxShadow:'0 8px 24px rgba(0,0,0,0.12)'}}>
           {(()=>{
             const dot = (c:string)=> <span style={{width:8, height:8, borderRadius:999, background:c, display:'inline-block', flex:'none'}}/>
-            if(mode==='demo') return (<>{dot('#F59E0B')}<span style={{fontWeight:800}}>📡 DEMO</span></>)
+            if(mode==='demo') return (<>{dot('#F59E0B')}<span style={{fontWeight:800}}>📡 GIẢ LẬP</span></>)
             const live = [sourceLive.firms, sourceLive.gee, sourceLive.sentinel2].filter(s=> s==='LIVE').length
             const known = [sourceLive.firms, sourceLive.gee, sourceLive.sentinel2].filter(Boolean).length
             if(known > 0 && live === known) return (<>{dot('#10B981')}<span style={{fontWeight:800}}>Dữ liệu: ĐẦY ĐỦ</span></>)
@@ -1520,7 +1534,7 @@ setRiskMeta(j.meta || null)
       {/* P10 one-attention: khi banner cháy hiện thì degraded nhường (ghi chú
           gộp vào banner cháy) — một thời điểm một điểm nhấn. */}
       {levelsState==='degraded' && (
-        <div style={{background:'rgba(69,26,3,0.92)', color:'#FDE68A', borderRadius:999, padding:'6px 14px', fontSize:11, fontWeight:700, boxShadow:'0 4px 12px rgba(0,0,0,0.2)', maxWidth:'92vw', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', pointerEvents:'auto'}}>⚠️ Cấp cháy từng xã chưa tải đủ. Điểm xám là MISSING, không phải mức an toàn</div>
+        <div style={{background:'rgba(69,26,3,0.92)', color:'#FDE68A', borderRadius:999, padding:'6px 14px', fontSize:11, fontWeight:700, boxShadow:'0 4px 12px rgba(0,0,0,0.2)', maxWidth:'92vw', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', pointerEvents:'auto'}}>⚠️ Cấp cháy từng xã chưa tải đủ. Điểm xám là chưa có dữ liệu, không phải mức an toàn</div>
       )}
 
       {/* FIRMS proximity is a signal, never a confirmed-fire banner. */}
@@ -1545,7 +1559,7 @@ setRiskMeta(j.meta || null)
             <div style={{marginTop:6, display:'flex', flexDirection:'column', gap:6}}>
               {spreadInfo.steps.map((s:any)=> (
                 <div key={s.hour} style={{fontSize:11, background:'#FEF2F2', borderRadius:8, padding:'6px 8px'}}>
-                   <b>Sau {s.hour}h:</b> lan {s.length_km} km · {s.area_ha} ha · gió {spreadInfo.inputs?.wind_speed_kmh ?? 'MISSING'} km/h
+                   <b>Sau {s.hour}h:</b> lan {s.length_km} km · {s.area_ha} ha · gió {hienThi(spreadInfo.inputs?.wind_speed_kmh)} km/h
                   {(s.affected_communes?.length > 0) && <div style={{marginTop:2}}>🏘️ {s.affected_communes.map((c:any)=> c.name).join(' · ')}</div>}
                 </div>
               ))}
@@ -1627,11 +1641,11 @@ setRiskMeta(j.meta || null)
         <label style={{display:'flex', gap:6, alignItems:'center', background: terrain3d?'rgba(16,185,129,0.25)':'rgba(255,255,255,0.08)', padding:'6px 8px', borderRadius:8, fontSize:12, border:'1px solid rgba(255,255,255,0.15)', cursor:'pointer', color:'#fff'}}>
           <input type="checkbox" checked={terrain3d} onChange={()=> setTerrain3d(v=> !v)} /> ⛰️ 3D địa hình (kéo chuột phải để nghiêng)
         </label>
-        <div style={{fontSize:11, fontWeight:700, opacity:.9}}>Lớp AI/GEE</div>
+        <div style={{fontSize:11, fontWeight:700, opacity:.9}}>Lớp AI/vệ tinh</div>
         {[
           ['hotspot','🔥 Điểm nhiệt FIRMS', 'hotspot', 'VIIRS_SNPP_NRT'],
           ['ndvi','🌿 NDVI', 'ndvi', 'ndvi'],
-          ['s1','📡 Sentinel-1 VV/VH', 's1', 's1'],
+          ['s1','📡 Sentinel-1 (ảnh radar)', 's1', 's1'],
         ].map(([k,label, key, geeLayer])=>(
           <label key={k} style={{display:'flex', gap:6, alignItems:'center', background: activeSat[key]?'rgba(16,185,129,0.25)':'rgba(255,255,255,0.08)', padding:'6px 8px', borderRadius:8, fontSize:12, border:'1px solid rgba(255,255,255,0.15)', cursor:'pointer', color:'#fff'}}>
             <input type="checkbox" checked={!!activeSat[key as string]} onChange={()=> toggleSat(key as string, geeLayer as string)} /> {label}
@@ -1737,11 +1751,11 @@ setRiskMeta(j.meta || null)
               new (maplibregl as any).Marker({ element: el }).setLngLat([center?.lng || 108.3, center?.lat || 13.9] as any).addTo(mapRef.current)
             }
           }catch(e){ setInfo({ layer:'smoke', status:'UNAVAILABLE', reason:String(e) }) }
-        }} className="ai-vision-button" title="Phân tích ảnh nền hiện tại bằng AI Vision">{info?.layer==='smoke' && info?.status==='ANALYZING' ? '⏳ Đang phân tích' : '◉ AI Vision / Detection'}</button>
+        }} className="ai-vision-button" title="Phân tích ảnh nền hiện tại bằng AI">{info?.layer==='smoke' && info?.status==='ANALYZING' ? '⏳ Đang phân tích' : '◉ AI nhận diện khói'}</button>
         <div className="ecomap-legend" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:14, padding:'12px 14px', fontSize:12, boxShadow:'0 8px 24px rgba(0,0,0,0.10)', maxHeight:260, overflow:'auto'}}>
           <div style={{fontWeight:800, fontSize:12}}>Chú giải</div>
           <div className="ai-vision-summary">
-            <div><span>AI VISION / DETECTION</span><b>{info?.layer==='smoke' ? (info.status === 'ANALYZING' ? 'ĐANG PHÂN TÍCH' : info.status || 'MISSING') : 'CHƯA CÓ KẾT QUẢ'}</b></div>
+            <div><span>AI NHẬN DIỆN ẢNH</span><b>{info?.layer==='smoke' ? (info.status === 'ANALYZING' ? 'ĐANG PHÂN TÍCH' : trangThaiNguon(info.status)) : 'CHƯA CÓ KẾT QUẢ'}</b></div>
             {info?.layer==='smoke' && info?.is_smoke === true && <div><span>Vùng nghi ngờ</span><b>1</b></div>}
             {info?.layer==='smoke' && info?.reason && <small>{info.reason}</small>}
           </div>
@@ -1753,7 +1767,7 @@ setRiskMeta(j.meta || null)
               <span style={{width:10, height:10, borderRadius:999, background:LEVEL_COLORS[lv], display:'inline-block', flex:'none'}} />Cấp {lv}
             </div>
           ))}
-          {levelsState==='degraded' && <div>⬜ Điểm xám — MISSING (chưa có dữ liệu)</div>}
+          {levelsState==='degraded' && <div>⬜ Điểm xám — chưa có dữ liệu</div>}
           <div className="eleg-sec">RANH GIỚI</div>
           {showProvince && <div style={{display:'flex', gap:6, alignItems:'center'}}><span style={{width:18, borderTop:'2px solid #E5F3FF', display:'inline-block'}} />Tỉnh</div>}
           {showCommunes && <div style={{display:'flex', gap:6, alignItems:'center'}}><span style={{width:18, borderTop:'1px solid #ffffff', outline:'1px solid #0B1412', display:'inline-block'}} />Xã</div>}
@@ -1761,13 +1775,13 @@ setRiskMeta(j.meta || null)
           {ASSET_KEYS.map(k=> assetVis[k] ? <div key={k}>{ICON_OF[k]} {TYPE_OF[k]}</div> : null)}
           <div className="eleg-sec">ĐỐI TƯỢNG</div>
           {levelsState==='degraded'
-            ? <div>🏘️ Điểm CẤP xã — MISSING (bấm vào xã để chẩn đoán)</div>
+            ? <div>🏘️ Điểm CẤP xã — chưa có dữ liệu (bấm vào xã để chẩn đoán)</div>
             : <div>🏘️ Điểm CẤP từng xã (bấm để xem)</div>}
           {hasRoutes && <div>🛣️ Tuyến tiếp cận</div>}
           {activeSat.hotspot && <div>🔥 Điểm nóng FIRMS</div>}
           {activeSat.hotspot && <div>🌡️ Nhiệt nhân tạo (loại khỏi cảnh báo)</div>}
           {activeSat.ndvi && <div>🌿 NDVI (raster)</div>}
-          {activeSat.s1 && <div>📡 Sentinel-1 (raster)</div>}
+          {activeSat.s1 && <div>📡 Sentinel-1 (ảnh radar)</div>}
           {showRiskGrid && <div className="eleg-sec">BẢN ĐỒ NHIỆT NGUY CƠ</div>}
           {showRiskGrid && LEVEL_ORDER.map(lv=> (
             <div key={`rg-${lv}`} style={{display:'flex', gap:6, alignItems:'center'}}>
@@ -1782,7 +1796,7 @@ setRiskMeta(j.meta || null)
           <div>🏠 Cháy nhà · 🏭 Cháy cơ sở</div>
           {assetVis.historical && <div>🔥 Từng cháy 2026 · 🏠 Sự cố tử vong</div>}
           <div>📍 Vị trí tìm kiếm</div>
-          {info?.layer==='smoke' && info?.is_smoke && <div style={{marginTop:6, padding:'6px 8px', background:'#FEE2E2', borderRadius:8, color:'#991B1B', fontWeight:700}}>🚨 Vùng nghi ngờ khói<br/><span style={{fontWeight:400, fontSize:10}}>Kết quả AI Vision LIVE. Cần xác minh thực địa.</span></div>}
+          {info?.layer==='smoke' && info?.is_smoke && <div style={{marginTop:6, padding:'6px 8px', background:'#FEE2E2', borderRadius:8, color:'#991B1B', fontWeight:700}}>🚨 Vùng nghi ngờ khói<br/><span style={{fontWeight:400, fontSize:10}}>Kết quả AI nhận diện (trực tiếp). Cần xác minh thực địa.</span></div>}
           {info?.layer==='smoke' && info?.is_smoke===false && info?.status==='LIVE' && <div style={{marginTop:6, padding:'6px 8px', background:'#DCFCE7', borderRadius:8, color:'#065F46'}}>✓ Không có khói — an toàn</div>}
           {info?.layer==='smoke' && info?.is_smoke!==true && info?.is_smoke!==false && <div style={{marginTop:6, padding:'6px 8px', background:'#FEF3C7', borderRadius:8, color:'#92400E'}}>{info.reason || 'AI khói chưa khả dụng. Không kết luận.'}</div>}
         </div>
@@ -1852,19 +1866,19 @@ setRiskMeta(j.meta || null)
       {/* M11: info-panel chừa gutter phải cho nav (ẩn ở Clean Mode) */}
       {!execView && info && (
         <div className="info-panel" style={{position:'absolute', bottom:'max(58px, calc(58px + env(safe-area-inset-bottom, 0px)))', right:76, background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:12, padding:12, minWidth:280, maxWidth:360, boxShadow:'0 8px 24px rgba(0,0,0,0.12)'}}>
-          {info && info.layer==='watch' && <><div style={{fontWeight:700, fontSize:12}}>👁 FIRMS HOTSPOT · <span style={{fontSize:10, color:'#64748B'}}>{info.status === 'ANALYZING' ? 'ĐANG KIỂM TRA' : info.status}</span></div><div style={{fontSize:12, marginTop:6, color:'#334155'}}>📍 Tọa độ: {info.fire?.lat?.toFixed(4)}°N, {info.fire?.lon?.toFixed(4)}°E<br/>Nguồn: FIRMS · {info.fire?.date || 'MISSING'}{info.fire?.distance_km != null ? ` · ${info.fire.distance_km} km` : ''}</div>{info.status === 'ANALYZING' && <div style={{fontSize:12, marginTop:6, color:'#64748B'}}>Đang lấy phân tích rủi ro...</div>}{info.status !== 'ANALYZING' && (info.rating ? <div style={{fontSize:12, marginTop:6, display:'flex', flexDirection:'column', gap:3}}><div>🔥 RISK <b>{info.rating.level}</b> · {info.rating.label}</div><div>⚠ Driver: <b>{info.rating.driver}</b></div><div>✅ Hành động: <b>{info.rating.action}</b></div><div style={{color:'#64748B', fontSize:11}}>Độ phủ: {info.rating.coverage}</div></div> : <div style={{fontSize:12, marginTop:6, color:'#B45309'}}>Đang chờ phân tích. FIELD_VERIFICATION_REQUIRED.</div>)}</>}
+          {info && info.layer==='watch' && <><div style={{fontWeight:700, fontSize:12}}>👁 ĐIỂM NÓNG FIRMS · <span style={{fontSize:10, color:'#64748B'}}>{info.status === 'ANALYZING' ? 'ĐANG KIỂM TRA' : trangThaiNguon(info.status)}</span></div><div style={{fontSize:12, marginTop:6, color:'#334155'}}>📍 Tọa độ: {info.fire?.lat?.toFixed(4)}°N, {info.fire?.lon?.toFixed(4)}°E<br/>Nguồn: FIRMS · {hienThi(info.fire?.date)}{info.fire?.distance_km != null ? ` · ${info.fire.distance_km} km` : ''}</div>{info.status === 'ANALYZING' && <div style={{fontSize:12, marginTop:6, color:'#64748B'}}>Đang lấy phân tích rủi ro...</div>}{info.status !== 'ANALYZING' && (info.rating ? <div style={{fontSize:12, marginTop:6, display:'flex', flexDirection:'column', gap:3}}><div>🔥 Điểm <b>{info.rating.level}</b> · {info.rating.label}</div><div>⚠ Nguyên nhân: <b>{info.rating.driver}</b></div><div>✅ Hành động: <b>{info.rating.action}</b></div><div style={{color:'#64748B', fontSize:11}}>Độ phủ: {info.rating.coverage}</div></div> : <div style={{fontSize:12, marginTop:6, color:'#B45309'}}>Đang chờ phân tích. Cần xác minh thực địa.</div>)}</>}
           {info && info.layer==='forecast' && <><div style={{fontWeight:700, fontSize:12}}>📋 BẢN TIN DỰ BÁO — {info.name}</div><div style={{marginTop:6}}>
             {info.status==='LOADING' && <span style={{fontSize:12, color:'#64748B'}}>Đang lấy bản tin</span>}
             {info.status!=='LOADING' && info.rating && <ForecastCard area={info.name} rating={info.rating} firms={info.firms} temp={info.temp != null ? `${info.temp}°C` : 'MISSING'} condition={info.condition} updated={info.updated} />}
             {info.status!=='LOADING' && !info.rating && <span style={{fontSize:12, color:'#B91C1C'}}>Không lấy được bản tin (UNAVAILABLE).</span>}
           </div></>}
-          {info && info.layer!=='watch' && info.layer!=='forecast' && <><div style={{fontWeight:700, fontSize:12}}>DỮ LIỆU VỆ TINH — {info.layer} <span style={{fontSize:10, color:'#64748B'}}>{info.status==='CONFIGURATION_REQUIRED' ? 'DEMO · Cache Vệ tinh Gia Lai' : info.status}</span></div><div style={{fontSize:12, marginTop:6, color:'#334155'}}>Nguồn: {info.status==='CONFIGURATION_REQUIRED' ? 'Esri/Sentinel Tile tĩnh · DEMO Cache' : (info.source || 'Sentinel-2')} · Ngày: {info.acquired || info.date || 'MISSING'} {info.status==='CONFIGURATION_REQUIRED' && <span style={{color:'#F59E0B'}}>· Fallback BaseMap</span>}</div>
+          {info && info.layer!=='watch' && info.layer!=='forecast' && <><div style={{fontWeight:700, fontSize:12}}>DỮ LIỆU VỆ TINH — {info.layer} <span style={{fontSize:10, color:'#64748B'}}>{info.status==='CONFIGURATION_REQUIRED' ? 'GIẢ LẬP · Ảnh vệ tinh lưu sẵn Gia Lai' : trangThaiNguon(info.status)}</span></div><div style={{fontSize:12, marginTop:6, color:'#334155'}}>Nguồn: {info.status==='CONFIGURATION_REQUIRED' ? 'Ảnh tĩnh Esri/Sentinel · bộ nhớ đệm giả lập' : (info.source || 'Sentinel-2')} · Ngày: {hienThi(info.acquired || info.date)} {info.status==='CONFIGURATION_REQUIRED' && <span style={{color:'#F59E0B'}}>· Nền dự phòng</span>}</div>
           {info.layer==='smoke' && info.is_smoke && <div style={{marginTop:6, padding:'6px 8px', background:'#FEE2E2', borderRadius:8, color:'#991B1B', fontSize:11, fontWeight:700}}>🚨 {info.alert?.message || 'Phát hiện khói'}<br/><span style={{fontWeight:400}}>Vision phát hiện khói. {info.reason}</span></div>}
           </>}
         </div>
       )}
 
-      {mode==='demo' && !tourOpen && !execView && <button onClick={()=>setTourOpen(true)} style={{position:'absolute', bottom:'max(58px, calc(58px + env(safe-area-inset-bottom, 0px)))', right:76, zIndex:20, border:0, borderRadius:999, background:'#F59E0B', color:'#000', fontWeight:800, fontSize:12, padding:'8px 14px', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,0,0,0.2)'}}>▶ Tutorial DEMO</button>}
+      {mode==='demo' && !tourOpen && !execView && <button onClick={()=>setTourOpen(true)} style={{position:'absolute', bottom:'max(58px, calc(58px + env(safe-area-inset-bottom, 0px)))', right:76, zIndex:20, border:0, borderRadius:999, background:'#F59E0B', color:'#000', fontWeight:800, fontSize:12, padding:'8px 14px', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,0,0,0.2)'}}>▶ Hướng dẫn dùng thử</button>}
       {mode==='demo' && tourOpen && <DemoTour onDone={()=>setTourOpen(false)} />}
 
       {/* P1 Asset Detail Drawer (single selection) + P4 hover preview */}

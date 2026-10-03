@@ -52,3 +52,14 @@ def test_grid_validates():
     assert c.get("/api/fire-risk/grid?bbox=nope").status_code == 400
     # whole province at 1 km -> too many cells
     assert c.get("/api/fire-risk/grid?cell_km=1").status_code == 400
+
+
+def test_grid_without_firms_key_stays_honest(monkeypatch):
+    """No FIRMS key: endpoint still 200, firms factor missing — never fake fires."""
+    from app.core.config import Settings
+    monkeypatch.setattr(Settings, "effective_firms_key", property(lambda self: None))
+    c = setup()
+    r = c.get("/api/fire-risk/grid?bbox=108.2,13.8,108.4,13.9&cell_km=5")
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert "unavailable" in (d["meta"]["fires"] or "").lower() or d["meta"]["fires"] == "0 live FIRMS points" or "FIRMS" in d["meta"]["fires"]

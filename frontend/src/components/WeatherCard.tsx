@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react'
 import { useLocation } from '../hooks/useLocation'
 import { API_BASE } from '../services/api'
 
+function trangThaiThoTiet(s: unknown): string {
+  const t = String(s || '').toUpperCase()
+  if(t === 'LIVE') return 'TRỰC TIẾP'
+  if(t === 'CACHED') return 'LƯU TẠM'
+  if(t === 'STALE') return 'DỮ LIỆU CŨ'
+  if(t === 'DEMO DATA' || t === 'DEMO') return 'GIẢ LẬP'
+  if(!t) return '—'
+  return String(s)
+}
+
 export default function WeatherCard(){
   const { state, request } = useLocation()
   const [weather, setWeather] = useState<any>(null)
@@ -33,9 +43,9 @@ export default function WeatherCard(){
       <div className="weather-head">
         <div>
           <div className="weather-title">📍 Vị trí của bạn</div>
-          <div className="weather-privacy">Vị trí chỉ lưu tạm, chỉ gửi khi lấy thời tiết. Không track liên tục. <a href="#" style={{textDecoration:'underline'}}>Chính sách</a></div>
+          <div className="weather-privacy">Vị trí chỉ lưu tạm, chỉ gửi khi lấy thời tiết. Không theo dõi liên tục. <a href="#" style={{textDecoration:'underline'}}>Chính sách</a></div>
         </div>
-        <span className={`badge ${weather?.metadata?.status==='LIVE' ? 'live':'demo'}`}>{weather?.metadata?.status || '—'}</span>
+        <span className={`badge ${weather?.metadata?.status==='LIVE' ? 'live':'demo'}`}>{trangThaiThoTiet(weather?.metadata?.status)}</span>
       </div>
 
       {state.status==='idle' && (
@@ -46,7 +56,7 @@ export default function WeatherCard(){
       )}
       {state.status==='locating' && <div className="weather-loading">Đang xác định vị trí của bạn...</div>}
       {state.status==='denied' && <div className="weather-error">{state.error} <button className="btn" onClick={request}>Thử lại</button></div>}
-      {state.status==='unsupported' && <div className="weather-error">Location is not supported on this device/browser.</div>}
+      {state.status==='unsupported' && <div className="weather-error">Thiết bị/trình duyệt không hỗ trợ định vị.</div>}
       {state.status==='error' && <div className="weather-error">{state.error}</div>}
 
       {state.status==='granted' && (
@@ -60,8 +70,8 @@ export default function WeatherCard(){
                 <span>🌧 {weather.current?.precipitation ?? 0}% mưa</span>
                 <span>💨 {weather.current?.windspeed ?? 12} km/h</span>
               </div>
-              <div className="forecast">Dự báo hôm nay — 12 ☀ 15 ☁ 18 🌧 21 🌧 00 ☁</div>
-              <div className="meta">Nguồn: {weather.metadata?.provider || 'Open-Meteo'} · {weather.metadata?.cache_status || 'LIVE'} · Cập nhật: {new Date().toLocaleTimeString()} · <span className="source-badge">{weather.metadata?.status || 'DEMO DATA'}</span></div>
+              <div className="forecast">Dự báo theo giờ: chưa có dữ liệu.</div>
+              <div className="meta">Nguồn: {weather.metadata?.provider || 'Open-Meteo'} · {trangThaiThoTiet(weather.metadata?.cache_status)} · Cập nhật: {new Date().toLocaleTimeString()} · <span className="source-badge">{trangThaiThoTiet(weather.metadata?.status)}</span></div>
             </div>
           )}
         </div>

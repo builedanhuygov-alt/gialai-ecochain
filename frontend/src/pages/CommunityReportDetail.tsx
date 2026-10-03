@@ -19,6 +19,15 @@ export default function CommunityReportDetail() {
   const { reportId = '' } = useParams()
   const [report, setReport] = useState<Report | null>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'unavailable'>('loading')
+  const [confs, setConfs] = useState<any[]>([])
+  const [nick, setNick] = useState('')
+  const [clat, setClat] = useState('')
+  const [clon, setClon] = useState('')
+  const [cmsg, setCmsg] = useState('')
+  const loadConfs = ()=>{
+    fetch(`${API_BASE}/api/citizen/fire-reports/${encodeURIComponent(reportId)}/confirmations`, { cache: 'no-store' })
+      .then(r=> r.ok ? r.json() : null).then(j=> setConfs(j?.confirmations || [])).catch(()=> {})
+  }
   useEffect(() => {
     let active = true
     fetch(`${API_BASE}/api/citizen/fire-reports/${encodeURIComponent(reportId)}`, { cache: 'no-store' })
@@ -27,10 +36,38 @@ export default function CommunityReportDetail() {
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         return response.json()
       })
-      .then(data => { if (active) { setReport(data); setState('ready') } })
+      .then(data => { if (active) { setReport(data); setState('ready'); loadConfs() } })
       .catch(error => { if (active) setState(String(error).includes('NOT_FOUND') ? 'missing' : 'unavailable') })
     return () => { active = false }
   }, [reportId])
+
+  const locate = ()=>{
+    if(!navigator.geolocation){ setCmsg('Trình duyệt không hỗ trợ định vị.'); return }
+    navigator.geolocation.getCurrentPosition(
+      p=> { setClat(String(p.coords.latitude.toFixed(6))); setClon(String(p.coords.longitude.toFixed(6))); setCmsg('') },
+      ()=> setCmsg('Không lấy được vị trí — nhập tay kinh/vĩ độ.'),
+      { timeout: 10000 })
+  }
+  const vote = async (confirmed: boolean)=>{
+    setCmsg('')
+    if(!nick.trim()){ setCmsg('Nhập biệt danh trước khi xác minh.'); return }
+    if(clat === '' || clon === ''){ setCmsg('Cần GPS của bạn (trong ~1 km quanh báo cáo).'); return }
+    try{
+      const r = await fetch(`${API_BASE}/api/citizen/fire-reports/${encodeURIComponent(reportId)}/confirm`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: nick.trim(), confirmed,
+          latitude: Number(clat), longitude: Number(clon),
+          device_id: (()=>{ try{
+            let d = localStorage.getItem('ecogl_device'); if(!d){ d = `dev-${Math.random().toString(36).slice(2)}`; localStorage.setItem('ecogl_device', d) } return d
+          }catch{ return undefined } })() }),
+      })
+      const j = await r.json().catch(()=> ({}))
+      if(!r.ok) throw new Error(j.detail || `HTTP ${r.status}`)
+      setCmsg(`Đã ghi nhận (${j.confirms} xác nhận). Trạng thái: ${j.report_status}`)
+      setReport((cur: any)=> cur ? { ...cur, status: j.report_status } : cur)
+      loadConfs()
+    }catch(e: any){ setCmsg(String(e.message || e)) }
+  }
 
   return (
     <main style={{ maxWidth: 860, margin: '0 auto', padding: 20, color: '#17251f' }}>
@@ -61,6 +98,30 @@ export default function CommunityReportDetail() {
               </figcaption>
             </figure>
           )) : <p style={{ fontSize: 12, color: '#63736c' }}>Chưa có ảnh thực địa.</p>}
+          <section aria-label="Xác minh báo cáo" style={{ marginTop: 16, borderTop: '1px solid #dce6e1', paddingTop: 12 }}>
+            <h2 style={{ fontSize: 15, margin: '0 0 4px' }}>Xác minh ({confs.filter(c=> c.confirmed).length} 👍 / {confs.filter(c=> !c.confirmed).length} 👎)</h2>
+            <p style={{ fontSize: 11, color: '#63736c', margin: '0 0 8px' }}>
+              Luật: mỗi người/thiết bị 1 lần · người báo không tự xác nhận · GPS trong ~1 km · trong 24 giờ.
+            </p>
+            {confs.map(c=> (
+              <div key={c.id} style={{ fontSize: 12, padding: '4px 0' }}>
+                <b>{c.user_id}</b> {c.confirmed ? '👍 xác nhận' : '👎 phản đối'}
+                <span style={{ color: '#63736c' }}> · {c.created_at ? new Date(c.created_at).toLocaleString('vi-VN') : ''}</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+              <input value={nick} onChange={e=> setNick(e.target.value)} placeholder="Biệt danh" aria-label="Biệt danh"
+                style={{ border: '1px solid #dce6e1', borderRadius: 8, padding: '8px 10px', fontSize: 13 }} />
+              <input value={clat} onChange={e=> setClat(e.target.value)} placeholder="Vĩ độ của bạn" aria-label="Vĩ độ của bạn"
+                style={{ border: '1px solid #dce6e1', borderRadius: 8, padding: '8px 10px', fontSize: 13, width: 130 }} />
+              <input value={clon} onChange={e=> setClon(e.target.value)} placeholder="Kinh độ của bạn" aria-label="Kinh độ của bạn"
+                style={{ border: '1px solid #dce6e1', borderRadius: 8, padding: '8px 10px', fontSize: 13, width: 130 }} />
+              <button onClick={locate} style={{ border: '1px solid #dce6e1', background: '#fff', borderRadius: 999, padding: '8px 12px', fontSize: 12 }}>📍 Vị trí tôi</button>
+              <button onClick={()=> vote(true)} style={{ background: '#0F766E', color: '#fff', border: 0, borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 700 }}>👍 Xác nhận cháy</button>
+              <button onClick={()=> vote(false)} style={{ background: '#fff', border: '1px solid #dce6e1', borderRadius: 999, padding: '8px 16px', fontSize: 13 }}>👎 Không cháy</button>
+            </div>
+            {cmsg && <p role="status" style={{ fontSize: 12, marginTop: 8 }}>{cmsg}</p>}
+          </section>
         </article>
       )}
     </main>

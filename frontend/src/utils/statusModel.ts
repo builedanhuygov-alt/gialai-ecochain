@@ -26,27 +26,27 @@ export function dataSourceFromStatus(status: unknown, demoMode = false): DataSou
 
 export function systemStatusLabel(status: SystemStatus): string {
   if (status === 'CHECKING') return 'ĐANG KIỂM TRA'
-  if (status === 'LIVE') return 'LIVE'
-  if (status === 'DEGRADED') return 'DEGRADED'
-  return 'OFFLINE'
+  if (status === 'LIVE') return 'TRỰC TIẾP'
+  if (status === 'DEGRADED') return 'SUY GIẢM'
+  return 'NGOẠI TUYẾN'
 }
 
 export function dataSourceLabel(kind: DataSourceKind): string {
   if (kind === 'LOADING') return 'ĐANG TẢI'
-  if (kind === 'FIRMS_LIVE') return 'FIRMS LIVE'
-  if (kind === 'FIRMS_CACHE') return 'FIRMS CACHE'
-  if (kind === 'FIRMS_STALE') return 'FIRMS STALE'
-  if (kind === 'DEMO') return 'DEMO'
-  if (kind === 'FALLBACK') return 'FIRMS FALLBACK'
-  return 'FIRMS UNAVAILABLE'
+  if (kind === 'FIRMS_LIVE') return 'FIRMS TRỰC TIẾP'
+  if (kind === 'FIRMS_CACHE') return 'FIRMS LƯU TẠM'
+  if (kind === 'FIRMS_STALE') return 'FIRMS DỮ LIỆU CŨ'
+  if (kind === 'DEMO') return 'GIẢ LẬP'
+  if (kind === 'FALLBACK') return 'FIRMS DỰ PHÒNG'
+  return 'FIRMS KHÔNG CÓ'
 }
 
 export function coverageWord(kind: DataSourceKind): { word: string; color: string } {
-  if (kind === 'DEMO') return { word: 'DEMO', color: '#F59E0B' }
-  if (kind === 'FIRMS_LIVE') return { word: 'FIRMS LIVE', color: '#10B981' }
+  if (kind === 'DEMO') return { word: 'GIẢ LẬP', color: '#F59E0B' }
+  if (kind === 'FIRMS_LIVE') return { word: 'FIRMS TRỰC TIẾP', color: '#10B981' }
   if (kind === 'FIRMS_CACHE' || kind === 'FIRMS_STALE') return { word: dataSourceLabel(kind), color: '#D97706' }
   if (kind === 'LOADING') return { word: 'ĐANG TẢI', color: '#64748B' }
-  if (kind === 'FALLBACK') return { word: 'FIRMS FALLBACK', color: '#D97706' }
+  if (kind === 'FALLBACK') return { word: 'FIRMS DỰ PHÒNG', color: '#D97706' }
   return { word: 'THIẾU NGUỒN FIRMS', color: '#EF4444' }
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useScope } from '../store/useScope'
 import { API_BASE } from '../services/api'
+import { hienThi } from '../utils/hienThi'
 
 const LEVELS = [
   { lv:'I', label:'Thấp', color:'bg-sky-500', text:'text-sky-600', bg:'bg-sky-50', border:'border-sky-200' },
@@ -11,13 +12,26 @@ const LEVELS = [
 ]
 
 const API = API_BASE.replace(/\/$/, '')
+// Mã nguồn thiếu (backend) -> tiếng Việt hiển thị.
+const tenNguonThieu = (k: string): string => ({
+  satellite: 'vệ tinh', weather: 'thời tiết', terrain: 'địa hình', firms: 'điểm nóng',
+  community: 'cộng đồng', fuel_dryness: 'thảm khô', weather_danger: 'thời tiết',
+  firms_proximity: 'điểm nóng', wind: 'gió', rainfall_deficit: 'mưa',
+  historical_community: 'lịch sử/cộng đồng',
+}[k] || k)
+const trangThaiTram = (s: string): string => {
+  const t = String(s || '').toUpperCase()
+  if(t === 'LIVE') return 'TRỰC TIẾP'
+  if(t === 'UNAVAILABLE') return 'KHÔNG CÓ'
+  if(t === 'DEMO' || t === 'DEMO DATA') return 'GIẢ LẬP'
+  return hienThi(s)
+}
 // Tọa độ đại diện từng khu vực để AI lấy vệ tinh/thời tiết/FIRMS đúng ô
 const AREA_COORDS: [string, number, number][] = [
   ['Chư Prông', 13.55, 107.65], ['Ia Mơr', 13.55, 107.65], ['Kon Ka Kinh', 14.25, 108.45],
   ['An Khê', 13.98, 108.65], ['Hội Sơn', 13.92, 108.68], ['Quy Nhơn', 13.78, 109.21],
 ]
-const coordsFor = (area:string): [number, number] => {
-  for(const [k, lat, lon] of AREA_COORDS) if(area.includes(k)) return [lat, lon]
+const coordsFor = (area:string): [number, number] => {  for(const [k, lat, lon] of AREA_COORDS) if(area.includes(k)) return [lat, lon]
   return [13.9, 108.3]
 }
 
@@ -63,7 +77,7 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
       const ev = j.evidence || {}
       const nHot = Array.isArray(ev.hotspots) ? ev.hotspots.length : (ev.hotspots ?? 0)
       const cov = j.forecast_rating?.data_coverage_status
-      setInputs(`FIRMS ${nHot} điểm · ${ev.weather?.temperature ?? 'MISSING'}°C${cov ? ` · Độ phủ ${cov}` : ''}`)
+      setInputs(`FIRMS ${nHot} điểm · ${hienThi(ev.weather?.temperature)}°C${cov ? ` · Độ phủ ${cov}` : ''}`)
       setStatus(j.status || 'LIVE')
     }catch{ setStatus('UNAVAILABLE') }
     setLoading(false)
@@ -104,18 +118,18 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
       {/* AI vệ tinh: đầu vào + trạng thái thật */}
       <div className="flex items-center gap-2 text-[10px] text-slate-500">
         <span>🛰️ {loading ? 'AI đang phân tích vệ tinh...' : inputs || 'Chờ AI vệ tinh'}</span>
-        <span className={`px-2 py-0.5 rounded-full font-bold ${status==='LIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>{status}</span>
+        <span className={`px-2 py-0.5 rounded-full font-bold ${status==='LIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>{trangThaiTram(status)}</span>
         {manual && <span className="px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-500 border border-slate-200">Chọn tay (admin)</span>}
         {!isAdmin && <span className="px-2 py-0.5 rounded-full font-bold bg-slate-50 text-slate-400 border border-slate-200" title="Chỉ admin/host được chỉnh tay">🔒 CẤP theo khu vực</span>}
         <button onClick={()=> analyze(scope.commune || scope.village || '', scope.lat, scope.lon)} className="ml-auto underline hover:text-slate-700">Cập nhật</button>
       </div>
       {rating ? (
         <div className="text-[11px] text-slate-600 leading-relaxed">
-          <div>⚠ <b>{rating.major_risk_driver || 'MISSING'}</b></div>
+          <div>⚠ <b>{hienThi(rating.major_risk_driver)}</b></div>
           <div>✅ {(rating.recommended_action || [])[0] || ''}</div>
           <div className="mt-0.5 break-words">
-            <span>Độ phủ: <b>{rating.data_coverage_status || 'MISSING'}</b></span>
-            {missing.length > 0 && <span title="Nguồn thiếu"> · thiếu: {missing.join(', ')}</span>}
+            <span>Độ phủ: <b>{hienThi(rating.data_coverage_status)}</b></span>
+            {missing.length > 0 && <span title="Nguồn thiếu"> · thiếu: {missing.map(tenNguonThieu).join(', ')}</span>}
           </div>
         </div>
       ) : score !== null && (
@@ -125,10 +139,10 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
           {(factors.length > 0 || missing.length > 0) && (
             <div className="mt-0.5 break-words">
               {factors.length > 0 && <span>· {factors.join(', ')}</span>}
-              {missing.length > 0 && <span title="Nguồn thiếu"> · còn thiếu: {missing.join(', ')}</span>}
+              {missing.length > 0 && <span title="Nguồn thiếu"> · còn thiếu: {missing.map(tenNguonThieu).join(', ')}</span>}
             </div>
           )}
-          <div className="mt-0.5 text-slate-500">FIELD_VERIFICATION_REQUIRED</div>
+          <div className="mt-0.5 text-slate-500">CẦN XÁC MINH THỰC ĐỊA</div>
         </div>
       )}
 

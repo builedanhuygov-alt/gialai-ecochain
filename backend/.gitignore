@@ -7,3 +7,5 @@ gialai-key.json
 *.sqlite3
 __pycache__/
 *.pyc
+# backtest result cache (regenerated on demand via the API)
+app/services/data/backtest_*.json

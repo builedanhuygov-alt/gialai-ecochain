@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, photoUrl } from '../services/api'
+import { hienThi } from '../utils/hienThi'
 
 // Enterprise asset UX — drawer thay popup nổi: bản đồ luôn đọc được,
 // ngữ cảnh được giữ, không modal giữa màn hình.
@@ -169,11 +170,11 @@ export default function AssetDrawer({ item, pinned, leaving, nearby, onClose, on
           {item.survey && (
             <div style={{background:'#F8FAFC', borderRadius:8, padding:8, display:'flex', flexDirection:'column', gap:2}}>
               <b style={{fontSize:11}}>🛣️ Khảo sát tuyến</b>
-              <div>Tình trạng: <b>{item.survey.road || 'MISSING'}</b></div>
-              <div>Mặt đường: <b>{item.survey.surface || 'MISSING'}</b></div>
-              <div>Tiếp cận mùa vụ: <b>{item.survey.seasonal || 'MISSING'}</b></div>
+              <div>Tình trạng: <b>{hienThi(item.survey.road)}</b></div>
+              <div>Mặt đường: <b>{hienThi(item.survey.surface)}</b></div>
+              <div>Tiếp cận mùa vụ: <b>{hienThi(item.survey.seasonal)}</b></div>
               <div>Giới hạn xe: <b>{item.survey.vehicleLimit != null ? `${item.survey.vehicleLimit} tấn` : 'MISSING'}</b></div>
-              <div style={{color:'#64748B', fontSize:11}}>Nguồn: {item.survey.source || 'MISSING'}{item.survey.verified ? ` · xác minh ${item.survey.verified}` : ''}</div>
+              <div style={{color:'#64748B', fontSize:11}}>Nguồn: {hienThi(item.survey.source)}{item.survey.verified ? ` · xác minh ${item.survey.verified}` : ''}</div>
             </div>
           )}
           {item.fire && <div>🕒 {item.fire.date || ''}{item.fire.confidence ? ` · tin cậy ${item.fire.confidence}` : ''}</div>}
@@ -187,7 +188,7 @@ export default function AssetDrawer({ item, pinned, leaving, nearby, onClose, on
               {dg.level && <div>Cấp cháy <b>CẤP {dg.level}</b>{dg.label ? ` · ${dg.label}` : ''}</div>}
               {dg.driver && <div>⚠ <b>{dg.driver}</b></div>}
               {dg.action && <div>✅ {dg.action}</div>}
-              <div style={{color:'#64748B', fontSize:11, marginTop:2}}>Độ phủ: {dg.coverage || 'MISSING'}</div>
+              <div style={{color:'#64748B', fontSize:11, marginTop:2}}>Độ phủ: {hienThi(dg.coverage)}</div>
               {dg.sigs && <div style={{fontSize:11, marginTop:2}}>🛡️ {dg.sigs}</div>}
               {dg.missing && <div style={{fontSize:10, color:'#B45309', marginTop:2}}>Thiếu: {dg.missing}</div>}
               {dg.brief && <div style={{fontSize:11, marginTop:2}}>📋 {dg.brief}</div>}
@@ -217,7 +218,7 @@ export default function AssetDrawer({ item, pinned, leaving, nearby, onClose, on
         <ViewerBlock viewer={item.viewer} assetId={item.assetId} />
         {/* P11 response liên quan — AI Alert → Asset → Response Plan → Action, mỗi bước 1 click */}
         <div>
-          <b style={{fontSize:12}}>🚒 Response liên quan</b>
+          <b style={{fontSize:12}}>🚒 Ứng phó liên quan</b>
           <div style={{display:'flex', gap:6, marginTop:6, flexWrap:'wrap'}}>
             <Link to={`/firesim?lat=${item.lat}&lon=${item.lon}`} style={plink}>🔥 FireSim tại điểm</Link>
             <Link to="/missions" style={plink}>🧾 Nhiệm vụ thực địa</Link>

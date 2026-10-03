@@ -2,6 +2,7 @@ import MapView from '../components/MapView'
 import { useEffect, useState } from 'react'
 import { Tabs } from '../components/Tabs'
 import { API_BASE } from '../services/api'
+import { hienThi } from '../utils/hienThi'
 
 const API = API_BASE
 
@@ -19,8 +20,8 @@ export default function Forest(){
     <div className="page">
       <h1>Trí tuệ Rừng</h1>
       <Tabs tabs={['Tổng quan','Sức khỏe','Bất thường']} onSelect={setTab} />
-      <div className="kpis"><div>Diện tích 12,430 ha</div><div>NDVI {ndvi?.ndvi?.mean ?? 'MISSING'}</div><div>Bất thường {proposals.length}</div></div>
-      <div style={{fontSize:11, color:'#64748B'}}>ForestGuard: {stats ? `đang giám sát ${stats.areas_monitored ?? 0} khu · chờ xử lý ${stats.pending_signals ?? 0} · rủi ro cao ${stats.high_risk ?? 0} ` : 'Đang tải '}<span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:stats?'#DCFCE7':'#FEF3C7'}}>{stats?'LIVE':'DEMO DATA'}</span></div>
+      <div className="kpis"><div>Diện tích 12,430 ha</div><div>NDVI {hienThi(ndvi?.ndvi?.mean)}</div><div>Bất thường {proposals.length}</div></div>
+      <div style={{fontSize:11, color:'#64748B'}}>ForestGuard: {stats ? `đang giám sát ${stats.areas_monitored ?? 0} khu · chờ xử lý ${stats.pending_signals ?? 0} · rủi ro cao ${stats.high_risk ?? 0} ` : 'Đang tải '}<span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:stats?'#DCFCE7':'#FEF3C7'}}>{stats?'TRỰC TIẾP':'GIẢ LẬP'}</span></div>
       {tab === 'Tổng quan' && <MapView />}
       {tab === 'Sức khỏe' && (
         <div className="card">🌿 NDVI Gia Lai: <b>{ndvi?.ndvi?.mean ?? 'MISSING'}</b> (min {ndvi?.ndvi?.min ?? 'MISSING'} · max {ndvi?.ndvi?.max ?? 'MISSING'}) · {ndvi?.source ?? 'MISSING'} · <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background: ndvi?.status==='LIVE' ? '#DCFCE7' : '#FEF3C7'}}>{ndvi?.status ?? 'MISSING'}</span><div style={{fontSize:11, color:'#64748B', marginTop:6}}>Công thức NDVI = (B08 − B04)/(B08 + B04) · Sentinel-2</div></div>
@@ -29,13 +30,13 @@ export default function Forest(){
         <div style={{display:'grid', gap:8}}>
           {proposals.length === 0 && <div className="card">Chưa có bất thường nào.</div>}
           {proposals.map(p=> (
-            <div key={p.id} className="card">🔥 {p.title || p.data_type} · {p.status || 'MISSING'}</div>
+            <div key={p.id} className="card">🔥 {p.title || p.data_type} · {hienThi(p.status)}</div>
           ))}
         </div>
       )}
       <div className="grid">
         <div className="card">Xu hướng NDVI — xem tab Sức khỏe (GEE Sentinel-2)</div>
-        <div className="card">Phát hiện AI — 🔥 nguy cơ cháy · 2 xác minh cộng đồng · FIELD_VERIFICATION_REQUIRED <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:'#FEF3C7'}}>DEMO DATA</span> <button>Review</button><div style={{fontSize:11, color:'#64748B', marginTop:6}}>Công thức Nesterov/FWI + NDVI (deterministic) · LLM chỉ diễn giải văn bản</div></div>
+        <div className="card">Phát hiện AI — 🔥 nguy cơ cháy · 2 xác minh cộng đồng · CẦN XÁC MINH THỰC ĐỊA <span style={{fontSize:10, padding:'2px 6px', borderRadius:999, background:'#FEF3C7'}}>DỮ LIỆU GIẢ LẬP</span> <button>Xem xét</button><div style={{fontSize:11, color:'#64748B', marginTop:6}}>Công thức Nesterov/FWI + NDVI (cố định) · LLM chỉ diễn giải văn bản</div></div>
       </div>
       <style>{`.page{display:flex; flex-direction:column; gap:16px} .kpis{display:flex; gap:12px} .kpis div{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:12px; flex:1} .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px} .card{background:#fff; border:1px solid #E2E8E5; border-radius:12px; padding:16px} h1{font-size:18px; font-weight:800} @media (max-width: 640px){ .kpis{ flex-direction:column; } .grid{ grid-template-columns:1fr; } }`}</style>
     </div>

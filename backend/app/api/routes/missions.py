@@ -91,6 +91,12 @@ def create_mission(body: dict, db: Session = Depends(get_db),
                 assignee=str(body.get("assignee") or "")[:100] or None,
                 created_by=user.username)
     db.add(m); db.commit(); db.refresh(m)
+    try:
+        from app.services.audit import audit_log
+        audit_log(db, action='MISSION_CREATED', resource_type='mission', resource_id=m.id,
+                  detail=f'{m.area} risk={m.risk_at_creation}', actor_id=user.username); db.commit()
+    except Exception:
+        pass
     return _shape(m)
 
 
@@ -134,6 +140,12 @@ def set_status(mission_id: str, body: dict, db: Session = Depends(get_db),
     if nxt == "ASSIGNED" and body.get("assignee"):
         m.assignee = str(body["assignee"])[:100]
     db.commit(); db.refresh(m)
+    try:
+        from app.services.audit import audit_log
+        audit_log(db, action='MISSION_STATUS', resource_type='mission', resource_id=m.id,
+                  detail=f'{m.status}', actor_id=user.username); db.commit()
+    except Exception:
+        pass
     r = db.query(FieldResult).filter_by(mission_id=m.id).first()
     return _shape(m, r)
 
@@ -225,6 +237,12 @@ def submit_result(mission_id: str, body: dict, db: Session = Depends(get_db),
             explanation=f"Field team confirmed fire at ({lat}, {lon}) — mission {m.id}.",
             geometry={"type": "Point", "coordinates": [lon, lat]})
         side_effects = {"report_id": rep.id, "alert_id": alert.id}
+    try:
+        from app.services.audit import audit_log
+        audit_log(db, action='MISSION_RESULT', resource_type='mission', resource_id=m.id,
+                  detail=outcome, actor_id=user.username)
+    except Exception:
+        pass
     db.commit()
     db.refresh(res)
     out = _shape(m, res)

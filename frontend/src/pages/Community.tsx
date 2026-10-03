@@ -125,8 +125,8 @@ function SuggestedMissions(){
   }
   if(items.length === 0) return null
   return (
-    <section className="cmn-panel" aria-label="Nhiệm vụ AI đề xuất">
-      <div className="cmn-kicker">NHIỆM VỤ AI ĐỀ XUẤT</div>
+    <section className="cmn-panel" aria-label="Nhiệm vụ đề xuất">
+      <div className="cmn-kicker">NHIỆM VỤ ĐỀ XUẤT</div>
       <div className="cmn-sub">Sinh từ cảnh báo đang hoạt động — bấm để tạo nhiệm vụ thật</div>
       {items.map((a: any)=> (
         <div key={a.id} style={{display:'flex', gap:8, alignItems:'center', fontSize:13, border:'1px solid #F1F5F9', borderRadius:10, padding:'8px 10px', marginTop:6}}>
@@ -380,7 +380,7 @@ export default function Community(){
           {/* FEED */}
           <div role="list" aria-label="Báo cáo hiện trường" style={{ display:'flex', flexDirection:'column', gap:12 }}>
             <div className="cmn-kicker">ĐỀ XUẤT HIỆN TRƯỜNG · {filtered.length}</div>
-            {loading && <div className="cmn-panel">Đang tải feed...</div>}
+            {loading && <div className="cmn-panel">Đang tải...</div>}
             {error && <div className="cmn-panel" style={{borderColor:'#F59E0B'}}>⚠ {error}</div>}
             {!loading && filtered.length === 0 && (
               <div className="cmn-panel">
@@ -469,7 +469,7 @@ export default function Community(){
         </div>
 
         {/* SIDEBAR */}
-        <aside className="cmn-side" aria-label="Thông tin tình báo">
+        <aside className="cmn-side" aria-label="Thông tin tổng hợp">
           <section className="cmn-panel" aria-label="Trạng thái cộng đồng">
             <div className="cmn-kicker">THỐNG KÊ ĐỀ XUẤT</div>
             <div className="cmn-telemetry">
@@ -492,7 +492,7 @@ export default function Community(){
                   <b style={{ display:'block', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{f.title}</b>
                   <span style={{ fontSize: 11, color: '#64748B' }}>{f.area}{f.createdAt ? ` · ${timeAgo(f.createdAt)}` : ''}</span>
                 </span>
-                <button className="cmn-btn" style={{ flex: 'none', padding: '6px 12px' }} onClick={()=> open(f.apiId!)}>XEM</button>
+                <button className="cmn-btn" style={{ flex: 'none', padding: '6px 12px' }} onClick={()=> open(f.apiId!)}>Xem</button>
               </div>
             ))}
           </section>

@@ -149,8 +149,8 @@ function EventEvidence({ event, health }: { event: any; health: any }) {
       <div className="fi-section-heading"><Radio size={16} /><h2 id="fi-evidence-title">Nguồn dữ liệu và bằng chứng</h2></div>
       <div className="fi-evidence-list">
         <EvidenceRow label="NASA FIRMS" state={firmsAvailable ? 'yes' : 'missing'} detail={firmsAvailable ? `${event.detection.source_status} · ${event.detection.acq_date || 'Chưa có ngày'}${acquisitionTime ? ` ${acquisitionTime}` : ''}` : 'Chưa có dữ liệu phát hiện'} />
-        <EvidenceRow label="Sentinel-2" state={satelliteState(s2Status, evidence.sentinel2)} detail={evidence.sentinel2 === true ? 'Bằng chứng gắn với sự kiện' : s2Status ? `Health nguồn: ${s2Status} · chưa có ảnh gắn với sự kiện` : 'Chưa có dữ liệu gắn với sự kiện'} />
-        <EvidenceRow label="Sentinel-1" state={satelliteState(s1Status, evidence.sentinel1)} detail={evidence.sentinel1 === true ? 'Bằng chứng gắn với sự kiện' : s1Status ? `Health nguồn: ${s1Status} · chưa có ảnh gắn với sự kiện` : 'Chưa có dữ liệu gắn với sự kiện'} />
+        <EvidenceRow label="Sentinel-2" state={satelliteState(s2Status, evidence.sentinel2)} detail={evidence.sentinel2 === true ? 'Bằng chứng gắn với sự kiện' : s2Status ? `Tình trạng nguồn: ${s2Status} · chưa có ảnh gắn với sự kiện` : 'Chưa có dữ liệu gắn với sự kiện'} />
+        <EvidenceRow label="Sentinel-1" state={satelliteState(s1Status, evidence.sentinel1)} detail={evidence.sentinel1 === true ? 'Bằng chứng gắn với sự kiện' : s1Status ? `Tình trạng nguồn: ${s1Status} · chưa có ảnh gắn với sự kiện` : 'Chưa có dữ liệu gắn với sự kiện'} />
         <EvidenceRow label="Thời tiết" state={evidence.weather === true ? 'yes' : 'missing'} detail={evidence.weather === true ? 'Dữ liệu thời tiết gắn với sự kiện' : 'Chưa có dữ liệu thời tiết gắn với sự kiện'} />
         <EvidenceRow label="Báo cáo cộng đồng" state={communityCount == null ? 'unavailable' : communityCount > 0 ? 'yes' : 'missing'} detail={communityCount == null ? 'Chưa thể tải dữ liệu báo cáo' : communityCount > 0 ? `${communityCount} báo cáo cộng đồng đã nhận · chưa xác minh đám cháy` : 'Chưa có báo cáo cộng đồng'} />
         <EvidenceRow label="Ảnh thực địa" state={evidence.field_photo == null ? 'unavailable' : evidence.field_photo ? 'yes' : 'missing'} detail={evidence.field_photo == null ? 'Chưa thể tải trạng thái ảnh' : evidence.field_photo ? 'Có ảnh thực địa đã lưu' : 'Chưa có ảnh thực địa'} />
@@ -382,7 +382,7 @@ export function EventsList() {
         <header className="fi-page-head">
           <div>
             <div className="fi-eyebrow">THEO DÕI ĐIỂM NGHI NGỜ</div>
-            <h1>Event Intelligence</h1>
+            <h1>Sự kiện cháy</h1>
             <p>{status === 'LOADING' ? 'Đang tải dữ liệu FIRMS…' : isLiveSourceStatus(status) ? `${events.length} phát hiện FIRMS · ${alerts.length} tín hiệu trong quy trình xác minh.` : 'Phát hiện FIRMS là tín hiệu quan sát, không phải vụ cháy đã xác nhận.'}</p>
             {status !== 'LOADING' && isLiveSourceStatus(status) && <small className="fi-freshness">Nguồn FIRMS {status}{observation ? ` · Quan sát gần nhất ${observation.date}${observation.time ? ` ${observation.time}` : ''}` : ' · Chưa có thời điểm quan sát'}</small>}
           </div>

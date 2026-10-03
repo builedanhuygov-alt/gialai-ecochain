@@ -227,13 +227,13 @@ export default function TwinScene({ sim, waters, opsAssets, communeFc, show, pla
       {/* M4 zoom controls — góc dưới-phải, sát đáy; timeline chừa gutter
           phải nên không bao giờ chồng nhau (không dùng offset cứng). */}
       <div style={{ position: 'absolute', right: 12, bottom: 12, zIndex: 7, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <button aria-label="Zoom in" title="Phóng to"
+        <button aria-label="Phóng to" title="Phóng to"
           onClick={() => { const d = (divRef.current as any)?._twin as any; if (d) dollyView(d, 0.75) }}
           style={{ width: 36, height: 36, borderRadius: 999, border: '1px solid #E2E8E5', background: 'rgba(255,255,255,0.95)', fontSize: 18, fontWeight: 800, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>＋</button>
-        <button aria-label="Zoom out" title="Thu nhỏ"
+        <button aria-label="Thu nhỏ" title="Thu nhỏ"
           onClick={() => { const d = (divRef.current as any)?._twin as any; if (d) dollyView(d, 1.33) }}
           style={{ width: 36, height: 36, borderRadius: 999, border: '1px solid #E2E8E5', background: 'rgba(255,255,255,0.95)', fontSize: 18, fontWeight: 800, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>－</button>
-        <button aria-label="Focus fire" title="Về lại hiện trường cháy"
+        <button aria-label="Về hiện trường cháy" title="Về lại hiện trường cháy"
           onClick={() => { const d = (divRef.current as any)?._twin as any; if (d) { try { frameTactical(d, d.controls.target.x, d.controls.target.y, d.controls.target.z) } catch {} } }}
           style={{ width: 36, height: 36, borderRadius: 999, border: '1px solid #E2E8E5', background: 'rgba(255,255,255,0.95)', fontSize: 16, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>🎯</button>
       </div>

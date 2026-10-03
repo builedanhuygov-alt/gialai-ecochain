@@ -254,13 +254,13 @@ export function SatThumb({ lat, lon, label, onOpen }: { lat: number; lon: number
   const body = (
     <>
       <img src={esriTileUrl(lat, lon)} alt={`Ảnh vệ tinh ${label}`} loading="lazy" onError={() => setErr(true)} />
-      <span className="live" style={{ background: 'rgba(7,17,31,0.85)' }}>SATELLITE</span>
+      <span className="live" style={{ background: 'rgba(7,17,31,0.85)' }}>VỆ TINH</span>
       <span className="ov"><Satellite size={11} />{fmtCoords(lat, lon)}</span>
     </>
   )
   if (!onOpen) return <div className="ei-thumb">{body}</div>
   return (
-    <button className="ei-thumb" onClick={onOpen} title="View geospatial context →"
+    <button className="ei-thumb" onClick={onOpen} title="      Xem bối cảnh không gian →"
       style={{ cursor: 'pointer', padding: 0, textAlign: 'left', font: 'inherit', color: 'inherit' }}>
       {body}
     </button>

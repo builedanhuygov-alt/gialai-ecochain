@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Bot, Database, Globe, Info, Satellite, Settings2 } from 'lucide-react'
 import ModelSwitcher from '../components/ModelSwitcher'
 import { api, API_BASE } from '../services/api'
+import { hienThi } from '../utils/hienThi'
 
 // Shared section-title style (Admin page only) — consistent weight/size/spacing.
 const secTitle: React.CSSProperties = {
@@ -27,7 +28,7 @@ function StatusChip({ status }: { status?: string }) {
       borderRadius: 999, padding: '3px 10px', whiteSpace: 'nowrap',
     }}>
       <span style={{ width: 7, height: 7, borderRadius: 999, background: c.dot, flex: 'none' }} />
-      {status || 'MISSING'}
+      {hienThi(status)}
     </span>
   )
 }
@@ -40,7 +41,7 @@ const SERVICES = [
   { key: 'firms', name: 'NASA FIRMS (điểm nóng)', env: 'FIRMS_MAP_KEY' },
   { key: 'llm', name: 'AI (Gemini/Groq)', env: 'GEMINI_API_KEY / GROQ_API_KEY' },
   { key: 'weather', name: 'Thời tiết (Open-Meteo)', env: 'không cần key' },
-  { key: 'database', name: 'Database', env: 'DATABASE_URL' },
+  { key: 'database', name: 'Cơ sở dữ liệu', env: 'DATABASE_URL' },
 ]
 
 function FeedbackTriage(){
@@ -48,7 +49,7 @@ function FeedbackTriage(){
   const [msg, setMsg] = useState('')
   const token = (()=>{ try{ return sessionStorage.getItem('ecogl_admin_token') }catch{ return null } })()
   const load = async ()=>{
-    if(!token){ setMsg('Đăng nhập admin ở mục ModelSwitcher để xem báo lỗi'); return }
+    if(!token){ setMsg('Đăng nhập admin ở mục mô hình để xem báo lỗi'); return }
     try{
       const r = await fetch(`${API}/api/feedback`, { headers:{ Authorization:`Bearer ${token}` } })
       if(r.status === 401 || r.status === 403){ setMsg('Phiên admin hết hạn hoặc không đủ quyền'); return }
@@ -156,16 +157,16 @@ function AssetBoard(){
         <input value={f.contact} onChange={e=> setF({...f, contact: e.target.value})} placeholder="Liên hệ trạm (SĐT/người, có thì điền)" aria-label="Liên hệ trạm" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, flex:'1 1 160px'}} />
         <input value={f.route_type} onChange={e=> setF({...f, route_type: e.target.value})} placeholder="Loại tuyến (tự do)" aria-label="Loại tuyến" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:120}} />
         <select value={f.road_condition} onChange={e=> setF({...f, road_condition: e.target.value})} aria-label="Tình trạng đường" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 8px', fontSize:12}}>
-          <option value="">Tình trạng đường (MISSING)</option>
+          <option value="">Tình trạng đường (thiếu)</option>
           {['GOOD','FAIR','POOR','BLOCKED'].map(v=> <option key={v} value={v}>{v}</option>)}
         </select>
         <select value={f.surface_type} onChange={e=> setF({...f, surface_type: e.target.value})} aria-label="Mặt đường" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 8px', fontSize:12}}>
-          <option value="">Mặt đường (MISSING)</option>
+          <option value="">Mặt đường (thiếu)</option>
           {['PAVED','GRAVEL','FOREST_ROAD','TRAIL'].map(v=> <option key={v} value={v}>{v}</option>)}
         </select>
         <input value={f.max_vehicle_tons} onChange={e=> setF({...f, max_vehicle_tons: e.target.value})} placeholder="Tải trọng tối đa (tấn)" aria-label="Tải trọng tối đa" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:140}} />
         <select value={f.seasonal_access} onChange={e=> setF({...f, seasonal_access: e.target.value})} aria-label="Tiếp cận theo mùa" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 8px', fontSize:12}}>
-          <option value="">Tiếp cận mùa (MISSING)</option>
+          <option value="">Tiếp cận mùa (thiếu)</option>
           <option value="DRY_ONLY">DRY_ONLY (mùa khô)</option>
           <option value="YEAR_ROUND">YEAR_ROUND (quanh năm)</option>
         </select>
@@ -180,8 +181,8 @@ function AssetBoard(){
         <input value={f.preview_image_url} onChange={e=> setF({...f, preview_image_url: e.target.value})} placeholder="Ảnh xem trước (URL, có thì điền)" aria-label="Ảnh xem trước" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, flex:'1 1 180px'}} />
         <input value={f.capture_date} onChange={e=> setF({...f, capture_date: e.target.value})} placeholder="Ngày chụp (YYYY-MM-DD)" aria-label="Ngày chụp" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:150}} />
         <input value={f.capture_source} onChange={e=> setF({...f, capture_source: e.target.value})} placeholder="Nguồn ảnh (vd: flycam-đội-1)" aria-label="Nguồn ảnh" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:12, width:150}} />
-        <select value={f.has_streetview} onChange={e=> setF({...f, has_streetview: e.target.value})} aria-label="Có Street View" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 8px', fontSize:12}}>
-          <option value="">Street View (MISSING)</option>
+        <select value={f.has_streetview} onChange={e=> setF({...f, has_streetview: e.target.value})} aria-label="Có ảnh đường" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 8px', fontSize:12}}>
+          <option value="">Street View (thiếu)</option>
           <option value="yes">Có (đã kiểm chứng)</option>
           <option value="no">Không có</option>
         </select>
@@ -192,9 +193,9 @@ function AssetBoard(){
       {gaps && (
         <div style={{marginTop:8, fontSize:11, background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:8, padding:'8px 10px'}}>
           <b>Khoảng trống dữ liệu</b> (từ /api/ops/gaps):
-          {' '}hồ {gaps.water?.total} · thiếu liên hệ {gaps.water?.missing_contact?.length ?? 'MISSING'} ·
-          {' '}trạm GPS {gaps.stations?.verified_gps ?? 'MISSING'} · thiếu GPS {gaps.stations?.missing_gps ?? 'MISSING'} · thiếu liên hệ {(gaps.stations?.missing_contact || []).length} ·
-          {' '}tuyến {gaps.routes?.total ?? 'MISSING'} · thiếu đường {(gaps.routes?.missing_geometry || []).length} · thiếu tình trạng {(gaps.routes?.missing_road_condition || []).length} ·
+          {' '}hồ {gaps.water?.total} · thiếu liên hệ {hienThi(gaps.water?.missing_contact?.length)} ·
+          {' '}trạm GPS {hienThi(gaps.stations?.verified_gps)} · thiếu GPS {hienThi(gaps.stations?.missing_gps)} · thiếu liên hệ {(gaps.stations?.missing_contact || []).length} ·
+          {' '}tuyến {hienThi(gaps.routes?.total)} · thiếu đường {(gaps.routes?.missing_geometry || []).length} · thiếu tình trạng {(gaps.routes?.missing_road_condition || []).length} ·
           {' '}xem: {Object.entries(gaps.viewers || {}).map(([k, v])=> `${k}:${v}`).join(' ')}
         </div>
       )}
@@ -205,7 +206,7 @@ function AssetBoard(){
           <b style={{flex:1}}>{a.name}</b>
           <span style={{color:'#64748B'}}>{a.latitude}, {a.longitude}</span>
           <span style={{fontSize:10, padding:'2px 8px', borderRadius:999, background: a.status==='active' ? '#DCFCE7' : '#FEE2E2'}}>{a.status}</span>
-          <span title={a.viewer?.detail || ''} style={{fontSize:10, padding:'2px 8px', borderRadius:999, background: a.viewer?.viewer_type === 'none' ? '#F1F5F9' : '#DCFCE7'}}>🌐 {a.viewer?.viewer_type || 'MISSING'} · {a.viewer?.verification_status || 'MISSING'}</span>
+          <span title={a.viewer?.detail || ''} style={{fontSize:10, padding:'2px 8px', borderRadius:999, background: a.viewer?.viewer_type === 'none' ? '#F1F5F9' : '#DCFCE7'}}>🌐 {hienThi(a.viewer?.viewer_type)} · {hienThi(a.viewer?.verification_status)}</span>
           <a href={`/viewer/${a.id}`} style={{fontSize:11, color:'#0F766E', fontWeight:700}}>Xem</a>
           <button onClick={()=> remove(a.id)} title="Xóa (cần admin)" style={{fontSize:11, background:'#fff', border:'1px solid #E2E8E5', borderRadius:999, padding:'2px 8px'}}>Xóa</button>
         </div>
@@ -223,7 +224,7 @@ function AccountPanel(){
     if(u.trim().length < 3 || p.length < 8){ setMsg('Tên ≥3 ký tự, mật khẩu ≥8 ký tự'); return }
     try{
       const r: any = await api.registerUser(u.trim(), p)
-      setMsg(`Đã tạo ${r.username} — vai trò ${r.role}. Đăng nhập ở ModelSwitcher.`)
+      setMsg(`Đã tạo ${r.username} — vai trò ${r.role}. Đăng nhập ở mục mô hình.`)
       setU(''); setP('')
     }catch(e:any){ setMsg(String(e.message || e).slice(0, 200)) }
   }
@@ -247,7 +248,7 @@ const STAT_ACCENT: Record<string, string> = {
 function Stat({ label, value }: { label: string; value: any }){  return (
     <div style={{background:'#fff', border:'1px solid #E2E8E5', borderLeft:`3px solid ${STAT_ACCENT[label] || '#16A34A'}`,
       borderRadius:12, padding:'12px 14px', minWidth:0}}>
-      <div style={{fontSize:26, fontWeight:800, fontVariantNumeric:'tabular-nums', lineHeight:1.1}}>{value ?? 'MISSING'}</div>
+      <div style={{fontSize:26, fontWeight:800, fontVariantNumeric:'tabular-nums', lineHeight:1.1}}>{hienThi(value)}</div>
       <div style={{fontSize:10, fontWeight:700, letterSpacing:1, color:'#64748B', textTransform:'uppercase', marginTop:4}}>{label}</div>
     </div>
   )
@@ -294,7 +295,7 @@ function ConfigBoard({ geo }: { geo: any }){  return (
       <div style={{display:'flex', gap:8, alignItems:'flex-start', fontSize:12, color:'#475569',
         background:'#F8FAFC', border:'1px solid #E2E8E5', borderRadius:10, padding:'8px 12px', marginTop:10}}>
         <Info size={14} style={{flex:'none', marginTop:2, color:'#64748B'}} />
-        <span>Thiết lập key trong Environment Variables của backend rồi redeploy. Không bao giờ dán key lên web.</span>
+        <span>Thiết lập khóa trong biến môi trường của backend rồi triển khai lại. Không bao giờ dán key lên web.</span>
       </div>
     </div>
   )
@@ -350,11 +351,11 @@ export default function Admin(){
         <SummaryCard icon={<Satellite size={16} />} label="GEE"
           ok={gee ? connected : null}
           text={gee ? (connected ? 'Đã kết nối LIVE' : 'Chưa cấu hình (cần key ở backend)') : 'Đang kiểm tra...'} />
-        <SummaryCard icon={<Bot size={16} />} label="AI Services" ok={true} text="Trực tuyến" />
+        <SummaryCard icon={<Bot size={16} />} label="Trí tuệ nhân tạo" ok={true} text="Trực tuyến" />
       </div>
 
       <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:16, marginTop:12}}>
-        <h3 style={secTitle}><Settings2 size={15} style={{color:'#64748B'}} />0. Tình trạng cấu hình (live từ backend)</h3>
+        <h3 style={secTitle}><Settings2 size={15} style={{color:'#64748B'}} />0. Tình trạng cấu hình (trực tiếp từ backend)</h3>
         {!geo && <div style={{fontSize:13, color:'#64748B'}}>Đang kiểm tra...</div>}
         {geo && <ConfigBoard geo={geo} />}
       </div>
@@ -365,16 +366,16 @@ export default function Admin(){
       </div>
 
       <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:16, marginTop:12}}>
-        <h3>1. Nhập API Bản đồ hiển thị (Map Tiles — cho Bản đồ trực tiếp)</h3>        <p style={{fontSize:12, color:'#64748B'}}>Dùng cho nền bản đồ, không phải dữ liệu vệ tinh phân tích. Để trống = OSM miễn phí. Có key thì dán vào đây hoặc ngay trên Bản đồ.</p>
-        <input id="map_key2" placeholder="MapTiler key hoặc URL style JSON (https://api.maptiler.com/...)" style={{width:'100%', padding:'8px', border:'1px solid #E2E8E5', borderRadius:8, marginTop:8}} />
+        <h3>1. Nhập API Bản đồ hiển thị (Map Tiles — cho Bản đồ trực tiếp)</h3>        <p style={{fontSize:12, color:'#64748B'}}>Dùng cho nền bản đồ, không phải dữ liệu vệ tinh phân tích. Để trống = OSM miễn phí. Có khóa thì dán vào đây hoặc ngay trên Bản đồ.</p>
+        <input id="map_key2" placeholder="Khóa MapTiler hoặc URL style JSON (https://api.maptiler.com/...)" style={{width:'100%', padding:'8px', border:'1px solid #E2E8E5', borderRadius:8, marginTop:8}} />
         <button onClick={saveMap} style={{marginTop:8, background:'#0F766E', color:'#fff', border:0, padding:'8px 12px', borderRadius:999}}>Lưu & Tải lại bản đồ</button>
         <div style={{fontSize:11, color:'#64748B', marginTop:6}}>Vị trí file: trình duyệt localStorage <code>ecogl_map_key</code> · Hoặc set <code>VITE_MAP_STYLE</code> trong <code>frontend/.env</code></div>
       </div>
 
       <div className="card" style={{background:'#FFF7ED', border:'1px solid #FDBA74', borderRadius:12, padding:16, marginTop:12}}>
         <h3>2. Vệ tinh EE Sentinel (Google Earth Engine — cho phân tích NDVI/Rừng)</h3>
-        <p style={{fontSize:12, color:'#7C2D12'}}>Đây là cấu hình <b>backend</b>, không phải bản đồ nền. Cần Service Account của Google Cloud. <a href="https://code.earthengine.google.com" target="_blank">Lấy tại code.earthengine.google.com</a></p>
-        <div style={{fontSize:13, marginTop:8}}>Trạng thái backend: <b>{gee ? (connected ? '● LIVE đã kết nối' : '○ chưa cấu hình — đang dùng DEMO DATA') : 'Đang kiểm tra...'}</b></div>
+        <p style={{fontSize:12, color:'#7C2D12'}}>Đây là cấu hình <b>backend</b>, không phải bản đồ nền. Cần tài khoản dịch vụ của Google Cloud. <a href="https://code.earthengine.google.com" target="_blank">Lấy tại code.earthengine.google.com</a></p>
+        <div style={{fontSize:13, marginTop:8}}>Trạng thái backend: <b>{gee ? (connected ? '● TRỰC TIẾP đã kết nối' : '○ chưa cấu hình — đang dùng dữ liệu giả lập') : 'Đang kiểm tra...'}</b></div>
         <div style={{fontSize:12, color:'#DC2626', marginTop:8, background:'#fff', border:'1px solid #FECACA', borderRadius:8, padding:10}}>
           ⛔ Không bao giờ dán private key vào trình duyệt hay bất kỳ ô nhập web nào — key chỉ tồn tại trong biến môi trường backend / secret manager.
         </div>

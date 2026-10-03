@@ -2,6 +2,7 @@
 // (moved from the deleted legacy EventIntelligence page; covered by EventIntel.test.ts)
 import { parseCoords, severityOf } from '../components/EventIntel'
 import type { Severity } from '../components/EventIntel'
+import { hienThi } from './hienThi'
 
 export type UEvt = {
   key: string; kind: 'hist' | 'live'; id: string | number;
@@ -33,7 +34,7 @@ export function buildUnified(hist: any[], items: any[]): UEvt[] {
       place: e.place, dates: e.acq_date || '', level: e.level,
       score: typeof e.score === 'number' ? e.score : null,
       sev: severityOf(e.level, e.score), status: e.status,
-      source: `${e.source} · ${e.sourceStatus || 'MISSING'}`,
+      source: `${e.source} · ${hienThi(e.sourceStatus)}`,
       lat: typeof e.lat === 'number' ? e.lat : null,
       lon: typeof e.lon === 'number' ? e.lon : null,
       timeISO: e.timeISO,

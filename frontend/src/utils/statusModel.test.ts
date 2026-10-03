@@ -24,7 +24,7 @@ describe('dataSourceFromStatus', () => {
   it('does not call a cache feed LIVE', () => {
     expect(dataSourceFromStatus('CACHED')).toBe('FIRMS_CACHE')
     expect(dataSourceFromStatus('LIVE')).toBe('FIRMS_LIVE')
-    expect(dataSourceLabel('FIRMS_CACHE')).toBe('FIRMS CACHE')
+    expect(dataSourceLabel('FIRMS_CACHE')).toBe('FIRMS LƯU TẠM')
   })
   it('marks demo mode separately from system LIVE', () => {
     expect(dataSourceFromStatus('LIVE', true)).toBe('DEMO')
@@ -41,9 +41,19 @@ describe('countLabel', () => {
 })
 
 describe('systemStatusLabel', () => {
-  it('uses short operator labels', () => {
-    expect(systemStatusLabel('LIVE')).toBe('LIVE')
-    expect(systemStatusLabel('DEGRADED')).toBe('DEGRADED')
-    expect(systemStatusLabel('OFFLINE')).toBe('OFFLINE')
+  it('uses short Vietnamese operator labels (no English)', () => {
+    expect(systemStatusLabel('LIVE')).toBe('TRỰC TIẾP')
+    expect(systemStatusLabel('DEGRADED')).toBe('SUY GIẢM')
+    expect(systemStatusLabel('OFFLINE')).toBe('NGOẠI TUYẾN')
+    expect(systemStatusLabel('CHECKING')).toBe('ĐANG KIỂM TRA')
+  })
+})
+
+describe('dataSourceLabel', () => {
+  it('labels every source state in Vietnamese', () => {
+    expect(dataSourceLabel('LOADING')).toBe('ĐANG TẢI')
+    expect(dataSourceLabel('FIRMS_LIVE')).toBe('FIRMS TRỰC TIẾP')
+    expect(dataSourceLabel('DEMO')).toBe('GIẢ LẬP')
+    expect(dataSourceLabel('UNAVAILABLE')).toBe('FIRMS KHÔNG CÓ')
   })
 })

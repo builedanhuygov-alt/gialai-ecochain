@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { hienThi } from '../utils/hienThi'
 
 type Rating = {
   level: string; label: string; major_risk_driver: string;
@@ -177,7 +178,7 @@ export default function ForecastCard({ area, rating, firms, temp, condition, upd
       {/* Key facts */}
       <div style={{padding:'10px 14px', fontSize:13, display:'flex', flexDirection:'column', gap:4}}>
         <div>📡 FIRMS: <b>{typeof firmsVal === 'number' ? `${firmsVal} điểm nóng` : 'MISSING'}</b></div>
-        <div>🌡 <b>{temp ?? 'MISSING'}</b> · 🌧 <b>{condition ?? 'MISSING'}</b></div>
+        <div>🌡 <b>{hienThi(temp)}</b> · 🌧 <b>{hienThi(condition)}</b></div>
       </div>
       <div style={{height:1, background:DIV_VAR}} />
       {/* 5. COVERAGE heatmap */}

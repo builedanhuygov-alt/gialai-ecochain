@@ -21,8 +21,7 @@ router = APIRouter(tags=["FireRisk"])
 
 _RUNNING: set = set()
 
-FIELD_ADVICE = [
-    ("FIRMS proximity", "Có điểm nóng FIRMS gần đây — ưu tiên kiểm tra thực địa trong 24h."),
+FIELD_ADVICE = [    ("FIRMS proximity", "Có điểm nóng FIRMS gần đây — ưu tiên kiểm tra thực địa trong 24h."),
     ("Fuel Dryness", "Thảm khô — hạn chế đốt nương, chuẩn bị đường băng cản lửa."),
     ("Weather danger", "Nắng nóng + hanh khô — tăng tuần tra buổi trưa/chiều."),
     ("Wind", "Gió mạnh — lửa lan nhanh, cảnh báo các xã xuôi gió."),
@@ -261,3 +260,11 @@ def risk_grid(bbox: Optional[str] = Query(default=None),
                      "weather": "Open-Meteo current (LIVE, cached 15 min)" if wx_live_any or demo else "Open-Meteo unreachable (cells unscored)",
                      "fires": f"{len(fires)} live FIRMS points" if firms_live else ("SIMULATED" if demo else "FIRMS unavailable (factor missing)"),
                      "disclaimer": "Chi so tham khao, trong so chua hieu chuan"}}
+
+
+@router.get("/fire-risk/config")
+def risk_config():
+    from app.services.fire_risk_config import THRESHOLDS, WEIGHTS
+    return {"weights": WEIGHTS,
+            "thresholds": [{"lte": t, "level": lvl} for t, lvl in THRESHOLDS],
+            "note": "Nguong cau hinh tai mot noi (fire_risk_config), khong rai rac UI"}

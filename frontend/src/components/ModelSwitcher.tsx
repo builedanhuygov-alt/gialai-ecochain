@@ -84,8 +84,8 @@ export default function ModelSwitcher(){
 
       {!me ? (
         <div style={{marginTop:10, display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
-          <input value={user} onChange={e=> setUser(e.target.value)} placeholder="admin username" aria-label="Tên đăng nhập" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:13}} />
-          <input value={pass} onChange={e=> setPass(e.target.value)} type="password" placeholder="password" aria-label="Mật khẩu" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:13}} onKeyDown={e=> { if(e.key === 'Enter') login() }} />
+          <input value={user} onChange={e=> setUser(e.target.value)} placeholder="Tên admin" aria-label="Tên đăng nhập" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:13}} />
+          <input value={pass} onChange={e=> setPass(e.target.value)} type="password" placeholder="Mật khẩu" aria-label="Mật khẩu" style={{border:'1px solid #E2E8E5', borderRadius:8, padding:'6px 10px', fontSize:13}} onKeyDown={e=> { if(e.key === 'Enter') login() }} />
           <button onClick={login} style={{background:'#0B1412', color:'#fff', border:0, borderRadius:999, padding:'6px 14px'}}>Đăng nhập admin</button>
         </div>
       ) : (
@@ -113,8 +113,8 @@ export default function ModelSwitcher(){
       </div>
       {isAdmin && (
         <div style={{marginTop:10, display:'flex', gap:6}}>
-          <button onClick={()=> setModeApi('DEMO')} style={{fontSize:12, padding:'6px 12px', borderRadius:999, border:'1px solid #E2E8E5', background: mode?.mode === 'DEMO' ? '#0B1412' : '#fff', color: mode?.mode === 'DEMO' ? '#fff' : '#000'}}>DEMO</button>
-          <button onClick={()=> setModeApi('REAL')} style={{fontSize:12, padding:'6px 12px', borderRadius:999, border:'1px solid #E2E8E5', background: mode?.mode === 'REAL' ? '#0F766E' : '#fff', color: mode?.mode === 'REAL' ? '#fff' : '#000'}}>REAL</button>
+          <button onClick={()=> setModeApi('DEMO')} style={{fontSize:12, padding:'6px 12px', borderRadius:999, border:'1px solid #E2E8E5', background: mode?.mode === 'DEMO' ? '#0B1412' : '#fff', color: mode?.mode === 'DEMO' ? '#fff' : '#000'}}>GIẢ LẬP</button>
+          <button onClick={()=> setModeApi('REAL')} style={{fontSize:12, padding:'6px 12px', borderRadius:999, border:'1px solid #E2E8E5', background: mode?.mode === 'REAL' ? '#0F766E' : '#fff', color: mode?.mode === 'REAL' ? '#fff' : '#000'}}>THẬT</button>
         </div>
       )}
       <div style={{fontSize:11, color:'#64748B', marginTop:8}}>Chỉ liệt kê phiên bản thật sự tồn tại trong code (hiện tại: v1.0). Đổi bản không tồn tại bị từ chối + audit log.</div>

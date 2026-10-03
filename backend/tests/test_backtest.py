@@ -87,3 +87,10 @@ def test_backtest_validates_and_runs_background():
         assert d["origin"] in ("LIVE", "DEMO / SIMULATED")
         assert "precision" in d and "confusion" in d and "roc" in d
         assert d["period"]["start"] == "2026-09-01"
+
+
+def test_fire_risk_config_single_source():
+    c = setup()
+    d = c.get('/api/fire-risk/config').json()
+    assert abs(sum(d['weights'].values()) - 1.0) < 1e-9
+    assert [t['level'] for t in d['thresholds']] == ['I', 'II', 'III', 'IV', 'V']

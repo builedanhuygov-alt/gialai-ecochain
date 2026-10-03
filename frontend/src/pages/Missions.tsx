@@ -168,11 +168,11 @@ export default function Missions(){
             style={{flex: '1 1 90px', border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
           <input value={lon} onChange={e=> setLon(e.target.value)} placeholder="Kinh độ" aria-label="Kinh độ"
             style={{flex: '1 1 90px', border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
-          <input value={risk} onChange={e=> setRisk(e.target.value)} placeholder="Risk 0-100" aria-label="Risk lúc tạo"
+          <input value={risk} onChange={e=> setRisk(e.target.value)} placeholder="Điểm 0–100" aria-label="Điểm lúc tạo"
             style={{flex: '1 1 90px', border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
           <select value={priority} onChange={e=> setPriority(e.target.value)} aria-label="Mức ưu tiên"
             style={{border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}}>
-            {['LOW', 'NORMAL', 'HIGH', 'CRITICAL'].map(p=> <option key={p} value={p}>{p}</option>)}
+            {[{v:'LOW',l:'Thấp'},{v:'NORMAL',l:'Thường'},{v:'HIGH',l:'Cao'},{v:'CRITICAL',l:'Nguy kịch'}].map(p=> <option key={p.v} value={p.v}>{p.l}</option>)}
           </select>
           <button onClick={create} style={{background: '#0F766E', color: '#fff', border: 0, borderRadius: 999, padding: '8px 18px', fontSize: 13, fontWeight: 700}}>Tạo</button>
         </div>
@@ -181,10 +181,10 @@ export default function Missions(){
       {msg && <div role="status" style={{marginTop: 8, fontSize: 13, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 12px'}}>{msg}</div>}
 
       <div style={{display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap'}}>
-        {['ALL', 'NEW', 'ASSIGNED', 'IN_PROGRESS', 'DONE'].map(s=> (
-          <button key={s} onClick={()=> setFilter(s)}
-            style={{padding: '6px 12px', borderRadius: 999, border: '1px solid #E2E8E5', background: filter === s ? '#0B1412' : '#fff', color: filter === s ? '#fff' : '#000', fontSize: 12}}>
-            {s === 'ALL' ? 'Tất cả' : s}
+        {[{v:'ALL',l:'Tất cả'},{v:'NEW',l:'Mới'},{v:'ASSIGNED',l:'Đã giao'},{v:'IN_PROGRESS',l:'Đang kiểm tra'},{v:'DONE',l:'Xong'}].map(s=> (
+          <button key={s.v} onClick={()=> setFilter(s.v)}
+            style={{padding: '6px 12px', borderRadius: 999, border: '1px solid #E2E8E5', background: filter === s.v ? '#0B1412' : '#fff', color: filter === s.v ? '#fff' : '#000', fontSize: 12}}>
+            {s.l}
           </button>
         ))}
       </div>
@@ -203,7 +203,7 @@ export default function Missions(){
             style={{all: 'unset', cursor: 'pointer', width: '100%', display: 'block'}}>
             <div style={{display: 'flex', justifyContent: 'space-between', gap: 8}}>
               <b>{m.area}</b>
-              <span style={{fontSize: 11, padding: '2px 8px', borderRadius: 999, background: '#F1F5F9'}}>{m.status}</span>
+              <span style={{fontSize: 11, padding: '2px 8px', borderRadius: 999, background: '#F1F5F9'}}>{tenTrangThai(m.status)}</span>
             </div>
             <div style={{fontSize: 12, color: '#64748B', marginTop: 4}}>
               {[m.priority, m.assignee ? `→ ${m.assignee}` : '', typeof m.risk_at_creation === 'number' ? `risk lúc tạo: ${m.risk_at_creation}` : ''].filter(Boolean).join(' · ')}
@@ -265,3 +265,11 @@ export default function Missions(){
 
 const btnPri = { background: '#0F766E', color: '#fff', border: 0, borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 700 } as const
 const btnSec = { background: '#fff', color: '#000', border: '1px solid #E2E8E5', borderRadius: 999, padding: '8px 16px', fontSize: 13 } as const
+
+function tenTrangThai(s?: string): string {
+  if(s === 'NEW') return 'Mới'
+  if(s === 'ASSIGNED') return 'Đã giao'
+  if(s === 'IN_PROGRESS') return 'Đang kiểm tra'
+  if(s === 'DONE') return 'Xong'
+  return s || '—'
+}

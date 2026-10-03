@@ -16,6 +16,11 @@ const Missions = lazy(()=> import('./pages/Missions'))
 const Forest = lazy(()=> import('./pages/Forest'))
 const Community = lazy(()=> import('./pages/Community'))
 const CommunityReportDetail = lazy(()=> import('./pages/CommunityReportDetail'))
+const TrungTamChiHuy = lazy(()=> import('./pages/TrungTamChiHuy'))
+const BanDo3D = lazy(()=> import('./pages/BanDo3D'))
+const ChayLichSu = lazy(()=> import('./pages/ChayLichSu'))
+const PhongThiNghiem = lazy(()=> import('./pages/PhongThiNghiem'))
+const NguonDuLieu = lazy(()=> import('./pages/NguonDuLieu'))
 const Notifications = lazy(()=> import('./pages/Notifications'))
 const Admin = lazy(()=> import('./pages/Admin'))
 const Audit = lazy(()=> import('./pages/Audit'))
@@ -24,8 +29,11 @@ const Viewer = lazy(()=> import('./pages/Viewer'))
 
 const TITLES: Record<string,string> = {
   '/': 'Bản đồ cháy rừng Gia Lai',
-  '/events': 'Sự kiện', '/firesim': 'Mô phỏng cháy', '/missions': 'Nhiệm vụ',
+  '/events': 'Sự kiện cháy', '/firesim': 'Mô phỏng lan lửa', '/missions': 'Nhiệm vụ thực địa',
   '/map': 'Bản đồ', '/forest': 'Rừng', '/community': 'Cộng đồng',
+  '/trung-tam-chi-huy': 'Trung tâm chỉ huy', '/ban-do-3d': 'Bản đồ 3D',
+  '/chay-lich-su': 'Vụ cháy đã ghi nhận', '/phong-thi-nghiem': 'Phòng thí nghiệm',
+  '/nguon-du-lieu': 'Nguồn dữ liệu', '/thong-bao': 'Thông báo', '/nhat-ky': 'Nhật ký',
   '/admin': 'Quản trị', '/notifications': 'Thông báo', '/audit': 'Nhật ký', '/login': 'Đăng nhập',
   '/viewer': 'Hiện trường 360°',
 }
@@ -36,12 +44,16 @@ function NotFound(){
       <div style={{fontSize:40}}>🧭</div>
       <h1 style={{fontSize:20, fontWeight:800}}>Không tìm thấy trang</h1>
       <p style={{fontSize:13, color:'#64748B'}}>Địa chỉ không tồn tại. Về bản đồ cháy rừng Gia Lai:</p>
-      <a href="/" style={{display:'inline-block', background:'#0F766E', color:'#fff', padding:'8px 20px', borderRadius:999, fontSize:13, fontWeight:700, textDecoration:'none'}}>Về Eco Map</a>
+      <a href="/" style={{display:'inline-block', background:'#0F766E', color:'#fff', padding:'8px 20px', borderRadius:999, fontSize:13, fontWeight:700, textDecoration:'none'}}>Về bản đồ</a>
     </div>
   )
 }
 
 function AIAssistant(){
+  const tenGiaiDoan = (p: string): string => ({
+    THINKING: 'Đang nghĩ', 'RETRIEVING DATA': 'Đang lấy dữ liệu', ANALYZING: 'Đang phân tích',
+    GENERATING: 'Đang tổng hợp', COMPLETE: 'Xong', ERROR: 'Lỗi', PUTER: 'Puter',
+  }[p] || p)
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(false)
@@ -99,7 +111,7 @@ function AIAssistant(){
     "Kiểm tra biến động rừng 7 ngày",
     "Tìm vùng cây trồng bị stress",
     "Chạy kịch bản nhiệt độ +3°C",
-    "Giải thích EUDR risk",
+    "Khu vực nào cần kiểm tra thực địa?",
     "Gia Lai hiện có khu vực nào nguy cơ cao?",
     "Vì sao khu vực này có nguy cơ cháy cao?"
   ]
@@ -209,7 +221,7 @@ function AIAssistant(){
       {open && (
         <div className="ai-drawer" role="dialog" aria-modal="true" style={{width:'min(420px, calc(100vw - 24px))', maxHeight:'85vh', overflow:'auto'}}>
           <div className="ai-head">Trí tuệ Môi trường Gia Lai <button onClick={()=>setOpen(false)}>✕</button></div>
-          <div style={{fontSize:11, color:'#64748B', margin:'4px 0'}}>Hệ thống điều phối: Master → RAG → Domain Agent → Tools → Evidence</div>
+          <div style={{fontSize:11, color:'#64748B', margin:'4px 0'}}>Luồng xử lý: câu hỏi → dữ liệu → công cụ → bằng chứng</div>
           <div className="suggestions">
             {suggestions.map(s=> <button key={s} onClick={()=> ask(s)}>{s}</button>)}
           </div>
@@ -224,56 +236,56 @@ function AIAssistant(){
           </div>
           <div style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:8}}>
             <button onClick={()=> runAiAction('fire-risk')} disabled={loading} style={{fontSize:11, padding:'4px 10px', borderRadius:999, border:'1px solid #0F766E', background:'#fff', color:'#0F766E'}}>🔥 Nguy cơ cháy AI</button>
-            <button onClick={()=> runAiAction('what-if')} disabled={loading} style={{fontSize:11, padding:'4px 10px', borderRadius:999, border:'1px solid #0F766E', background:'#fff', color:'#0F766E'}}>🧪 Kịch bản What-if</button>
+            <button onClick={()=> runAiAction('what-if')} disabled={loading} style={{fontSize:11, padding:'4px 10px', borderRadius:999, border:'1px solid #0F766E', background:'#fff', color:'#0F766E'}}>🧪 Kịch bản giả định</button>
             <button onClick={()=> runAiAction('pccc')} disabled={loading} style={{fontSize:11, padding:'4px 10px', borderRadius:999, border:'1px solid #0F766E', background:'#fff', color:'#0F766E'}}>🚒 Tổng hợp PCCC</button>
-            <button onClick={()=> askPuter()} disabled={loading} title="Chat qua Puter.js (deepseek-v4.1-flash) — tính vào tài khoản Puter của bạn, không dùng key backend" style={{fontSize:11, padding:'4px 10px', borderRadius:999, border:'1px solid #7C3AED', background:'#fff', color:'#7C3AED'}}>✦ Hỏi Puter AI</button>
+            <button onClick={()=> askPuter()} disabled={loading} title="Chat qua Puter.js (deepseek-v4.1-flash) — tính vào tài khoản Puter của bạn, không dùng khóa backend" style={{fontSize:11, padding:'4px 10px', borderRadius:999, border:'1px solid #7C3AED', background:'#fff', color:'#7C3AED'}}>✦ Hỏi Puter AI</button>
           </div>
           <textarea value={q} onChange={e=>setQ(e.target.value)} placeholder="Gia Lai hiện tại có khu vực nào nguy cơ cháy rừng cao?" aria-label="Hỏi AI" />
           <div style={{display:'flex', gap:8, marginTop:8}}>
-            <button className="ask" onClick={()=>ask()} disabled={loading}>{loading? phase : 'Phân tích'}</button>
-            <button className="ask" onClick={askStream} disabled={loading} style={{background:'#0B1412'}}>{loading? '...' : 'Stream'}</button>
+            <button className="ask" onClick={()=>ask()} disabled={loading}>{loading? tenGiaiDoan(phase) : 'Phân tích'}</button>
+            <button className="ask" onClick={askStream} disabled={loading} style={{background:'#0B1412'}}>{loading? '...' : 'Trực tiếp'}</button>
           </div>
-          {loading && <div style={{marginTop:8, fontSize:12, background:'#FEF3C7', padding:'6px 10px', borderRadius:8}}>{phase}... <span className="dot" style={{display:'inline-block', width:8, height:8, background:'#F59E0B', borderRadius:999, animation:'pulse 1s infinite'}}/></div>}
+          {loading && <div style={{marginTop:8, fontSize:12, background:'#FEF3C7', padding:'6px 10px', borderRadius:8}}>{tenGiaiDoan(phase)}... <span className="dot" style={{display:'inline-block', width:8, height:8, background:'#F59E0B', borderRadius:999, animation:'pulse 1s infinite'}}/></div>}
           {stream && <div className="answer-wrap">
             <div className="answer" style={{whiteSpace:'pre-wrap', maxHeight:showFullAnswer ? 420 : 180, overflow:'auto'}}>{stream.slice(0, showFullAnswer ? 6000 : 1200)}</div>
             {stream.length > 1200 && <button className="answer-toggle" onClick={()=> setShowFullAnswer(v=>!v)}>{showFullAnswer ? 'Thu gọn kết quả' : 'Xem đầy đủ kết quả'}</button>}
           </div>}
           {result && (
             <div className="ai-result-card">
-              <div className="ai-result-head"><div style={{fontWeight:800, fontSize:12, letterSpacing:0.4}}>FIRE INTELLIGENCE</div><span>AI · {phase === 'COMPLETE' ? 'LIVE' : phase}</span></div>
+              <div className="ai-result-head"><div style={{fontWeight:800, fontSize:12, letterSpacing:0.4}}>PHÂN TÍCH CHÁY</div><span>AI · {phase === 'COMPLETE' ? 'TRỰC TIẾP' : tenGiaiDoan(phase)}</span></div>
               {result.provider === 'Puter' && <div style={{fontSize:11, color:'#7C3AED', marginBottom:4}}>Nguồn: Puter · {result.model} · {result.billing}</div>}
-              <div className="ai-risk-line">Risk: <b>{result.risk?.score ?? result.structured_output?.risk?.score ?? '--'} / 100</b> · Band <b>{result.risk?.band ?? '--'}</b></div>
-              <div style={{fontSize:12}}>Confidence: <b>{Math.round((result.risk?.confidence ?? result.model_confidence ?? 0)*100) || result.risk?.confidence || '--'}%</b> · Data completeness: {result.data_completeness ?? '--'}%</div>
-              <div style={{fontSize:11, color:'#334155', marginTop:4}}>Tín hiệu: {Object.keys(result.factors || {}).join(', ') || 'fuel dryness, weather, FIRMS'}</div>
-              <div style={{fontSize:11, marginTop:6}}>Evidence: {result.evidence?.length ?? 0} sources · RAG: {result.rag?.retrieved_documents ?? 0} docs</div>
+              <div className="ai-risk-line">Điểm: <b>{result.risk?.score ?? result.structured_output?.risk?.score ?? '--'} / 100</b> · Mức <b>{result.risk?.band ?? '--'}</b></div>
+              <div style={{fontSize:12}}>Độ tin cậy: <b>{Math.round((result.risk?.confidence ?? result.model_confidence ?? 0)*100) || result.risk?.confidence || '--'}%</b> · Độ đầy dữ liệu: {result.data_completeness ?? '--'}%</div>
+              <div style={{fontSize:11, color:'#334155', marginTop:4}}>Tín hiệu: {Object.keys(result.factors || {}).join(', ') || 'thảm khô, thời tiết, FIRMS'}</div>
+              <div style={{fontSize:11, marginTop:6}}>Bằng chứng: {result.evidence?.length ?? 0} nguồn · RAG: {result.rag?.retrieved_documents ?? 0} tài liệu</div>
               <div style={{display:'flex', gap:6, marginTop:8, flexWrap:'wrap'}}>
-                <button onClick={()=> setShowInspector(v=>!v)} style={{fontSize:11, padding:'4px 8px', borderRadius:999, border:'1px solid #0F766E', background: showInspector?'#0F766E':'#fff', color: showInspector?'#fff':'#0F766E'}}>AI Inspector</button>
-                <button onClick={()=> navigator.clipboard.writeText(JSON.stringify(result, null, 2))} style={{fontSize:11, padding:'4px 8px', borderRadius:999, border:'1px solid #E2E8E5'}}>Copy</button>
-                <button onClick={()=> window.open(`${API}/api/ai/rag/search?q=${encodeURIComponent(q)}`,'_blank')} style={{fontSize:11, padding:'4px 8px', borderRadius:999, border:'1px solid #E2E8E5'}}>Evidence</button>
+                <button onClick={()=> setShowInspector(v=>!v)} style={{fontSize:11, padding:'4px 8px', borderRadius:999, border:'1px solid #0F766E', background: showInspector?'#0F766E':'#fff', color: showInspector?'#fff':'#0F766E'}}>Chi tiết AI</button>
+                <button onClick={()=> navigator.clipboard.writeText(JSON.stringify(result, null, 2))} style={{fontSize:11, padding:'4px 8px', borderRadius:999, border:'1px solid #E2E8E5'}}>Chép</button>
+                <button onClick={()=> window.open(`${API}/api/ai/rag/search?q=${encodeURIComponent(q)}`,'_blank')} style={{fontSize:11, padding:'4px 8px', borderRadius:999, border:'1px solid #E2E8E5'}}>Bằng chứng</button>
               </div>
               {showInspector && (
                 <div style={{marginTop:8, background:'#0B1412', color:'#A7F3D0', borderRadius:8, padding:10, fontSize:11, fontFamily:'monospace'}}>
-                  <div>AI WORKFLOW</div>
-                  <div>Intent: {result.intent}</div>
-                  <div>Agent: {result.workflow?.agent}</div>
-                  <div>Tools: {(result.workflow?.tools_used || []).join(', ')}</div>
-                  <div>Retrieval: {result.workflow?.retrieval_count} docs</div>
-                  <div>Data sources: {result.workflow?.data_sources}</div>
-                  <div>Structured: {String(result.workflow?.structured_valid)}</div>
-                  <div>Model: {result.workflow?.model} ({result.workflow?.provider})</div>
-                  <div>Latency: {result.workflow?.latency_ms}ms</div>
-                  <div>Status: {result.workflow?.status}</div>
+                  <div>LUỒNG AI</div>
+                  <div>Mục đích: {result.intent}</div>
+                  <div>Tác vụ: {result.workflow?.agent}</div>
+                  <div>Công cụ: {(result.workflow?.tools_used || []).join(', ')}</div>
+                  <div>Truy xuất: {result.workflow?.retrieval_count} tài liệu</div>
+                  <div>Nguồn dữ liệu: {result.workflow?.data_sources}</div>
+                  <div>Cấu trúc: {String(result.workflow?.structured_valid)}</div>
+                  <div>Mô hình: {result.workflow?.model} ({result.workflow?.provider})</div>
+                  <div>Độ trễ: {result.workflow?.latency_ms}ms</div>
+                  <div>Trạng thái: {result.workflow?.status}</div>
                 </div>
               )}
-              <div style={{fontSize:10, color:'#64748B', marginTop:6}}>Phân biệt: <b>OBSERVED</b> vệ tinh/thời tiết · <b>AI INFERENCE</b> risk · <b>SIMULATION</b> What-if · <b>OFFICIAL</b> khi có xác minh</div>
+              <div style={{fontSize:10, color:'#64748B', marginTop:6}}>Phân biệt: <b>QUAN TRẮC</b> vệ tinh/thời tiết · <b>SUY LUẬN AI</b> điểm nguy cơ · <b>MÔ PHỎNG</b> giả định · <b>CHÍNH THỨC</b> khi có xác minh</div>
               <div style={{fontSize:10, color:'#92400E', background:'#FEF3C7', padding:'4px 6px', borderRadius:6, marginTop:4}}>Citations: {(result.rag?.citations || []).slice(0,3).map((c:any)=> c.title).join(' · ') || 'Sentinel-2, FIRMS, Open-Meteo'}</div>
             </div>
           )}
           <div style={{marginTop:8, display:'flex', alignItems:'center', gap:6, fontSize:10, color:'#64748B'}}>
-            <span>Pipeline:</span>
-            <span style={{background: phase==='THINKING'?'#0F766E':'#E2E8E5', color: phase==='THINKING'?'#fff':'#64748B', padding:'2px 6px', borderRadius:999}}>USER</span>→
-            <span style={{background: phase==='RETRIEVING DATA'?'#0F766E':'#E2E8E5', padding:'2px 6px', borderRadius:999}}>RAG</span>→
-            <span style={{background: phase==='ANALYZING'?'#0F766E':'#E2E8E5', padding:'2px 6px', borderRadius:999}}>TOOLS</span>→<span style={{background: phase==='GENERATING'?'#0F766E':'#E2E8E5', padding:'2px 6px', borderRadius:999}}>AI</span>→<span style={{background: phase==='COMPLETE'?'#10B981':'#E2E8E5', color: phase==='COMPLETE'?'#fff':'#64748B', padding:'2px 6px', borderRadius:999}}>EVIDENCE</span>
+            <span>Quy trình:</span>
+            <span style={{background: phase==='THINKING'?'#0F766E':'#E2E8E5', color: phase==='THINKING'?'#fff':'#64748B', padding:'2px 6px', borderRadius:999}}>NGƯỜI DÙNG</span>→
+            <span style={{background: phase==='RETRIEVING DATA'?'#0F766E':'#E2E8E5', padding:'2px 6px', borderRadius:999}}>DỮ LIỆU</span>→
+            <span style={{background: phase==='ANALYZING'?'#0F766E':'#E2E8E5', padding:'2px 6px', borderRadius:999}}>CÔNG CỤ</span>→<span style={{background: phase==='GENERATING'?'#0F766E':'#E2E8E5', padding:'2px 6px', borderRadius:999}}>AI</span>→<span style={{background: phase==='COMPLETE'?'#10B981':'#E2E8E5', color: phase==='COMPLETE'?'#fff':'#64748B', padding:'2px 6px', borderRadius:999}}>BẰNG CHỨNG</span>
           </div>
         </div>
       )}
@@ -332,6 +344,13 @@ function AnimatedRoutes(){
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
           <Route path="/" element={<PageTransition><EcoMap/></PageTransition>} />
+          <Route path="/trung-tam-chi-huy" element={<PageTransition><TrungTamChiHuy/></PageTransition>} />
+          <Route path="/ban-do-3d" element={<PageTransition><BanDo3D/></PageTransition>} />
+          <Route path="/chay-lich-su" element={<PageTransition><ChayLichSu/></PageTransition>} />
+          <Route path="/phong-thi-nghiem" element={<PageTransition><PhongThiNghiem/></PageTransition>} />
+          <Route path="/nguon-du-lieu" element={<PageTransition><NguonDuLieu/></PageTransition>} />
+          <Route path="/thong-bao" element={<PageTransition><Notifications/></PageTransition>} />
+          <Route path="/nhat-ky" element={<PageTransition><Audit/></PageTransition>} />
           <Route path="/events" element={<PageTransition><EventsList/></PageTransition>} />
           <Route path="/events/:id" element={<PageTransition><EventIntelligence/></PageTransition>} />
           <Route path="/firesim" element={<PageTransition><FireSim/></PageTransition>} />

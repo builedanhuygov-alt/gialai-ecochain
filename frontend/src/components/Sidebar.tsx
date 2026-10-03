@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Map, Flame, FileCheck, Users, Settings, X } from 'lucide-react'
+import { Database, FileCheck, Flame, FlaskConical, History, Map, Mountain, Radio, Users, Wind, Settings, X } from 'lucide-react'
 import FireRiskGauge from './FireRiskGauge'
 import { useLang } from '../i18n'
 
@@ -8,13 +8,20 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
   const { t } = useLang()
   const groups = [
     { label: t('nav.main'), items:[
+      { to:'/trung-tam-chi-huy', label: t('nav.chihuy'), icon: Radio },
       { to:'/', label: t('nav.eco'), icon: Map },
+      { to:'/ban-do-3d', label: t('nav.map3d'), icon: Mountain },
       { to:'/events', label: t('nav.events'), icon: Flame },
-      { to:'/firesim', label: t('nav.firesim'), icon: Flame },
-      { to:'/missions', label: t('nav.missions'), icon: FileCheck },
     ]},
-    { label:'', items:[
+    { label: t('nav.analyse'), items:[
+      { to:'/chay-lich-su', label: t('nav.history'), icon: History },
+      { to:'/phong-thi-nghiem', label: t('nav.lab'), icon: FlaskConical },
+      { to:'/firesim', label: t('nav.firesim'), icon: Wind },
+    ]},
+    { label: t('nav.field'), items:[
+      { to:'/missions', label: t('nav.missions'), icon: FileCheck },
       { to:'/community', label: t('nav.community'), icon: Users },
+      { to:'/nguon-du-lieu', label: t('nav.sources'), icon: Database },
     ]},
   ]
   return (

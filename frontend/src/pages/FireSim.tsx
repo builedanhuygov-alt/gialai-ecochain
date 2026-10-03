@@ -7,6 +7,7 @@ import FireSimulationLayer, { setRouteMesh } from '../components/sim/FireSimLaye
 import FireFrontCanvas, { frontSupported } from '../components/sim/FireFrontCanvas'
 import TwinScene from '../components/sim/TwinScene'
 import type { TwinShow } from '../components/sim/TwinScene'
+import { hienThi } from '../utils/hienThi'
 
 const API = API_BASE.replace(/\/$/, '')
 
@@ -305,7 +306,7 @@ export default function FireSim(){
     <div style={{display:'flex', flexDirection:'column', gap:12}}>
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8}}>
             <h1 style={{margin:0}}>🔥 Mô phỏng cháy 3D <span style={{fontSize:11, fontWeight:400, color:'#64748B'}}>ELLIPTICAL_HEURISTIC. Phác thảo chiến thuật, không phải vật lý cháy</span></h1>
-        <Link to="/command" style={{fontSize:12, color:'#0F766E', fontWeight:700}}>→ Chỉ huy</Link>
+        <Link to="/trung-tam-chi-huy" style={{fontSize:12, color:'#0F766E', fontWeight:700}}>→ Chỉ huy</Link>
       </div>
       <div style={{display:'grid', gridTemplateColumns:'300px 1fr', gap:12}} className="firesim-grid">
         <div style={{display:'flex', flexDirection:'column', gap:10, background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
@@ -353,7 +354,7 @@ export default function FireSim(){
               B (gió {compareWind} km/h, nét đứt tím) vs A (gió {wind} km/h): diện tích {compareDelta.dArea >= 0 ? '+' : ''}{compareDelta.dArea} ha · xã {compareDelta.dN >= 0 ? '+' : ''}{compareDelta.dN}
             </div>
           )}
-          {planStale && !planLoading && <div style={{fontSize:11, color:'#B45309'}}>Plan đang cũ hơn kịch bản. Sẽ tự tái sinh.</div>}
+          {planStale && !planLoading && <div style={{fontSize:11, color:'#B45309'}}>Bản kế hoạch đang cũ hơn kịch bản. Sẽ tự tái sinh.</div>}
           {error && <div style={{fontSize:12, color:'#B91C1C'}}>⚠ {error}</div>}
           <div style={{display:'flex', flexDirection:'column', gap:4, borderTop:'1px solid #F1F5F9', paddingTop:8}}>
             <b style={{fontSize:12}}>Lớp hiển thị {mode === '3d' ? '(3D)' : '(2D)'}</b>
@@ -378,7 +379,7 @@ export default function FireSim(){
         <div style={{position:'relative', minHeight:420, borderRadius:12, overflow:'hidden', border:'1px solid #E2E8E5'}} ref={mapDiv}>
           <div style={{position:'absolute', top:8, left:8, zIndex:7, display:'flex', gap:6}}>
             <button onClick={()=> setMode('2d')} style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'4px 12px', background: mode==='2d' ? '#0B1412' : '#fff', color: mode==='2d' ? '#fff' : '#0B1412', cursor:'pointer'}}>2D bản đồ</button>
-            <button onClick={()=> { setDemError(''); setMode('3d') }} style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'4px 12px', background: mode==='3d' ? '#0B1412' : '#fff', color: mode==='3d' ? '#fff' : '#0B1412', cursor:'pointer'}}>3D Twin</button>
+            <button onClick={()=> { setDemError(''); setMode('3d') }} style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'4px 12px', background: mode==='3d' ? '#0B1412' : '#fff', color: mode==='3d' ? '#fff' : '#0B1412', cursor:'pointer'}}>3D</button>
           </div>
           {mode === '2d' && map && mapReady && data && (
             <>
@@ -427,7 +428,7 @@ export default function FireSim(){
                 <button key={h} onClick={()=> { setUntilHour(h === 0 ? 0 : h); setPlaying(false) }} style={{fontSize:11, fontWeight:700, borderRadius:999, border: untilHour === h ? '2px solid #0B1412' : '1px solid #E2E8E5', padding:'2px 10px', background:'#fff', cursor:'pointer', transition:'border-color 200ms cubic-bezier(0.16,1,0.3,1)'}}>T+{h}h</button>
               ))}
               <button onClick={()=> setPlaying(p=> !p)} style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'2px 10px', background: playing ? '#DC2626' : '#fff', color: playing ? '#fff' : '#0B1412', cursor:'pointer', transition:'background-color 200ms cubic-bezier(0.16,1,0.3,1), color 200ms cubic-bezier(0.16,1,0.3,1)'}}>{playing ? '⏸' : '▶'} Playback</button>
-              <button onClick={()=> { setUntilHour(null); setPlaying(false) }} title="Reset timeline về toàn kịch bản" style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'2px 10px', background:'#fff', cursor:'pointer'}}>↺ Reset</button>
+              <button onClick={()=> { setUntilHour(null); setPlaying(false) }} title="Đặt lại mốc thời gian về toàn kịch bản" style={{fontSize:11, fontWeight:700, borderRadius:999, border:'1px solid #E2E8E5', padding:'2px 10px', background:'#fff', cursor:'pointer'}}>↺ Đặt lại</button>
               <input type="range" min={0} max={Math.max(...data.spread.steps.map((s: any)=> s.hour))} step={1} value={untilHour ?? Math.max(...data.spread.steps.map((s: any)=> s.hour))} onChange={e=> { setUntilHour(Number(e.target.value)); setPlaying(false) }} aria-label="Mốc thời gian lan cháy" style={{flex:'1 1 150px', minWidth:130, accentColor:'#DC2626'}} />
               <span style={{fontSize:10, fontWeight:800, color:'#991B1B', minWidth:42}}>{untilHour === null ? 'TẤT CẢ' : `T+${untilHour}h`}</span>
               <span style={{fontSize:10, color:'#64748B'}}>timeline lọc ellipse + xã + story (tuyến/nước theo toàn kịch bản){mode === '3d' && ' · cây = proxy tán ESTIMATED · kéo xoay / lăn zoom / chuột phải nghiêng'}</span>
@@ -452,19 +453,19 @@ export default function FireSim(){
             <div style={{fontSize:12, color:'#64748B'}}>ROS {imp.ros_kmh} km/h · tiến triển: {Object.entries(imp.progression || {}).map(([h, v]: any)=> `+${h}h ${v.length_km}km`).join(' · ')}</div>
           </div>
           <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
-            <b>🏘️ {imp.communities_threatened} xã: {(imp.communes || []).join(', ') || 'MISSING'}</b>
-            <div style={{fontSize:12, color:'#64748B'}}>Trạm ảnh hưởng: {(imp.stations_impacted || []).join(', ') || 'MISSING'}</div>
+            <b>🏘️ {imp.communities_threatened} xã: {(imp.communes || []).join(', ') || 'chưa rõ'}</b>
+            <div style={{fontSize:12, color:'#64748B'}}>Trạm ảnh hưởng: {(imp.stations_impacted || []).join(', ') || 'chưa rõ'}</div>
             {(simView?.communities || []).length > 0 && (
               <div style={{fontSize:11, marginTop:4}}>{(simView.communities || []).slice(0, 6).map((c: any)=> (
-                <span key={c.code} title={`Nước: ${c.shield_components?.water_availability || 'MISSING'} · Trạm: ${c.shield_components?.response_availability || 'MISSING'} · Tuyến: ${c.shield_components?.route_resilience || 'MISSING'} · Địa hình: ${c.shield_components?.terrain_difficulty || 'MISSING'} · Dân số: ${c.population ?? 'MISSING'}`} style={{display:'inline-block', background:'#F1F5F9', borderRadius:8, padding:'2px 8px', marginRight:4, marginBottom:4}}>
+                <span key={c.code} title={`Nước: ${hienThi(c.shield_components?.water_availability)} · Trạm: ${hienThi(c.shield_components?.response_availability)} · Tuyến: ${hienThi(c.shield_components?.route_resilience)} · Địa hình: ${hienThi(c.shield_components?.terrain_difficulty)} · Dân số: ${hienThi(c.population)}`} style={{display:'inline-block', background:'#F1F5F9', borderRadius:8, padding:'2px 8px', marginRight:4, marginBottom:4}}>
                   {c.commune} · {c.band} · 🛡️{c.shield}
                 </span>
               ))}</div>
             )}
           </div>
           <div className="card" style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
-            <b>💧 Nước ảnh hưởng: {(imp.water_impacted || []).join(', ') || 'MISSING'}</b>
-            <div style={{fontSize:12, color:'#64748B'}}>Tuyến ảnh hưởng: {(imp.routes_impacted || []).join(', ') || 'MISSING'}</div>
+            <b>💧 Nước ảnh hưởng: {(imp.water_impacted || []).join(', ') || 'chưa rõ'}</b>
+            <div style={{fontSize:12, color:'#64748B'}}>Tuyến ảnh hưởng: {(imp.routes_impacted || []).join(', ') || 'chưa rõ'}</div>
           </div>
         </div>
       )}
@@ -501,7 +502,7 @@ export default function FireSim(){
           {data?.wind_corridor && (
             <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
               <b>🌬️ Hành lang gió ({data.wind_corridor.length_km} km × ±{data.wind_corridor.half_width_km} km)</b>
-              <div style={{fontSize:12, color:'#64748B'}}>Xã trong hành lang: {(data.wind_corridor.communes_inside || []).join(', ') || 'MISSING'}</div>
+              <div style={{fontSize:12, color:'#64748B'}}>Xã trong hành lang: {(data.wind_corridor.communes_inside || []).join(', ') || 'chưa rõ'}</div>
               <div style={{fontSize:11, color:'#64748B'}}>{data.wind_corridor.method}</div>
             </div>
           )}
@@ -517,10 +518,10 @@ export default function FireSim(){
           )}
           {(data?.top_actions?.length > 0 || data?.checklist || data?.fire_behavior) && (
             <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:12}}>
-              <b>🎖️ Operations Officer — TOP 5</b>
+              <b>🎖️ Sĩ quan tác chiến — 5 việc chính</b>
               {(data.top_actions || []).map((a: any, i: number)=> (
                 <div key={i} style={{fontSize:12, borderTop:'1px solid #F1F5F9', padding:'4px 0'}}>
-                  <b>{a.action}: {a.title}</b> — {a.unit || 'MISSING'} · {a.reason}
+                  <b>{a.action}: {a.title}</b> — {hienThi(a.unit)} · {a.reason}
                   {a.eta_minutes != null && <> · ETA ~{a.eta_minutes}′</>} · tin cậy {a.confidence}
                 </div>
               ))}
@@ -528,9 +529,9 @@ export default function FireSim(){
               {data?.checklist && (
                 <div style={{fontSize:12, marginTop:6}}>
                   <b>☑️ Checklist:</b>
-                  <div>Ngay: {(data.checklist.immediate || []).join(' · ') || 'MISSING'}</div>
-                  <div>30′: {(data.checklist.short_term || []).join(' · ') || 'MISSING'}</div>
-                  <div>1–3h: {(data.checklist.medium_term || []).join(' · ') || 'MISSING'}</div>
+                  <div>Ngay: {(data.checklist.immediate || []).join(' · ') || 'chưa rõ'}</div>
+                  <div>30′: {(data.checklist.short_term || []).join(' · ') || 'chưa rõ'}</div>
+                  <div>1–3h: {(data.checklist.medium_term || []).join(' · ') || 'chưa rõ'}</div>
                 </div>
               )}
             </div>
@@ -566,14 +567,14 @@ export default function FireSim(){
           {planLoading && <div style={{fontSize:12, color:'#64748B'}}>Đang tổng hợp…</div>}
           {plan && !planLoading && !plan.error && (
             <div style={{fontSize:12, display:'flex', flexDirection:'column', gap:4, marginTop:6}}>
-              <div>CẤP <b>{plan.risk_summary?.level}</b> · {plan.command_status} · Nước: <b>{plan.primary_water?.name}</b> ({plan.primary_water?.priority}) · Trạm: <b>{plan.primary_station?.station_name || 'MISSING'}</b> · Tuyến: <b>{plan.primary_route?.route_name || 'MISSING'}</b></div>
+              <div>CẤP <b>{plan.risk_summary?.level}</b> · {plan.command_status} · Nước: <b>{plan.primary_water?.name}</b> ({plan.primary_water?.priority}) · Trạm: <b>{hienThi(plan.primary_station?.station_name)}</b> · Tuyến: <b>{hienThi(plan.primary_route?.route_name)}</b></div>
               <div>🌐 {(plan.analyst_bulletin?.hinh_anh_hien_truong || []).join(' · ')}</div>
               {plan.earth_intelligence && <div>🧠 {plan.earth_intelligence.recommended_action}</div>}
               {(plan.deployment_plan || []).length > 0 && (
                 <ol style={{margin:'4px 0 4px 16px', padding:0, fontSize:12}}>{plan.deployment_plan.map((d: any, i: number)=> <li key={i}>{d.detail}{d.eta_minutes != null && <> (ETA ~{d.eta_minutes}′)</>}</li>)}</ol>
               )}
               <ul style={{margin:'4px 0 4px 16px', padding:0}}>{(plan.tactical_recommendations || []).slice(0, 6).map((r: string, i: number)=> <li key={i}>{r}</li>)}</ul>
-              <Link to="/command" style={{fontSize:12, color:'#0F766E', fontWeight:700}}>Mở Command Center →</Link>
+              <Link to="/trung-tam-chi-huy" style={{fontSize:12, color:'#0F766E', fontWeight:700}}>Mở Trung tâm chỉ huy →</Link>
             </div>
           )}
           {plan?.error && <div style={{fontSize:12, color:'#B91C1C'}}>⚠ {plan.error}</div>}
