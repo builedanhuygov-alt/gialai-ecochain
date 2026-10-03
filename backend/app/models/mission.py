@@ -12,15 +12,11 @@ from app.database import Base
 MISSION_STATUSES = ("NEW", "ASSIGNED", "IN_PROGRESS", "DONE")
 MISSION_NEXT = {"NEW": ("ASSIGNED",), "ASSIGNED": ("IN_PROGRESS",), "IN_PROGRESS": ("DONE",), "DONE": ()}
 MISSION_OUTCOMES = ("CONFIRMED_FIRE", "FALSE_ALARM", "RESOLVED")
+MISSION_DECISIONS = ("XAC_NHAN", "TU_CHOI", "CAN_THEM_DU_LIEU")
 
-# Fixed field procedure (steps, not data — no numbers invented).
-FIELD_CHECKLIST = [
-    "Đến tọa độ mục tiêu (trong ~1 km)",
-    "Chụp ảnh hiện trường kèm GPS + giờ",
-    "Xác nhận có/không có cháy",
-    "Ghi chú thảm thực bì, gió, dấu vết lửa",
-    "Gửi kết quả trong 24 giờ",
-]
+# Checklist 4 bước cố định (quan sát/báo cáo, không chữa cháy).
+# Nguồn sự thật duy nhất nằm ở services/fire_risk.CHECKLIST_4.
+from app.services.fire_risk import CHECKLIST_4 as FIELD_CHECKLIST
 
 
 class Mission(Base):
@@ -33,6 +29,10 @@ class Mission(Base):
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     risk_at_creation: Mapped[int | None] = mapped_column(Integer, nullable=True)
     priority: Mapped[str] = mapped_column(String(20), default="NORMAL")
+    zone: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    inspection_priority: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    decision: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    decided_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="NEW")
     assignee: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -52,4 +52,11 @@ class FieldResult(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     reporter_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    vegetation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    smoke_heat: Mapped[str | None] = mapped_column(Text, nullable=True)
+    human_activity: Mapped[str | None] = mapped_column(Text, nullable=True)
+    water_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access: Mapped[str | None] = mapped_column(Text, nullable=True)
+    match_result: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

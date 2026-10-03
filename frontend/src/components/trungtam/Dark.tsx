@@ -86,8 +86,7 @@ export function RiskBar({ score, level }: { score: number | null; level?: string
   )
 }
 
-export function DataQuality({ missing, completeness }: { missing?: string[]; completeness?: number | null }) {
-  const pct = completeness === null || completeness === undefined ? null : Math.round(completeness * 100)
+export function DataQuality({ missing, completeness }: { missing?: string[]; completeness?: number | null }) {  const pct = completeness === null || completeness === undefined ? null : Math.round(completeness * 100)
   const names: Record<string, string> = {
     fuel_dryness: 'thảm khô', weather_danger: 'thời tiết', firms_proximity: 'điểm nóng',
     wind: 'gió', rainfall_deficit: 'mưa', terrain: 'địa hình', historical_community: 'lịch sử/cộng đồng',
@@ -104,6 +103,31 @@ export function DataQuality({ missing, completeness }: { missing?: string[]; com
       {missing && missing.length > 0 && (
         <div style={{ color: C.warn, marginTop: 6 }}>Thiếu: {missing.map(m => names[m] || m).join(', ')}. Không dùng số giả thay thế.</div>
       )}
+    </div>
+  )
+}
+
+export function CanhBaoChinhThuc() {
+  return (
+    <div role="alert" style={{ background: '#450A0A', border: '2px solid #DC2626', borderRadius: 12,
+      padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#FECACA' }}>
+      Cảnh báo chính thức: CHƯA CÓ — chỉ cơ quan có thẩm quyền mới ban hành.
+      Mọi mức nguy cơ trên đây là chỉ số tham khảo.
+    </div>
+  )
+}
+
+export function ChatLuongNguon({ rows }: { rows: { nhom: string; co: boolean; chiTiet: string }[] }) {
+  return (
+    <div style={{ fontSize: 12 }}>
+      <div style={{ color: C.muted, marginBottom: 4 }}>CHẤT LƯỢNG DỮ LIỆU</div>
+      {rows.map(r=> (
+        <div key={r.nhom} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 0', borderTop: `1px solid ${C.line}` }}>
+          <span aria-hidden>{r.co ? '✓' : '✗'}</span>
+          <b style={{ minWidth: 90 }}>{r.nhom}</b>
+          <span style={{ color: C.muted }}>{r.co ? 'có' : 'không'} · {r.chiTiet}</span>
+        </div>
+      ))}
     </div>
   )
 }

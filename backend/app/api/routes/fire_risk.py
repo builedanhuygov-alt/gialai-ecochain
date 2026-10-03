@@ -268,3 +268,91 @@ def risk_config():
     return {"weights": WEIGHTS,
             "thresholds": [{"lte": t, "level": lvl} for t, lvl in THRESHOLDS],
             "note": "Nguong cau hinh tai mot noi (fire_risk_config), khong rai rac UI"}
+
+
+@router.post("/fire-risk/explain")
+def explain_risk(body: dict):
+    """Giải thích nguyên nhân theo luật cố định (không học máy)."""
+    from app.services.fire_risk import explain
+    try:
+        inp = _input_from_body(body)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "numeric inputs must be numbers")
+    return explain(inp, origin="USER_INPUT" if body.get("_trial") else "LIVE")
+
+
+@router.get("/fire-risk/change")
+async def risk_change(lat: float = Query(...), lon: float = Query(...),
+                      administrative_unit_id: str = Query(default="Gia Lai")):
+    """Hôm nay so với hôm qua: chênh lệch từng yếu tố + câu tóm tắt tự sinh.
+
+    Chỉ thời tiết đổi theo ngày (kho lưu trữ Open-Meteo); vệ tinh/FIRMS/
+    cộng đồng giữ nguyên hôm nay và ghi rõ. Không đoán.
+    """
+    from datetime import date, timedelta
+    from app.services.fire_risk import FireRiskInput, compute_score
+    from app.services.weather_service import current_summary, fetch_current
+    try:
+        w = await fetch_current(lat, lon)
+    except Exception:
+        raise HTTPException(503, "Không lấy được thời tiết hiện tại")
+    if w.get("status") not in ("LIVE", "CACHED", "STALE"):
+        raise HTTPException(503, "Thời tiết hiện tại không khả dụng")
+    hom_nay = current_summary(w)
+    hom_qua: dict = {}
+    try:
+        from app.services.weather_service import fetch_history
+        h = await fetch_history(lat, lon, past_days=2)
+        if h.get("status") in ("LIVE", "CACHED"):
+            prec = (h.get("daily", {}) or {}).get("precipitation_sum") or []
+            tmax = (h.get("daily", {}) or {}).get("temperature_2m_max") or []
+            if len(prec) >= 2:
+                hom_qua = {"temperature": tmax[-2] if len(tmax) >= 2 else None,
+                           "rainfall": prec[-2]}
+    except Exception:
+        hom_qua = {}
+    co_hom_qua = hom_qua.get("temperature") is not None or hom_qua.get("rainfall") is not None
+    base = {"humidity": hom_nay.get("humidity"), "wind_speed": hom_nay.get("wind_speed")}
+    nay = FireRiskInput(temperature=hom_nay.get("temperature"), rainfall=hom_nay.get("rainfall"),
+                        humidity=hom_nay.get("humidity"), wind_speed=hom_nay.get("wind_speed"),
+                        firms_observed=True)
+    # Hôm qua chỉ có nhiệt/mưa từ kho lưu trữ; ẩm/gió hôm qua không có nên
+    # để thiếu (chuẩn hóa lại trọng số, không dùng số giả).
+    qua = FireRiskInput(temperature=hom_qua.get("temperature"), rainfall=hom_qua.get("rainfall"),
+                        firms_observed=True)
+    # NOTE: firms_observed=True cả hai ngày nhưng hotspot_count=0 (không có
+    # đếm FIRMS theo ngày trong NRT) — yếu tố điểm nóng giữ nguyên, chỉ thời
+    # tiết tạo chênh lệch. Ghi rõ trong ghi chú.
+    r_nay = compute_score(nay, origin="LIVE")
+    r_qua = compute_score(qua, origin="LIVE")
+    ten = {"fuel_dryness": "Thực vật khô", "weather_danger": "Nhiệt độ",
+           "firms_proximity": "Điểm nhiệt", "wind": "Gió", "rainfall_deficit": "Mưa",
+           "terrain": "Địa hình", "historical_community": "Lịch sử/cộng đồng"}
+    # Chênh lệch điểm thành phần (chỉ yếu tố quan sát được cả hai ngày).
+    from app.services.fire_risk import _factor_scores
+    s_nay, s_qua = _factor_scores(nay), _factor_scores(qua)
+    o_qua = {f for f in r_qua.breakdown}
+    chung = [f for f in r_nay.breakdown if f in o_qua]
+    lech = [{"yeu_to": ten.get(f, f), "delta": round(s_nay[f] - s_qua[f], 1)} for f in chung]
+    lech.sort(key=lambda d: d["delta"], reverse=True)
+    d_tong = (r_nay.score or 0) - (r_qua.score or 0)
+    lon_nhat = lech[0] if lech else None
+    if not co_hom_qua:
+        tom_tat = "Thiếu dữ liệu thời tiết hôm qua – chưa đủ cơ sở so sánh."
+    elif d_tong > 0:
+        tom_tat = (f"Nguy cơ tăng {d_tong} điểm so với hôm qua"
+                   + (f", chủ yếu do {lon_nhat['yeu_to']} (+{lon_nhat['delta']})." if lon_nhat else "."))
+    elif d_tong < 0:
+        tom_tat = (f"Nguy cơ giảm {abs(d_tong)} điểm so với hôm qua"
+                   + (f", chủ yếu do {lon_nhat['yeu_to']} ({lon_nhat['delta']})." if lon_nhat else "."))
+    else:
+        tom_tat = "Nguy cơ không đổi so với hôm qua."
+    return {
+        "hom_nay": r_nay.score, "hom_qua": r_qua.score if co_hom_qua else None,
+        "delta": d_tong if co_hom_qua else None,
+        "chenh_lech": lech if co_hom_qua else [],
+        "tom_tat": tom_tat,
+        "ghi_chu": ("Chỉ thời tiết đổi theo ngày; vệ tinh/FIRMS/cộng đồng giữ nguyên hôm nay."
+                    if co_hom_qua else "Thiếu dữ liệu thời tiết hôm qua – chưa đủ cơ sở so sánh."),
+        "origin": "LIVE",
+    }

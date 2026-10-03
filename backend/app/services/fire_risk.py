@@ -244,3 +244,138 @@ def input_from_legacy(
         community_count=community or 0, community_observed=bool(community),
         historical_fire=bool(historical), historical_observed=historical is not None,
     )
+
+
+# Checklist 4 bước cố định cho kiểm tra thực địa (quan sát/báo cáo, không
+# chữa cháy — không đưa hướng dẫn chữa cháy nguy hiểm).
+CHECKLIST_4 = [
+    "Xác minh vị trí và dấu hiệu nhiệt/cháy thực tế",
+    "Kiểm tra thảm thực vật và vật liệu khô",
+    "Ghi nhận gió, nguồn nước, khả năng tiếp cận",
+    "Chụp ảnh/GPS và cập nhật kết quả",
+]
+
+_FACTOR_VI = {
+    "fuel_dryness": "Thực vật khô", "weather_danger": "Nhiệt độ",
+    "firms_proximity": "Điểm nhiệt", "wind": "Gió",
+    "rainfall_deficit": "Mưa", "terrain": "Địa hình",
+    "historical_community": "Lịch sử/cộng đồng",
+}
+
+
+def _mo_ta_yeu_to(factor: str, inp: FireRiskInput, subscore: float) -> str:
+    """Câu giải thích tự sinh từ GIÁ TRỊ THẬT (không văn bản cố định)."""
+    if factor == "fuel_dryness":
+        ndvi = inp.ndvi if inp.ndvi is not None else float("nan")
+        muc = "rất khô" if (inp.ndvi or 9) < 0.3 else "khô" if (inp.ndvi or 9) < 0.5 else "trung bình"
+        return f"NDVI {ndvi:.2f} — thảm {muc}, điểm thành phần {subscore:.0f}/100."
+    if factor == "weather_danger":
+        return (f"Nhiệt {inp.temperature}°C, ẩm {inp.humidity}% — "
+                f"điểm thành phần {subscore:.0f}/100.")
+    if factor == "firms_proximity":
+        return (f"{inp.hotspot_count} điểm nhiệt vệ tinh — điểm thành phần {subscore:.0f}/100. "
+                "Điểm nhiệt là tín hiệu cần xác minh, không phải xác nhận cháy rừng.")
+    if factor == "wind":
+        return f"Gió {inp.wind_speed} km/h — điểm thành phần {subscore:.0f}/100."
+    if factor == "rainfall_deficit":
+        return f"Mưa {inp.rainfall} mm — điểm thành phần {subscore:.0f}/100."
+    if factor == "terrain":
+        return f"Dốc {inp.slope}° — điểm thành phần {subscore:.0f}/100."
+    if factor == "historical_community":
+        return (f"Lịch sử/cộng đồng ({inp.community_count} xác nhận) — "
+                f"điểm thành phần {subscore:.0f}/100. Lịch sử chỉ là bối cảnh.")
+    return f"Điểm thành phần {subscore:.0f}/100."
+
+
+def explain(inp: FireRiskInput, *, origin: str = "LIVE") -> Dict[str, Any]:
+    """Giải thích nguyên nhân theo luật cố định từ compute_score.
+
+    Trả: điểm/mức/confidence (độ đầy dữ liệu), top 3 theo contribution kèm
+    câu sinh từ giá trị thật, thanh đóng góp mọi yếu tố (tổng = điểm),
+    thông báo thiếu dữ liệu. Không đoán, không học máy.
+    """
+    r = compute_score(inp, origin=origin)
+    if r.score is None:
+        return {
+            "score": None, "level": None,
+            "confidence": 0.0, "origin": origin,
+            "top3": [], "bars": [],
+            "thieu": ["Thiếu dữ liệu – chưa đủ cơ sở để tính thành phần này: "
+                      + ", ".join(sorted(r.missing)) + "."],
+            "disclaimer": "Chi so tham khao, trong so chua hieu chuan",
+        }
+    subs = _factor_scores(inp)
+    bars = []
+    for f in r.breakdown:
+        w = r.weights_used.get(f, 0.0)
+        bars.append({
+            "factor": f, "label": _FACTOR_VI.get(f, f),
+            "score": round(subs[f], 2), "trong_so": round(w, 4),
+            "contribution": round(subs[f] * w, 2),
+            "mo_ta": _mo_ta_yeu_to(f, inp, subs[f]),
+        })
+    bars.sort(key=lambda b: b["contribution"], reverse=True)
+    thieu = ["Thiếu dữ liệu – chưa đủ cơ sở để tính thành phần này: "
+             + _FACTOR_VI.get(f, f) + "." for f in r.missing]
+    return {
+        "score": r.score, "level": r.level,
+        "confidence": round(r.data_completeness, 3), "origin": origin,
+        "top3": bars[:3], "bars": bars, "thieu": thieu,
+        "disclaimer": "Chi so tham khao, trong so chua hieu chuan",
+    }
+
+
+def recommend_field_checks(top_factors: List[str]) -> List[Dict[str, str]]:
+    """Danh sách việc theo yếu tố nổi bật (không phải hướng dẫn chữa cháy)."""
+    anh_xa = {
+        "firms_proximity": ("Xác minh tại chỗ điểm nóng",
+                            "Đến tọa độ điểm nhiệt, xác nhận khói/lửa bằng mắt thường."),
+        "fuel_dryness": ("Khảo sát thảm mục",
+                         "Ghi nhận thảm khô, tàn dư nương rẫy gần khu dân cư."),
+        "weather_danger": ("Đo lại tại chỗ",
+                           "Đo nhiệt/ẩm buổi trưa, đối chiếu với số liệu trạm."),
+        "wind": ("Kiểm tra đường ranh cản lửa",
+                 "Xem đường ranh theo hướng gió, điểm cao quan sát."),
+        "rainfall_deficit": ("Ghi nhận khô hạn thực tế",
+                             "Đếm ngày không mưa, kiểm tra nguồn nước gần nhất."),
+        "terrain": ("Đánh giá tiếp cận",
+                    "Xem đường vào, độ dốc, điểm tập kết lực lượng."),
+        "historical_community": ("Hỏi người dân",
+                                 "Tiền sử cháy khu vực, nguồn lửa sinh hoạt."),
+    }
+    out = []
+    for f in top_factors:
+        if f in anh_xa:
+            viec, ly_do = anh_xa[f]
+            out.append({"viec": viec, "ly_do": ly_do, "yeu_to": _FACTOR_VI.get(f, f)})
+    return out
+
+
+def compute_inspection_priority(risk: Optional[int],
+                                hotspot_km: Optional[float],
+                                hotspot_conf: Optional[str] = None,
+                                temp_trend_up: bool = False,
+                                access_ok: bool = False) -> Dict[str, Any]:
+    """FIELD INSPECTION PRIORITY (0–100) — chỉ để sắp thứ tự xem xét.
+
+    KHÔNG phải xác suất cháy, KHÔNG cộng vào Fire Risk Score.
+    Thành phần: điểm nguy cơ (55%), gần điểm nóng (25/10), độ tin cậy
+    điểm nóng (h=5/n=2), xu hướng nóng lên (+5), tiếp cận tốt (+5).
+    """
+    r = max(0, min(100, risk if risk is not None else 0))
+    gan = 25 if (hotspot_km is not None and hotspot_km <= 3) else (
+        10 if (hotspot_km is not None and hotspot_km <= 10) else 0)
+    tin = {"h": 5, "n": 2, "l": 0}.get((hotspot_conf or "").lower(), 0)
+    xu_huong = 5 if temp_trend_up else 0
+    tiep_can = 5 if access_ok else 0
+    diem = int(round(min(100, r * 0.55 + gan + tin + xu_huong + tiep_can)))
+    cao = (risk is not None and risk >= 75) or (hotspot_km is not None and hotspot_km <= 3)
+    dat = (risk is not None and risk >= 55) or (hotspot_km is not None and hotspot_km <= 3)
+    return {
+        "priority": diem,
+        "muc": "CAO" if cao else "TRUNG BÌNH",
+        "du_dieu_kien": dat,
+        "han": "Đề xuất kiểm tra trong ngày" if cao else "Đề xuất kiểm tra trong 24 giờ",
+        "thanh_phan": {"risk": round(r * 0.55, 1), "gan": gan, "tin": tin,
+                       "xu_huong": xu_huong, "tiep_can": tiep_can},
+    }

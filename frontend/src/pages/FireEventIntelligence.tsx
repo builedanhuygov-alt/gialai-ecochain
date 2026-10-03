@@ -337,6 +337,11 @@ function InvestigationStyles() {
 
 export function EventsList() {
   const { status, events, alerts, error, health, healthStatus, retry } = useFireEventFeed()
+  const [cheDo, setCheDo] = useState<'tructiep' | 'daghi'>('tructiep')
+  const [lichSu, setLichSu] = useState<any[]>([])
+  const [dangTaiLS, setDangTaiLS] = useState(false)
+  const [chonLS, setChonLS] = useState<any>(null)
+  const [tenXaLS, setTenXaLS] = useState('')
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [mobilePane, setMobilePane] = useState<'list' | 'map'>('list')
   const eventRefs = useRef(new Map<string, HTMLElement>())
@@ -361,6 +366,22 @@ export function EventsList() {
     }))
     if (window.matchMedia('(max-width: 900px)').matches) setMobilePane('map')
   }
+
+  useEffect(() => {
+    if(cheDo !== 'daghi' || lichSu.length > 0) return
+    setDangTaiLS(true)
+    fetch(`${API_BASE}/api/fire/warnings`, { cache: 'no-store' })
+      .then(r=> { if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+      .then(j=> setLichSu(Array.isArray(j) ? j : []))
+      .catch(()=> setLichSu([]))
+      .finally(()=> setDangTaiLS(false))
+  }, [cheDo])
+
+  useEffect(() => {
+    if(!chonLS?.administrative_unit_id){ setTenXaLS(''); return }
+    fetch(`${API_BASE}/api/communes/${encodeURIComponent(chonLS.administrative_unit_id)}`)
+      .then(r=> r.ok ? r.json() : null).then(j=> setTenXaLS(j?.name || '')).catch(()=> setTenXaLS(''))
+  }, [chonLS])
 
   useEffect(() => {
     const highlight = (event: Event) => {
@@ -393,6 +414,45 @@ export function EventsList() {
           </div>
         </header>
         <BacktestCard />
+        <div className="fi-mobile-tabs" role="group" aria-label="Bộ lọc thời gian">
+          <button className={cheDo === 'tructiep' ? 'active' : ''} aria-pressed={cheDo === 'tructiep'} onClick={() => setCheDo('tructiep')}>Trực tiếp</button>
+          <button className={cheDo === 'daghi' ? 'active' : ''} aria-pressed={cheDo === 'daghi'} onClick={() => setCheDo('daghi')}>Đã ghi nhận</button>
+        </div>
+        {cheDo === 'daghi' ? (
+          <div className="fi-list-layout">
+            <section className="fi-feed-panel" aria-label="Vụ cháy đã ghi nhận">
+              <div className="fi-feed-head"><h2>Vụ cháy đã ghi nhận</h2><span>{dangTaiLS ? '…' : lichSu.length}</span></div>
+              <div className="fi-event-list">
+                {dangTaiLS && <div><div className="fi-skeleton" /><div className="fi-skeleton" /></div>}
+                {!dangTaiLS && lichSu.length === 0 && <div className="fi-empty-state">Chưa có vụ cháy nào trong hồ sơ.</div>}
+                {lichSu.map((r: any)=> (
+                  <article className={`fi-event-row${chonLS?.id === r.id ? ' selected' : ''}`} key={r.id}>
+                    <button className="fi-event-link" type="button" onClick={()=> setChonLS(r)}>
+                      <strong>Cấp {r.level || '—'} · {r.label || ''}</strong>
+                      <span>{r.scope || r.id}</span>
+                      <span>{r.issued_at ? String(r.issued_at).slice(0, 10) : 'Chưa có ngày'}</span>
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </section>
+            <section className="fi-feed-panel" aria-label="Chi tiết vụ cháy">
+              <div className="fi-feed-head"><h2>Chi tiết</h2></div>
+              {!chonLS && <div className="fi-empty-state">Chọn một vụ cháy để xem hồ sơ.</div>}
+              {chonLS && (
+                <div style={{fontSize: 13, display: 'grid', gap: 6, padding: '4px 12px 12px'}}>
+                  <div><b>Mã hồ sơ:</b> {chonLS.id}</div>
+                  <div><b>Ngày:</b> {chonLS.issued_at || 'Chưa có dữ liệu'}</div>
+                  <div><b>Xã:</b> {tenXaLS || 'Chưa xác định'}</div>
+                  <div><b>Phạm vi:</b> {chonLS.scope || 'Chưa có dữ liệu'}</div>
+                  <div><b>Diện tích:</b> Chưa có dữ liệu</div>
+                  <div><b>Nguồn:</b> {chonLS.source || 'Chưa có dữ liệu'}</div>
+                </div>
+              )}
+            </section>
+          </div>
+        ) : (
+        <>
         <div className="fi-mobile-tabs" role="group" aria-label="Chế độ xem tín hiệu">
           <button className={mobilePane === 'list' ? 'active' : ''} aria-pressed={mobilePane === 'list'} onClick={() => setMobilePane('list')}>Danh sách ({eventCountLabel(status, events.length)})</button>
           <button className={mobilePane === 'map' ? 'active' : ''} aria-pressed={mobilePane === 'map'} onClick={() => setMobilePane('map')}>Bản đồ ({eventCountLabel(status, alerts.length)})</button>
@@ -430,6 +490,8 @@ export function EventsList() {
             <MapView fill fireAlerts={alerts} fireAlertsStatus={status} />
           </div>
         </div>
+        </>
+        )}
       </main>
     </div>
   )

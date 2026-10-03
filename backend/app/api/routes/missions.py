@@ -15,8 +15,8 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user, require_role
 from app.database import get_db
 from app.models.mission import (
-    FIELD_CHECKLIST, MISSION_NEXT, MISSION_OUTCOMES, MISSION_STATUSES,
-    FieldResult, Mission,
+    FIELD_CHECKLIST, MISSION_DECISIONS, MISSION_NEXT, MISSION_OUTCOMES,
+    MISSION_STATUSES, FieldResult, Mission,
 )
 
 router = APIRouter(tags=["Missions"])
@@ -32,6 +32,8 @@ def _shape(m: Mission, result: Optional[FieldResult] = None) -> dict:
         "id": m.id, "area": m.area, "cell_id": m.cell_id,
         "latitude": m.latitude, "longitude": m.longitude,
         "risk_at_creation": m.risk_at_creation, "priority": m.priority,
+        "zone": m.zone, "inspection_priority": m.inspection_priority,
+        "decision": m.decision, "decided_by": m.decided_by,
         "due_at": m.due_at.isoformat() if m.due_at else None,
         "status": m.status, "assignee": m.assignee, "created_by": m.created_by,
         "checklist_steps": FIELD_CHECKLIST, "checklist_done": checks,
@@ -41,6 +43,11 @@ def _shape(m: Mission, result: Optional[FieldResult] = None) -> dict:
             "photo_hash": result.photo_hash,
             "latitude": result.latitude, "longitude": result.longitude,
             "reporter_id": result.reporter_id,
+            "observed_at": result.observed_at.isoformat() if result.observed_at else None,
+            "vegetation": result.vegetation, "smoke_heat": result.smoke_heat,
+            "human_activity": result.human_activity,
+            "water_source": result.water_source, "access": result.access,
+            "match_result": result.match_result,
             "created_at": result.created_at.isoformat() if result.created_at else None,
         } if result else None),
     }
@@ -114,6 +121,184 @@ def list_missions(status: Optional[str] = Query(default=None),
     by_mission = {r.mission_id: r for r in results}
     return {"missions": [_shape(m, by_mission.get(m.id)) for m in missions],
             "count": len(missions)}
+
+
+@router.get("/missions/recommendations")
+async def recommend_inspections(db: Session = Depends(get_db)):
+    """ĐỀ XUẤT KIỂM TRA THỰC ĐỊA (không phải điều động/lệnh).
+
+    Điều kiện: Risk ≥ 55 HOẶC hotspot ≤ 3 km. Ưu tiên FIELD INSPECTION
+    PRIORITY (0–100) chỉ để sắp thứ tự — không cộng vào Fire Risk Score.
+    AI không tự giao nhiệm vụ, không tự phát cảnh báo.
+    """
+    from datetime import timedelta
+    from app.core.time import utcnow
+    from app.services.fire_risk import compute_inspection_priority, recommend_field_checks
+    from app.services.village_fire import haversine
+
+    # Điểm nóng trực tiếp (giới hạn 200 để tính khoảng cách).
+    fires: list = []
+    try:
+        from app.services.firms_service import fetch_firms_gialai
+        data = await fetch_firms_gialai(day_range=1)
+        if isinstance(data, dict) and data.get("status") in ("LIVE", "CACHED", "STALE"):
+            fires = [f for f in data.get("fires", []) if not f.get("suspect_artificial")][:200]
+    except Exception:
+        fires = []
+
+    # Ứng viên: xã có centroid, chấm điểm chung một lần gọi.
+    from app.services import communes as cs
+    units_all = cs.get_communes(db, limit=500)
+    units = [u for u in units_all if u.get("centroid")]
+    import httpx
+    # Dùng commune-levels nội bộ thay vì gọi HTTP chính mình.
+    from app.api.routes.fire import commune_levels as _levels
+    try:
+        lv = await _levels({"units": [{"name": u["name"], "lat": u["centroid"][0],
+                                       "lon": u["centroid"][1]} for u in units]})
+    except Exception:
+        lv = {"levels": []}
+
+    # Trạm gần nhất cho khả năng tiếp cận.
+    try:
+        from app.models.ops import OperationalAsset as _OA
+        tram = [(a.latitude, a.longitude) for a in
+                db.query(_OA).filter(_OA.status == "active").all()
+                if a.latitude is not None and a.longitude is not None]
+    except Exception:
+        tram = []
+
+    ra: list = []
+    for it in (lv.get("levels") or []):
+        try:
+            risk = it.get("score")
+            risk = int(risk) if risk is not None else None
+        except (TypeError, ValueError):
+            risk = None
+        lat, lon = it.get("lat"), it.get("lon")
+        gan_nhat, tin_cay = None, None
+        for f in fires:
+            try:
+                d = haversine(lon, lat, float(f["longitude"]), float(f["latitude"]))
+            except (TypeError, ValueError, KeyError):
+                continue
+            if gan_nhat is None or d < gan_nhat:
+                gan_nhat, tin_cay = d, f.get("confidence")
+        if not ((risk is not None and risk >= 55) or (gan_nhat is not None and gan_nhat <= 3)):
+            continue
+        tiep_can = any(haversine(lon, lat, t[1], t[0]) <= 15 for t in tram) if tram else False
+        uu = compute_inspection_priority(risk, gan_nhat, tin_cay,
+                                         temp_trend_up=False, access_ok=tiep_can)
+        ten_xa = it.get("name", "?")
+        ly_do = []
+        if risk is not None and risk >= 55:
+            ly_do.append(f"Risk {risk}/100 ≥ 55")
+        if gan_nhat is not None and gan_nhat <= 3:
+            ly_do.append(f"điểm nóng cách {gan_nhat:.1f} km")
+        # Top yếu tố từ engine dùng chung (không tính lại công thức khác).
+        try:
+            from app.services.fire_risk import FireRiskInput, compute_score
+            from app.services.weather_service import current_summary, fetch_current
+            w = await fetch_current(lat, lon)
+            s = current_summary(w) if w.get("status") in ("LIVE", "CACHED", "STALE") else {}
+            r0 = compute_score(FireRiskInput(
+                temperature=s.get("temperature"), humidity=s.get("humidity"),
+                rainfall=s.get("rainfall"), wind_speed=s.get("wind_speed"),
+                hotspot_count=1 if (gan_nhat is not None and gan_nhat <= 3) else 0,
+                firms_observed=True), origin="LIVE")
+            top = sorted(r0.breakdown, key=lambda f: r0.breakdown[f] * r0.weights_used.get(f, 0),
+                         reverse=True)[:3]
+        except Exception:
+            top = []
+        from app.services.fire_risk import CHECKLIST_4
+        han = utcnow() + timedelta(hours=24)
+        ra.append({
+            "tieu_de": "ĐỀ XUẤT KIỂM TRA THỰC ĐỊA",
+            "area": ten_xa, "zone": it.get("key") or "",
+            "latitude": lat, "longitude": lon,
+            "risk": risk, "priority": uu["priority"], "muc": uu["muc"],
+            "han": han.isoformat(), "han_text": uu["han"],
+            "ly_do": ly_do,
+            "hotspot": ({"khoang_cach_km": round(gan_nhat, 2), "do_tin_cay": tin_cay}
+                        if gan_nhat is not None else None),
+            "top_yeu_to": top,
+            "viec_theo_yeu_to": recommend_field_checks(top),
+            "checklist": CHECKLIST_4,
+            "origin": "LIVE",
+        })
+    ra.sort(key=lambda x: x["priority"], reverse=True)
+    return {"recommendations": ra[:10], "count": min(len(ra), 10),
+            "ghi_chu": "Ưu tiên chỉ để sắp thứ tự xem xét, không phải xác suất cháy."}
+
+
+@router.post("/missions/recommendations/decide")
+def decide_recommendation(body: dict, db: Session = Depends(get_db),
+                          user=Depends(require_role("ranger"))):
+    """Con người quyết định: XAC_NHAN / TU_CHOI / CAN_THEM_DU_LIEU.
+
+    Chỉ XAC_NHAN mới tạo nhiệm vụ. Mọi quyết định đều ghi nhật ký.
+    """
+    from app.services.audit import audit_log
+    quyet = str(body.get("decision") or "").upper()
+    if quyet not in MISSION_DECISIONS:
+        raise HTTPException(400, f"decision must be one of {MISSION_DECISIONS}")
+    area = str(body.get("area") or "").strip()
+    if not area:
+        raise HTTPException(400, "area is required")
+    risk = body.get("risk")
+    try:
+        risk = int(risk) if risk not in (None, "") else None
+    except (TypeError, ValueError):
+        raise HTTPException(400, "risk must be an integer")
+    prio = body.get("priority")
+    try:
+        prio = int(prio) if prio not in (None, "") else None
+    except (TypeError, ValueError):
+        raise HTTPException(400, "priority must be an integer")
+
+    mission_id = None
+    if quyet == "XAC_NHAN":
+        m = Mission(area=area[:300], zone=str(body.get("zone") or "")[:100] or None,
+                    latitude=body.get("latitude"), longitude=body.get("longitude"),
+                    risk_at_creation=risk, inspection_priority=prio,
+                    priority="HIGH" if (body.get("muc") == "CAO") else "NORMAL",
+                    status="NEW", decision=quyet, decided_by=user.username,
+                    created_by=user.username)
+        db.add(m); db.flush()
+        mission_id = m.id
+    try:
+        audit_log(db, action=f"MISSION_DECISION_{quyet}", resource_type="mission",
+                  resource_id=mission_id or area[:36],
+                  detail=f"{area} risk={risk} priority={prio}", actor_id=user.username)
+    except Exception:
+        pass
+    db.commit()
+    return {"decision": quyet, "mission_id": mission_id, "area": area}
+
+
+@router.get("/missions/decisions")
+def decision_log(db: Session = Depends(get_db)):
+    """Nhật ký quyết định (từ audit log)."""
+    from app.models.ops import AuditLog
+    rows = (db.query(AuditLog)
+            .filter(AuditLog.action.like("MISSION_DECISION_%"))
+            .order_by(AuditLog.created_at.desc()).limit(100).all())
+    return {"decisions": [{
+        "id": r.id, "timestamp": r.created_at.isoformat() if r.created_at else None,
+        "area": r.resource_id, "action": r.action, "detail": r.detail,
+        "actor": r.actor_id, "status": "LOGGED",
+    } for r in rows], "count": len(rows)}
+
+
+@router.delete("/missions/decisions/{entry_id}")
+def delete_decision(entry_id: str, db: Session = Depends(get_db),
+                    user=Depends(require_role("admin"))):
+    from app.models.ops import AuditLog
+    r = db.get(AuditLog, entry_id)
+    if not r or not (r.action or "").startswith("MISSION_DECISION_"):
+        raise HTTPException(404, "Decision log entry not found")
+    db.delete(r); db.commit()
+    return {"deleted": entry_id}
 
 
 @router.get("/missions/{mission_id}")
@@ -216,6 +401,20 @@ def submit_result(mission_id: str, body: dict, db: Session = Depends(get_db),
                       note=str(body.get("note") or "")[:2000] or None,
                       photo_hash=photo_hash, latitude=lat, longitude=lon,
                       reporter_id=user.username)
+    for _k in ("vegetation", "smoke_heat", "human_activity", "water_source", "access"):
+        _v = body.get(_k)
+        if _v not in (None, ""):
+            setattr(res, _k, str(_v)[:1000])
+    _obs = body.get("observed_at")
+    if _obs:
+        try:
+            res.observed_at = datetime.fromisoformat(str(_obs)[:19])
+        except ValueError:
+            raise HTTPException(400, "observed_at must be ISO datetime")
+    # AI PREDICTED vs FIELD OBSERVED — chỉ để thống kê, chưa tự đổi trọng số.
+    du_doan_chay = (m.risk_at_creation or 0) >= 55
+    thay_chay = outcome in ("CONFIRMED_FIRE", "RESOLVED")
+    res.match_result = "MATCH" if du_doan_chay == thay_chay else "MISMATCH"
     db.add(res)
     m.status = "DONE"
     side_effects: dict = {}
@@ -284,11 +483,14 @@ def missions_stats(db: Session = Depends(get_db)):
         n = slot["with_result"]
         slot["false_alarm_rate"] = (slot["false_alarms"] / n) if n else None
     total_res = sum(outcomes.values())
+    khop = sum(1 for r in results.values() if r.match_result == "MATCH")
+    lech = sum(1 for r in results.values() if r.match_result == "MISMATCH")
     return {
         "missions_total": len(missions),
         "by_status": {s: sum(1 for m in missions if m.status == s) for s in MISSION_STATUSES},
         "results": outcomes,
         "false_alarm_rate": (outcomes["FALSE_ALARM"] / total_res) if total_res else None,
+        "model_field": {"MATCH": khop, "MISMATCH": lech},
         "by_risk_band": by_band,
         "note": "Statistics only — weights are not adjusted automatically.",
     }

@@ -220,7 +220,9 @@ export default function AssetDrawer({ item, pinned, leaving, nearby, onClose, on
         <div>
           <b style={{fontSize:12}}>🚒 Ứng phó liên quan</b>
           <div style={{display:'flex', gap:6, marginTop:6, flexWrap:'wrap'}}>
-            <Link to={`/firesim?lat=${item.lat}&lon=${item.lon}`} style={plink}>🔥 FireSim tại điểm</Link>
+            {!String(item.key || '').startsWith('civ:') && (
+              <Link to={`/firesim?lat=${item.lat}&lon=${item.lon}`} style={plink}>🔥 Mô phỏng tại điểm</Link>
+            )}
             <Link to="/missions" style={plink}>🧾 Nhiệm vụ thực địa</Link>
           </div>
         </div>

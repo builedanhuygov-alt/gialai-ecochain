@@ -60,6 +60,7 @@ function AIAssistant(){
   const [phase, setPhase] = useState<string>('')
   const [stream, setStream] = useState<string>('')
   const [result, setResult] = useState<any>(null)
+  const [lichSu, setLichSu] = useState<{ role: string; content: string }[]>([])
   const [showInspector, setShowInspector] = useState(false)
   const [showFullAnswer, setShowFullAnswer] = useState(false)
   const [aiStatus, setAiStatus] = useState<any>(null)
@@ -121,6 +122,7 @@ function AIAssistant(){
     if(!qq) return
     setQ(qq)
     setLoading(true); setPhase('THINKING'); setStream(''); setResult(null); setShowFullAnswer(false)
+    setLichSu(h=> [...h.slice(-10), { role: 'user', content: qq }])
     try{
       setPhase('RETRIEVING DATA')
       // Serverless functions time out — fail fast with a clear message instead
@@ -129,7 +131,9 @@ function AIAssistant(){
       const timer = setTimeout(()=> ctrl.abort(), 28000)
       let r: Response
       try{
-        r = await fetch(`${API}/api/ai/chat`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ query: qq, lat:13.9, lon:108.3 }), signal: ctrl.signal })
+        r = await fetch(`${API}/api/ai/chat`, { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ query: qq, lat:13.9, lon:108.3,
+            conversation: [...lichSu.slice(-6), { role: 'user', content: qq }] }), signal: ctrl.signal })
       }catch(ab:any){
         throw new Error(ab?.name === 'AbortError' ? 'AI phản hồi quá lâu (quá 28s) — Vercel serverless giới hạn thời gian chạy. Hãy thử câu hỏi ngắn hơn hoặc thử lại.' : String(ab?.message || ab))
       }finally{ clearTimeout(timer) }
@@ -141,13 +145,16 @@ function AIAssistant(){
       const j = await r.json()
       setPhase('ANALYZING')
       // Simulate streaming for non-stream endpoint
-      const content = JSON.stringify(j.structured_output || j, null, 2)
+      const content = j.answer || JSON.stringify(j.structured_output || j, null, 2)
       setStream(content.slice(0, 800))
       setPhase('GENERATING')
       setResult(j)
       setPhase('COMPLETE')
+      if(j.answer) setLichSu(h=> [...h.slice(-10), { role: 'assistant', content: String(j.answer).slice(0, 800) }])
     }catch(e:any){
-      setStream(String(e.message || e).slice(0,400))
+      const msg = String(e.message || e).slice(0,400)
+      setStream(msg)
+      setLichSu(h=> [...h.slice(-10), { role: 'assistant', content: msg }])
       setPhase('ERROR')
     }finally{ setLoading(false) }
   }
@@ -246,6 +253,17 @@ function AIAssistant(){
             <button className="ask" onClick={askStream} disabled={loading} style={{background:'#0B1412'}}>{loading? '...' : 'Trực tiếp'}</button>
           </div>
           {loading && <div style={{marginTop:8, fontSize:12, background:'#FEF3C7', padding:'6px 10px', borderRadius:8}}>{tenGiaiDoan(phase)}... <span className="dot" style={{display:'inline-block', width:8, height:8, background:'#F59E0B', borderRadius:999, animation:'pulse 1s infinite'}}/></div>}
+          {lichSu.length > 0 && (
+            <div style={{marginTop:8, display:'flex', flexDirection:'column', gap:6, maxHeight:220, overflow:'auto'}} aria-label="Lịch sử trò chuyện">
+              {lichSu.slice(-8).map((m, i)=> (
+                <div key={i} style={{alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth:'90%',
+                  background: m.role === 'user' ? '#0F766E' : '#F8FAF9', color: m.role === 'user' ? '#fff' : '#0F172A',
+                  border: m.role === 'user' ? '0' : '1px solid #E2E8E5', borderRadius:12, padding:'6px 10px', fontSize:12}}>
+                  {m.content}
+                </div>
+              ))}
+            </div>
+          )}
           {stream && <div className="answer-wrap">
             <div className="answer" style={{whiteSpace:'pre-wrap', maxHeight:showFullAnswer ? 420 : 180, overflow:'auto'}}>{stream.slice(0, showFullAnswer ? 6000 : 1200)}</div>
             {stream.length > 1200 && <button className="answer-toggle" onClick={()=> setShowFullAnswer(v=>!v)}>{showFullAnswer ? 'Thu gọn kết quả' : 'Xem đầy đủ kết quả'}</button>}

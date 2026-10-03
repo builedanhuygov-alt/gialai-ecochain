@@ -145,5 +145,62 @@ def test_missions_honest_empty_and_checklist():
     d = c.get("/api/missions").json()
     assert d["missions"] == [] and d["count"] == 0
     t = c.get("/api/missions/checklist").json()
-    assert len(t["steps"]) == 5
+    assert len(t["steps"]) == 4
     assert c.get("/api/missions/nope").status_code == 404
+
+
+def test_recommendations_shape_and_decide_flow():
+    c = setup()
+    admin, _, viewer = _users(c)
+    r = c.get('/api/missions/recommendations')
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert 'recommendations' in d and 'count' in d
+    for rec in d['recommendations']:
+        assert rec['tieu_de'] == 'ĐỀ XUẤT KIỂM TRA THỰC ĐỊA'
+        assert rec['muc'] in ('CAO', 'TRUNG BÌNH')
+        assert len(rec['checklist']) == 4
+        assert 'hotspot' in rec and 'top_yeu_to' in rec
+    # viewer cannot decide
+    bad = c.post('/api/missions/recommendations/decide',
+                 json={'decision': 'XAC_NHAN', 'area': 'X', 'risk': 80, 'priority': 70},
+                 headers=viewer)
+    assert bad.status_code == 403
+    body = {'decision': 'XAC_NHAN', 'area': 'Xa Test', 'latitude': 13.9,
+            'longitude': 108.3, 'risk': 80, 'priority': 70, 'muc': 'CAO'}
+    r2 = c.post('/api/missions/recommendations/decide', json=body, headers=admin)
+    assert r2.status_code == 200, r2.text
+    assert r2.json()['mission_id']
+    r3 = c.post('/api/missions/recommendations/decide',
+                json={'decision': 'TU_CHOI', 'area': 'Xa Test 2', 'risk': 60,
+                      'priority': 40}, headers=admin)
+    assert r3.status_code == 200 and r3.json()['mission_id'] is None
+    assert c.post('/api/missions/recommendations/decide',
+                  json={'decision': 'SAI', 'area': 'X'}, headers=admin).status_code == 400
+    log = c.get('/api/missions/decisions').json()
+    assert log['count'] >= 2
+    assert all('timestamp' in x and 'area' in x for x in log['decisions'])
+    # delete needs admin
+    did = log['decisions'][0]['id']
+    assert c.delete(f'/api/missions/decisions/{did}', headers=viewer).status_code == 403
+    assert c.delete(f'/api/missions/decisions/{did}', headers=admin).status_code == 200
+    assert c.delete('/api/missions/decisions/nope', headers=admin).status_code == 404
+
+
+def test_result_match_mismatch_and_extended_form():
+    c = setup()
+    admin, _, _ = _users(c)
+    mid = _create(c, admin).json()['id']  # risk 72 >= 55 -> predicted fire
+    _to_progress(c, admin, mid)
+    r = c.post(f'/api/missions/{mid}/result',
+               json={'outcome': 'FALSE_ALARM', 'latitude': 13.9001, 'longitude': 108.3001,
+                     'vegetation': 'thảm khô', 'smoke_heat': 'không thấy khói',
+                     'human_activity': 'không', 'water_source': 'hồ cách 2km',
+                     'access': 'đường đất vào được', 'observed_at': '2026-10-03T08:00:00'},
+               headers=admin)
+    assert r.status_code == 200, r.text
+    got = c.get(f'/api/missions/{mid}').json()
+    assert got['result']['match_result'] == 'MISMATCH'
+    assert got['result']['vegetation'] == 'thảm khô'
+    s = c.get('/api/missions-stats/summary').json()
+    assert s['model_field']['MISMATCH'] >= 1

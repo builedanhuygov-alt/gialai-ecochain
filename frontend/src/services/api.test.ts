@@ -73,6 +73,20 @@ describe('api client', () => {
     await expect(api.missionStatus('m1', 'IN_PROGRESS')).resolves.toEqual({ id: 'm1', status: 'IN_PROGRESS' })
   })
 
+  it('mission recommendations + decisions through, null when down', async () => {
+    mockFetch(true, { recommendations: [{ tieu_de: 'ĐỀ XUẤT KIỂM TRA THỰC ĐỊA' }], count: 1 })
+    await expect(api.missionRecommendations()).resolves.toEqual({ recommendations: [{ tieu_de: 'ĐỀ XUẤT KIỂM TRA THỰC ĐỊA' }], count: 1 })
+    mockFetch(true, { decision: 'XAC_NHAN', mission_id: 'm9' })
+    await expect(api.missionDecide({ decision: 'XAC_NHAN', area: 'X' })).resolves.toEqual({ decision: 'XAC_NHAN', mission_id: 'm9' })
+    mockFetch(true, { decisions: [], count: 0 })
+    await expect(api.missionDecisions()).resolves.toEqual({ decisions: [], count: 0 })
+    mockFetch(true, { deleted: 'd1' })
+    await expect(api.missionDecisionDelete('d1')).resolves.toEqual({ deleted: 'd1' })
+    mockFetch(false, {}, 500)
+    await expect(api.missionRecommendations()).resolves.toBeNull()
+    await expect(api.missionDecisions()).resolves.toBeNull()
+  })
+
   it('fire-risk calculate posts inputs and returns a score', async () => {
     mockFetch(true, { score: 62, level: 'IV', origin: 'LIVE' })
     const r = await api.fireRiskCalculate({ temperature: 36, humidity: 25 })

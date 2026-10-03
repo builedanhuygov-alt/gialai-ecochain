@@ -133,7 +133,7 @@ export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts
   const [assetVis, setAssetVis] = useState<Record<string, boolean>>({
     water:true, station:true,
     camera:false, watchtower:false, firetruck:false, pump:false, team:false, hydro:false,
-    historical:true,
+    historical:true, civ:true,
   })
   const assetVisRef = useRef(assetVis)
   assetVisRef.current = assetVis
@@ -1120,7 +1120,8 @@ setRiskMeta(j.meta || null)
       try{ (m.getElement() as HTMLElement).style.display = assetVis[type] === false ? 'none' : '' }catch{}
     }
     for(const { m, group } of histMarkersRef.current){
-      try{ (m.getElement() as HTMLElement).style.display = (group === 'historical' && !assetVis.historical) ? 'none' : '' }catch{}
+      try{ (m.getElement() as HTMLElement).style.display =
+        ((group === 'historical' && !assetVis.historical) || (group === 'civ' && !assetVis.civ)) ? 'none' : '' }catch{}
     }
   },[assetVis])
   // Show sampled village reference points without presenting them as fire locations.
@@ -1571,10 +1572,10 @@ setRiskMeta(j.meta || null)
 
       {/* Ô nguy cơ được bấm: điểm, giải thích, đề xuất, tạo nhiệm vụ */}
       {riskCell && (
-        <div style={{position:'absolute', left:12, top:112, zIndex:10, width:300, maxWidth:'80vw', background:'rgba(255,255,255,0.97)', borderRadius:12, padding:12, boxShadow:'0 8px 24px rgba(0,0,0,0.2)', border:'1px solid #E2E8E5'}}>
+        <div style={{position:'absolute', right:12, bottom:'max(64px, calc(58px + env(safe-area-inset-bottom, 0px)))', zIndex:10, width:300, maxWidth:'80vw', background:'rgba(255,255,255,0.97)', borderRadius:12, padding:12, boxShadow:'0 8px 24px rgba(0,0,0,0.2)', border:'1px solid #E2E8E5'}}>
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
             <b style={{fontSize:12}}>🗺️ Ô {riskCell.cell_id}</b>
-            <button onClick={()=> { setRiskCell(null); setMissionMsg('') }} aria-label="Đóng" style={{border:0, background:'transparent', cursor:'pointer'}}>✕</button>
+            <button onClick={()=> { setRiskCell(null); setMissionMsg('') }} aria-label="Đóng thẻ ô nguy cơ" style={{border:'1px solid #E2E8E5', background:'#fff', borderRadius:8, minWidth:44, minHeight:44, fontSize:16, cursor:'pointer'}}>✕</button>
           </div>
           {riskCell.origin === 'DEMO / SIMULATED' && (
             <div style={{marginTop:6, fontSize:11, fontWeight:800, color:'#92400E', background:'#FEF3C7', border:'1px solid #FCD34D', borderRadius:8, padding:'6px 8px'}}>DỮ LIỆU GIẢ LẬP</div>
@@ -1652,7 +1653,7 @@ setRiskMeta(j.meta || null)
           </label>
         ))}
         <div style={{fontSize:11, fontWeight:700, opacity:.9}}>Tài sản & sự cố (mặc định: 💧🏕️)</div>
-        {([['water','🌊 Hồ chứa'],['station','🏕️ Trạm'],['team','⛺ Tổ kiểm lâm'],['firetruck','🚒 Xe chữa cháy'],['pump','🔧 Máy bơm'],['watchtower','🗼 Chòi canh'],['camera','📷 Camera'],['hydro','⚡ Thủy điện'],['historical','📜 Sự cố lịch sử (opt-in)']] as [string,string][]).map(([k,label])=>(
+        {([['water','🌊 Hồ chứa'],['station','🏕️ Trạm'],['team','⛺ Tổ kiểm lâm'],['firetruck','🚒 Xe chữa cháy'],['pump','🔧 Máy bơm'],['watchtower','🗼 Chòi canh'],['camera','📷 Camera'],['hydro','⚡ Thủy điện'],['historical','📜 Cháy rừng/lịch sử (opt-in)'],['civ','🏠 Cháy nhà/cơ sở (tách khỏi cháy rừng)']] as [string,string][]).map(([k,label])=>(
           <label key={k} style={{display:'flex', gap:6, alignItems:'center', background: assetVis[k]?'rgba(16,185,129,0.25)':'rgba(255,255,255,0.08)', padding:'6px 8px', borderRadius:8, fontSize:12, border:'1px solid rgba(255,255,255,0.15)', cursor:'pointer', color:'#fff'}}>
             <input type="checkbox" checked={!!assetVis[k]} onChange={()=> setAssetVis(s=> ({...s, [k]:!s[k]}))} /> {label}
           </label>
@@ -1792,6 +1793,8 @@ setRiskMeta(j.meta || null)
           {showRiskGrid && riskMeta?.origin === 'DEMO / SIMULATED' && (
             <div style={{marginTop:6, padding:'6px 8px', background:'#FEF3C7', borderRadius:8, color:'#92400E', fontWeight:700}}>DỮ LIỆU GIẢ LẬP</div>
           )}
+          {showCommunity && <div>🟢 Báo cáo cộng đồng (chấm xanh, bấm để xem)</div>}
+          {fireAlerts.length > 0 && <div>🔴 Điểm nóng FIRMS đang theo dõi (đỏ)</div>}
           <div>⚠ Vùng trọng điểm (chưa cháy)</div>
           <div>🏠 Cháy nhà · 🏭 Cháy cơ sở</div>
           {assetVis.historical && <div>🔥 Từng cháy 2026 · 🏠 Sự cố tử vong</div>}

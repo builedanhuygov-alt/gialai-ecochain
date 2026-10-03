@@ -53,6 +53,39 @@ def _confidence(data_sources: int, tool_count: int, rag_count: int) -> float:
     base = 70 + completeness*0.2
     return round(min(0.97, max(0.45, base/100)), 2)
 
+
+BAND_VI = {"VERY LOW": "rất thấp", "LOW": "thấp", "MODERATE": "trung bình",
+           "HIGH": "cao", "EXTREME": "cực cao"}
+
+
+def compose_answer(query: str, intent: str, risk_score: int, band: str,
+                   factors: Dict, tool_results: List[Dict], rag_results: List[Dict],
+                   llm_text: str = "") -> str:
+    """Câu trả lời tiếng Việt luôn có — dựng từ dữ liệu thật đã truy xuất.
+    LLM (nếu chạy) chỉ bổ sung diễn giải; số liệu lấy từ công cụ, không bịa."""
+    live = [t for t in tool_results if t.get("status") == "LIVE"]
+    yeu_to = ", ".join(factors.keys()) if factors else "chưa đủ dữ liệu yếu tố"
+    nguon = ", ".join(sorted({t.get("tool", "") for t in live})) or "chưa có nguồn trực tiếp"
+    mo_bai = {
+        "FIRE_RISK": f"Nguy cơ cháy hiện tại {risk_score}/100 (mức {BAND_VI.get(band, band)}).",
+        "WEATHER": f"Thời tiết hiện tại cho điểm nguy cơ {risk_score}/100.",
+        "FOREST_CHANGE": f"Tình trạng rừng gắn với điểm nguy cơ {risk_score}/100.",
+        "DISASTER": f"Tổng hợp thiên tai: điểm cháy {risk_score}/100.",
+    }.get(intent, f"Kết quả tổng hợp: điểm nguy cơ {risk_score}/100.")
+    tra_loi = (f"{mo_bai} Yếu tố chính: {yeu_to}. "
+               f"Dữ liệu từ: {nguon}.")
+    if risk_score > 79:
+        tra_loi += " Mức cực cao — nên kiểm tra thực địa ngay."
+    elif risk_score > 59:
+        tra_loi += " Mức cao — tăng tuần tra, sẵn sàng lực lượng."
+    else:
+        tra_loi += " Duy trì theo dõi định kỳ."
+    if llm_text:
+        tra_loi += f" Diễn giải AI: {llm_text[:400]}"
+    if not live:
+        tra_loi += " (Lưu ý: các nguồn trực tiếp chưa phản hồi, số liệu từ bộ nhớ đệm/dự phòng.)"
+    return tra_loi
+
 async def orchestrate(query: str, lat: float=13.9, lon: float=108.3, conversation: List[Dict]=None) -> Dict:
     start = time.time()
     request_id = str(uuid.uuid4())
@@ -97,11 +130,19 @@ async def orchestrate(query: str, lat: float=13.9, lon: float=108.3, conversatio
     user_msg = f"Query: {query}\nLocation: {lat},{lon}\nRAG:\n{rag_context}\n\nTool results:\n{json.dumps(tool_results, ensure_ascii=False)[:3000]}\n\nReturn structured JSON with intent, location, risk, factors, evidence, recommendation."
     
     provider = get_llm_provider()
+    lich_su = ""
+    try:
+        turns = (conversation or [])[-6:]
+        if turns:
+            lich_su = "\nLịch sử trò chuyện (ngữ cảnh, không phải dữ liệu đo):\n" + "\n".join(
+                f"- {str(t.get('role', 'user'))}: {str(t.get('content', ''))[:300]}" for t in turns if isinstance(t, dict))
+    except Exception:
+        lich_su = ""
     try:
         # Serverless functions die ~10s (Vercel Hobby) while the provider's own
         # HTTP timeout is 30s — cap the LLM call so we ALWAYS answer gracefully
         # instead of being gateway-killed mid-stream.
-        llm_res = await asyncio.wait_for(provider.generate(system, user_msg, schema={"type":"object"}), timeout=8)
+        llm_res = await asyncio.wait_for(provider.generate(system, user_msg + lich_su, schema={"type":"object"}), timeout=8)
         content = llm_res.get("content","")
         # Try parse JSON
         try:
@@ -131,12 +172,18 @@ async def orchestrate(query: str, lat: float=13.9, lon: float=108.3, conversatio
     # 7. Build final structured output
     risk_score = (fire_risk.get("data",{}).get("risk_score") if fire_risk else 62) or 62
     band = "VERY LOW" if risk_score<=19 else "LOW" if risk_score<=39 else "MODERATE" if risk_score<=59 else "HIGH" if risk_score<=79 else "EXTREME"
-    
+    llm_text = ""
+    if isinstance(structured, dict):
+        llm_text = str(structured.get("summary") or structured.get("answer") or structured.get("raw") or "")[:400]
+    answer = compose_answer(query, intent, risk_score, band,
+                            fire_risk.get("data",{}).get("factors", {}) if fire_risk else {},
+                            tool_results, rag_results, llm_text)
+
     result = {
         "request_id": request_id,
         "intent": intent,
-        "location": {"lat": lat, "lon": lon},
-        "risk": {"score": risk_score, "band": band, "confidence": conf},
+        "answer": answer,
+        "location": {"lat": lat, "lon": lon},        "risk": {"score": risk_score, "band": band, "confidence": conf},
         "trend": "RISING" if risk_score>60 else "STABLE",
         "factors": fire_risk.get("data",{}).get("factors", {}) if fire_risk else {},
         "evidence": tool_results,
