@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Clock3, Flame, MapPin, Radio, RotateCw, ShieldCheck } from 'lucide-react'
 import MapView from '../components/MapView'
+import BacktestCard from '../components/BacktestCard'
 import { API_BASE, photoUrl } from '../services/api'
 import {
   buildEventListFromAlerts,
@@ -391,6 +392,7 @@ export function EventsList() {
             {status !== 'LOADING' && <button className="fi-button" onClick={retry} aria-label="Tải lại danh sách FIRMS"><RotateCw size={14} /> Thử lại</button>}
           </div>
         </header>
+        <BacktestCard />
         <div className="fi-mobile-tabs" role="group" aria-label="Chế độ xem tín hiệu">
           <button className={mobilePane === 'list' ? 'active' : ''} aria-pressed={mobilePane === 'list'} onClick={() => setMobilePane('list')}>Danh sách ({eventCountLabel(status, events.length)})</button>
           <button className={mobilePane === 'map' ? 'active' : ''} aria-pressed={mobilePane === 'map'} onClick={() => setMobilePane('map')}>Bản đồ ({eventCountLabel(status, alerts.length)})</button>

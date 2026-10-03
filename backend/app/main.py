@@ -108,6 +108,7 @@ def create_app() -> FastAPI:
     from app.api.routes.forest_guard import router as fg_router
     from app.api.routes.forest import router as forest_router
     from app.api.routes.earth_engine import router as ee_router
+    from app.api.routes.fire_risk import router as fire_risk_router
     from app.api.routes.phase5 import router as phase5_router
     from app.api.routes.community import router as community_router
     from app.api.routes.geospatial import router as geo_router
@@ -129,6 +130,7 @@ def create_app() -> FastAPI:
     app.include_router(fg_router, prefix="/api", tags=["ForestGuard"])
     app.include_router(forest_router, prefix="/api", tags=["Forest"])
     app.include_router(ee_router, prefix="/api", tags=["EarthEngine"])
+    app.include_router(fire_risk_router, prefix="/api", tags=["FireRisk"])
     app.include_router(phase5_router, prefix="/api", tags=["Alerts"])
     app.include_router(community_router, prefix="/api", tags=["Community"])
     app.include_router(geo_router, prefix="/api", tags=["Geospatial"])
