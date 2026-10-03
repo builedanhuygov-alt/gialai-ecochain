@@ -65,6 +65,9 @@ def test_calculate_endpoint_shape_and_rules():
     # drier must not score lower (monotonicity smoke test)
     r2 = c.post("/api/fire-risk/calculate", json={"temperature": 38, "humidity": 60})
     assert r2.json()["score"] <= d["score"]
+    r4 = c.post("/api/fire-risk/calculate", json={"temperature": 38, "humidity": 20, "rainfall": 10})
+    r5 = c.post("/api/fire-risk/calculate", json={"temperature": 38, "humidity": 20, "rainfall": 0})
+    assert r5.json()["score"] >= r4.json()["score"]  # more drought never scores lower
     # empty body -> no score, not a fake number
     r3 = c.post("/api/fire-risk/calculate", json={})
     assert r3.json()["score"] is None
