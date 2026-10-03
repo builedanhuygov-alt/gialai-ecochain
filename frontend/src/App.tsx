@@ -11,37 +11,23 @@ const EcoMap = lazy(()=> import('./pages/EcoMap'))
 const MapPage = lazy(()=> import('./pages/MapPage'))
 const EventIntelligence = lazy(()=> import('./pages/FireEventIntelligence'))
 const EventsList = lazy(()=> import('./pages/FireEventIntelligence').then(m=> ({ default: m.EventsList })))
-const WhatIfLab = lazy(()=> import('./pages/WhatIfLab'))
 const FireSim = lazy(()=> import('./pages/FireSim'))
 const Missions = lazy(()=> import('./pages/Missions'))
 const Forest = lazy(()=> import('./pages/Forest'))
-const Disaster = lazy(()=> import('./pages/Disaster'))
-const Agriculture = lazy(()=> import('./pages/Agriculture'))
-const Carbon = lazy(()=> import('./pages/Carbon'))
-const EUDR = lazy(()=> import('./pages/EUDR'))
-const Logistics = lazy(()=> import('./pages/Logistics'))
-const Twin = lazy(()=> import('./pages/Twin'))
 const Community = lazy(()=> import('./pages/Community'))
 const CommunityReportDetail = lazy(()=> import('./pages/CommunityReportDetail'))
 const Notifications = lazy(()=> import('./pages/Notifications'))
-const Governance = lazy(()=> import('./pages/Governance'))
-const Leaderboard = lazy(()=> import('./pages/Leaderboard'))
-const Reports = lazy(()=> import('./pages/Reports'))
 const Admin = lazy(()=> import('./pages/Admin'))
 const Audit = lazy(()=> import('./pages/Audit'))
 const Login = lazy(()=> import('./pages/Login'))
-const Command = lazy(()=> import('./pages/Command'))
 const Viewer = lazy(()=> import('./pages/Viewer'))
 
 const TITLES: Record<string,string> = {
   '/': 'Bản đồ cháy rừng Gia Lai',
-  '/events': 'Sự kiện', '/what-if': 'What-if Lab', '/firesim': 'Mô phỏng cháy 3D', '/missions': 'Nhiệm vụ',
-  '/map': 'Bản đồ', '/forest': 'Rừng', '/disaster': 'Thiên tai',
-  '/agriculture': 'Nông nghiệp', '/carbon': 'Carbon', '/eudr': 'EUDR',
-  '/logistics': 'Logistics', '/twin': 'Bản sao số', '/community': 'Cộng đồng',
-  '/actions': 'Điều hành', '/leaderboard': 'Xếp hạng', '/reports': 'Báo cáo',
+  '/events': 'Sự kiện', '/firesim': 'Mô phỏng cháy', '/missions': 'Nhiệm vụ',
+  '/map': 'Bản đồ', '/forest': 'Rừng', '/community': 'Cộng đồng',
   '/admin': 'Quản trị', '/notifications': 'Thông báo', '/audit': 'Nhật ký', '/login': 'Đăng nhập',
-  '/command': 'Chỉ huy', '/viewer': 'Hiện trường 360°',
+  '/viewer': 'Hiện trường 360°',
 }
 
 function NotFound(){
@@ -318,7 +304,12 @@ function AnimatedRoutes(){
   useEffect(()=>{
     const openFireEvent = (event: Event)=>{
       const eventId = (event as CustomEvent).detail?.eventId
-      if(typeof eventId === 'string' && eventId) navigate(`/events/${encodeURIComponent(eventId)}`)
+      if(typeof eventId !== 'string' || !eventId) return
+      if(location.pathname === '/events') {
+        window.dispatchEvent(new CustomEvent('ecochain-highlight-fire-signal', { detail:{ eventId } }))
+        return
+      }
+      navigate(`/events/${encodeURIComponent(eventId)}`)
     }
     const openCommunityReport = (event: Event)=>{
       const reportId = (event as CustomEvent).detail?.reportId
@@ -330,7 +321,7 @@ function AnimatedRoutes(){
       window.removeEventListener('ecochain-open-fire-event', openFireEvent)
       window.removeEventListener('ecochain-open-community-report', openCommunityReport)
     }
-  },[navigate])
+  },[navigate, location.pathname])
   useEffect(()=>{
     const base = Object.keys(TITLES).sort((a,b)=> b.length - a.length)
       .find(p=> p === '/' ? location.pathname === '/' : location.pathname.startsWith(p))
@@ -343,28 +334,17 @@ function AnimatedRoutes(){
           <Route path="/" element={<PageTransition><EcoMap/></PageTransition>} />
           <Route path="/events" element={<PageTransition><EventsList/></PageTransition>} />
           <Route path="/events/:id" element={<PageTransition><EventIntelligence/></PageTransition>} />
-          <Route path="/what-if" element={<PageTransition><WhatIfLab/></PageTransition>} />
           <Route path="/firesim" element={<PageTransition><FireSim/></PageTransition>} />
           <Route path="/missions" element={<PageTransition><Missions/></PageTransition>} />
           {/* Legacy intelligence kept as hidden capabilities, not primary nav */}
           <Route path="/map" element={<PageTransition><MapPage/></PageTransition>} />
           <Route path="/forest" element={<PageTransition><Forest/></PageTransition>} />
-          <Route path="/disaster" element={<PageTransition><Disaster/></PageTransition>} />
-          <Route path="/agriculture" element={<PageTransition><Agriculture/></PageTransition>} />
-          <Route path="/carbon" element={<PageTransition><Carbon/></PageTransition>} />
-          <Route path="/eudr" element={<PageTransition><EUDR/></PageTransition>} />
-          <Route path="/logistics" element={<PageTransition><Logistics/></PageTransition>} />
-          <Route path="/twin" element={<PageTransition><Twin/></PageTransition>} />
           <Route path="/community" element={<PageTransition><Community/></PageTransition>} />
           <Route path="/community/reports/:reportId" element={<PageTransition><CommunityReportDetail/></PageTransition>} />
-          <Route path="/actions" element={<PageTransition><Governance/></PageTransition>} />
-          <Route path="/leaderboard" element={<PageTransition><Leaderboard/></PageTransition>} />
-          <Route path="/reports" element={<PageTransition><Reports/></PageTransition>} />
           <Route path="/admin" element={<PageTransition><Admin/></PageTransition>} />
           <Route path="/notifications" element={<PageTransition><Notifications/></PageTransition>} />
           <Route path="/audit" element={<PageTransition><Audit/></PageTransition>} />
           <Route path="/login" element={<PageTransition><Login/></PageTransition>} />
-          <Route path="/command" element={<PageTransition><Command/></PageTransition>} />
           <Route path="/viewer/:assetId" element={<PageTransition><Viewer/></PageTransition>} />
           <Route path="*" element={<PageTransition><NotFound/></PageTransition>} />
         </Routes>

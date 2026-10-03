@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { esriTileUrl, parseCoords, severityOf, tileXY } from './EventIntel'
-import { buildUnified, filterEvents, sortEvents } from '../pages/EventIntelligence'
+import { buildUnified, filterEvents, sortEvents } from '../utils/eventList'
+import { eventCountLabel, formatAcquisitionTime } from '../pages/FireEventIntelligence'
 
 describe('severityOf', () => {
   it('maps CẤP bands first', () => {
@@ -15,6 +16,25 @@ describe('severityOf', () => {
     expect(severityOf('Theo dõi', 70)).toBe('MEDIUM')
     expect(severityOf('Theo dõi', 40)).toBe('LOW')
     expect(severityOf(null, null)).toBe('LOW')
+  })
+})
+
+describe('eventCountLabel', () => {
+  it('does not show zero before a successful source response', () => {
+    expect(eventCountLabel('LOADING', 0)).toBe('…')
+    expect(eventCountLabel('UNAVAILABLE', 0)).toBe('—')
+  })
+  it('shows zero only for a loaded empty source', () => {
+    expect(eventCountLabel('LIVE', 0)).toBe('0')
+    expect(eventCountLabel('CACHED', 3)).toBe('3')
+  })
+})
+
+describe('formatAcquisitionTime', () => {
+  it('preserves leading zeroes and validates UTC acquisition times', () => {
+    expect(formatAcquisitionTime(627)).toBe('06:27 UTC')
+    expect(formatAcquisitionTime('0035')).toBe('00:35 UTC')
+    expect(formatAcquisitionTime('2460')).toBeNull()
   })
 })
 

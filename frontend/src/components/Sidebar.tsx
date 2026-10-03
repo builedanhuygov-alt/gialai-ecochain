@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Map, Flame, FileCheck, Truck, Layers, Users, Settings, HelpCircle, X, Radio } from 'lucide-react'
+import { Map, Flame, FileCheck, Users, Settings, X } from 'lucide-react'
 import FireRiskGauge from './FireRiskGauge'
 import { useLang } from '../i18n'
 
@@ -9,15 +9,12 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
   const groups = [
     { label: t('nav.main'), items:[
       { to:'/', label: t('nav.eco'), icon: Map },
-      { to:'/command', label: t('nav.command'), icon: Radio },
       { to:'/events', label: t('nav.events'), icon: Flame },
-      { to:'/what-if', label: t('nav.whatif'), icon: Layers },
       { to:'/firesim', label: t('nav.firesim'), icon: Flame },
       { to:'/missions', label: t('nav.missions'), icon: FileCheck },
     ]},
     { label:'', items:[
       { to:'/community', label: t('nav.community'), icon: Users },
-      { to:'/twin', label: t('nav.twin'), icon: Truck },
     ]},
   ]
   return (
@@ -46,7 +43,7 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
                   <NavLink key={it.to} to={it.to} onClick={onClose}>
                     {({isActive})=> (
                       <span className={isActive?'nav-link active':'nav-link'}>
-                        {isActive && <motion.span layoutId="nav-active-pill" transition={{duration:0.22, ease:[0.32,0.72,0,1]}} style={{position:'absolute', inset:0, background:'#132E2A', border:'1px solid #1E4A44', borderRadius:10}} />}
+                        {isActive && <motion.span layoutId="nav-active-pill" transition={{duration:0.22, ease:[0.32,0.72,0,1]}} style={{position:'absolute', inset:0, background:'#13201D', border:'1px solid #1E3A36', borderRadius:10}} />}
                         <Icon size={18} strokeWidth={1.7} /><span>{it.label}</span>
                       </span>
                     )}
@@ -59,13 +56,14 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
 
         <div className="sidebar-foot">
           <NavLink to="/admin" className="nav-link" onClick={onClose}><Settings size={16}/> {t('nav.settings')}</NavLink>
-          <NavLink to="/reports" className="nav-link" onClick={onClose}><HelpCircle size={16}/> {t('nav.help')}</NavLink>
           <div className="profile"><div className="avatar">QT</div><div><div className="pname">{t('nav.adminName')}</div><div className="prole">Gia Lai</div></div></div>
         </div>
       </aside>
       {mobileOpen && <div className="backdrop" onClick={onClose} />}
       <style>{`
-        .sidebar{ width:268px; background:#0B1412; color:#D1D5DB; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; flex-shrink:0; border-right:1px solid #1E3A36; overflow:auto; }
+        .sidebar{ width:268px; background:#0B1412; color:#D1D5DB; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; flex-shrink:0; border-right:1px solid #1E3A36; overflow:auto; scrollbar-width:thin; scrollbar-color:#1E3A36 transparent; }
+        .sidebar::-webkit-scrollbar{ width:8px; }
+        .sidebar::-webkit-scrollbar-thumb{ background:#1E3A36; border-radius:999px; }
         .brand{ display:flex; gap:12px; align-items:center; padding:18px 16px; border-bottom:1px solid #1E3A36; }
         .logo{ width:36px; height:36px; border-radius:10px; background:#0F766E; color:#fff; display:grid; place-items:center; font-weight:800; letter-spacing:0.5px; }
         .logo-img{ width:40px; height:40px; border-radius:10px; object-fit:contain; }
@@ -75,13 +73,13 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen:boolean; o
         .nav{ padding:12px 10px; flex:1; }
         .group{ margin:14px 0; }
         .group-label{ font-size:11px; letter-spacing:0.8px; color:#6B7280; padding:6px 10px; }
-        .nav-link{ position:relative; display:flex; gap:10px; align-items:center; padding:9px 10px; border-radius:10px; color:#CBD5D1; text-decoration:none; font-size:14px; font-weight:500; transition:background-color 150ms cubic-bezier(0.4,0,0.2,1), color 150ms cubic-bezier(0.4,0,0.2,1), border-color 150ms cubic-bezier(0.4,0,0.2,1); border:1px solid transparent; }
+        .nav-link{ position:relative; display:flex; gap:10px; align-items:center; padding:9px 10px; min-height:40px; border-radius:10px; color:#CBD5D1; text-decoration:none; font-size:14px; font-weight:500; transition:background-color 150ms cubic-bezier(0.4,0,0.2,1), color 150ms cubic-bezier(0.4,0,0.2,1), border-color 150ms cubic-bezier(0.4,0,0.2,1); border:1px solid transparent; }
         .nav-link > svg{ transition:transform 150ms cubic-bezier(0.4,0,0.2,1); flex:none; }
         .nav-link:hover{ background:#13201D; color:#fff; }
         .nav-link:hover > svg{ transform:scale(1.05); }
         .nav-link.active{ color:#fff; border:1px solid transparent; }
         .nav-link > svg, .nav-link > :last-child{ position:relative; z-index:1; }
-        .sidebar-foot{ padding:14px 12px; border-top:1px solid #1E3A36; display:flex; flex-direction:column; gap:10px; font-size:13px;}
+        .sidebar-foot{ padding:14px 12px 20px; border-top:1px solid #1E3A36; display:flex; flex-direction:column; gap:10px; font-size:13px; flex:none;}
         .sidebar-foot a{ display:flex; gap:8px; align-items:center; color:#94A3B8; }
         .profile{ display:flex; gap:10px; align-items:center; margin-top:4px; }
         .avatar{ width:32px; height:32px; border-radius:999px; background:#1E3A36; display:grid; place-items:center; color:#fff; font-weight:700;}

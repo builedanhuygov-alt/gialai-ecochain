@@ -105,35 +105,12 @@ function Gallery(){
   )
 }
 
-function Lessons(){
-  const [rows, setRows] = useState<any[]>([])
-  useEffect(()=>{
-    api.learning().then((d: any)=> setRows(Array.isArray(d) ? d.slice(0, 5) : [])).catch(()=> setRows([]))
-  },[])
-  if(rows.length === 0) return null
-  return (
-    <section className="cmn-panel" aria-label="Bài học thực tế">
-      <div className="cmn-kicker">BÀI HỌC TỪ THỰC TẾ</div>
-      <div className="cmn-sub">AI dự đoán → thực địa kiểm chứng → ghi nhận để lần sau chính xác hơn</div>
-      {rows.map((l: any, i: number)=> (
-        <div key={i} style={{fontSize:13, border:'1px solid #F1F5F9', borderRadius:10, padding:'8px 10px', marginTop:6}}>
-          <div>🔮 Dự đoán: {l.prediction || 'MISSING'}</div>
-          <div>✅ Thực tế: {l.outcome || 'MISSING'}</div>
-          <span style={{fontSize:11, padding:'2px 8px', borderRadius:999, background: l.prediction_correct ? '#DCFCE7' : '#FEE2E2', fontWeight:700}}>
-            {l.prediction_correct ? 'AI ĐÚNG' : 'AI SAI. Đã học'}
-          </span>
-        </div>
-      ))}
-    </section>
-  )
-}
-
 function SuggestedMissions(){
   const [items, setItems] = useState<any[]>([])
   const [made, setMade] = useState<Record<string, string>>({})
   useEffect(()=>{
-    api.alertList('ACTIVE').then((d: any)=>{
-      const rows = (Array.isArray(d) ? d : []).slice(0, 3)
+    api.alerts().then((d: any)=>{
+      const rows = (Array.isArray(d) ? d : []).filter((a: any)=> a.status === 'ACTIVE').slice(0, 3)
       setItems(rows)
     }).catch(()=> setItems([]))
   },[])
@@ -532,7 +509,6 @@ export default function Community(){
             {filtered.length === 0 && <div className="cmn-sub" style={{ marginTop: 6 }}>Chưa có hoạt động nào.</div>}
           </section>
 
-          <Lessons />
           <SuggestedMissions />
         </aside>
       </div>

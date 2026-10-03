@@ -159,20 +159,14 @@ def test_consistency_audit_shape():
     assert water_check["ok"] is True
 
 
-def test_p6_honest_shapes():
+def test_community_honest_shapes():
     c = setup()
-    assert c.get("/api/supply-chain/risk").json()["status"] == "INSUFFICIENT_DATA"
-    r = c.post("/api/ai/nl-analytics", json={"question": "xyz unknown"}).json()
-    assert r["evidence"] == []
-    rep = c.post("/api/ai/report", json={}).json()
-    assert "counts" in rep and "proposals" in rep["counts"]
-    kpi = c.get("/api/kpi/provincial").json()
-    assert "provenance" in kpi and "alerts_active" in kpi
-    trend = c.get("/api/kpi/trend").json()
-    assert "by_month" in trend
-    prof = c.get("/api/profile/commune/GL-126").json()
-    assert prof["forest"] is None and prof["population_status"] == "VERIFIED"
+    # Empty ranking (not a fake one) when no active alerts
     rr = c.get("/api/response-ranking").json()
     assert rr["ranking"] == []
-    u = c.get("/api/uncertainty/does-not-exist").json()
-    assert u["confidence"] is None and u["uncertainty"] == "INSUFFICIENT_DATA"
+    # Unknown report -> 404, not invented data
+    assert c.get("/api/citizen/fire-reports/does-not-exist").status_code == 404
+    # Evidence timeline of unknown incident -> honest empty, not 500
+    r = c.get("/api/evidence-timeline/does-not-exist")
+    assert r.status_code == 200
+    assert r.json()["timeline"] == []

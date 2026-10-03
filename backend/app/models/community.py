@@ -101,3 +101,29 @@ class CitizenReport(Base):
     match_distance_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="PENDING")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ReportConfirmation(Base):
+    """Per-report community verification (early-warning scope).
+
+    Rules enforced at the API layer:
+    - one user confirms a report once (UQ report_id+user_id)
+    - one device confirms a report once (UQ report_id+device_id)
+    - the reporter cannot self-confirm (403)
+    - confirmation must carry GPS within ~1 km of the report (400)
+    - confirmation must arrive within 24 h of the report (400)
+    """
+    __tablename__ = "report_confirmations"
+    __table_args__ = (
+        UniqueConstraint("report_id", "user_id", name="uq_report_user"),
+        UniqueConstraint("report_id", "device_id", name="uq_report_device"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    report_id: Mapped[str] = mapped_column(String(36), ForeignKey("citizen_reports.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    device_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False)  # true=confirm, false=reject
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

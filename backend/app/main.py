@@ -108,13 +108,8 @@ def create_app() -> FastAPI:
     from app.api.routes.forest_guard import router as fg_router
     from app.api.routes.forest import router as forest_router
     from app.api.routes.earth_engine import router as ee_router
-    from app.api.routes.risk import router as risk_router
-    from app.api.routes.farm_logistics import router as farm_router
     from app.api.routes.phase5 import router as phase5_router
-    from app.api.routes.p6 import router as p6_router
-    from app.api.routes.master import router as master_router
-    from app.api.routes.p8 import router as p8_router
-    from app.api.routes.p9 import router as p9_router
+    from app.api.routes.community import router as community_router
     from app.api.routes.geospatial import router as geo_router
     from app.api.routes.fire import router as fire_router
     from app.api.routes.model_switch import router as model_router
@@ -134,13 +129,8 @@ def create_app() -> FastAPI:
     app.include_router(fg_router, prefix="/api", tags=["ForestGuard"])
     app.include_router(forest_router, prefix="/api", tags=["Forest"])
     app.include_router(ee_router, prefix="/api", tags=["EarthEngine"])
-    app.include_router(risk_router, prefix="/api", tags=["Risk"])
-    app.include_router(farm_router, prefix="/api", tags=["FarmLogistics"])
-    app.include_router(phase5_router, prefix="/api", tags=["Phase5"])
-    app.include_router(p6_router, prefix="/api", tags=["Phase6"])
-    app.include_router(master_router, prefix="/api", tags=["Master"])
-    app.include_router(p8_router, prefix="/api", tags=["Phase8"])
-    app.include_router(p9_router, prefix="/api", tags=["Phase9"])
+    app.include_router(phase5_router, prefix="/api", tags=["Alerts"])
+    app.include_router(community_router, prefix="/api", tags=["Community"])
     app.include_router(geo_router, prefix="/api", tags=["Geospatial"])
     app.include_router(fire_router, prefix="/api", tags=["Fire"])
     app.include_router(model_router, prefix="/api", tags=["ModelSwitch"])
@@ -166,10 +156,7 @@ def create_app() -> FastAPI:
             "health": "/api/health",
             "earth_engine": "/api/earth-engine/status",
             "forest": "/api/forest/areas",
-            "orchestrator": "/api/agents/orchestrate",
             "public": "/api/public/map",
-            "demo": "/api/demo/run",
-            "pitch": "/api/pitch",
             "demo_mode": s.is_demo,
             "gee_status": "see /api/earth-engine/status",
         }

@@ -5,10 +5,7 @@ const API = API_BASE
 // where each agent's output is actually surfaced (honest mapping)
 const POWERS: Record<string, { map?: string; pages: [string, string][] }> = {
   ForestGuard: { map: 'CẤP cháy + vùng rừng trên Bản đồ', pages: [['/forest', 'Forest'], ['/map', 'Bản đồ']] },
-  FireRisk: { map: 'CẤP cháy popup xã + trạm quan trắc', pages: [['/disaster', 'Disaster'], ['/map', 'Bản đồ']] },
-  DisasterGuard: { pages: [['/disaster', 'Disaster (đa thiên tai)']] },
-  CarbonGuard: { pages: [['/carbon', 'Carbon']] },
-  EUDRGuard: { pages: [['/eudr', 'EUDR']] },
+  FireRisk: { map: 'CẤP cháy popup xã + trạm quan trắc', pages: [['/events', 'Sự kiện'], ['/map', 'Bản đồ']] },
 }
 // admin token lives in sessionStorage (cleared when the tab closes), never localStorage.
 const token = ()=> sessionStorage.getItem('ecogl_admin_token') || ''

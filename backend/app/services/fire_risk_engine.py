@@ -20,23 +20,26 @@ def _seed(uid:str, extra:str="")->random.Random:
 
 class FireRiskEngine:
     def analyze(self, administrative_unit_id:str, satellite:Dict|None=None, weather:Dict|None=None, terrain:Dict|None=None, hotspots:List[Dict]|None=None, community:int=0, historical:Dict|None=None, sources_available:Dict[str,bool]|None=None)->Dict[str,Any]:
-        from app.services.fire_risk_config import WEIGHTS
+        # Single formula lives in app.services.fire_risk.compute_score.
+        # Legacy mode (renormalize=False) preserves historical numbers; the
+        # ±3 seeded jitter is kept for backward-compatible outputs.
+        from app.services.fire_risk import compute_score, input_from_legacy
         satellite=satellite or {}
         weather=weather or {}
         terrain=terrain or {}
         # Artificial-heat suspects (airport runways, industrial zones — flagged
         # by firms_service) must NEVER count as fire evidence.
-        raw_hotspots=hotspots or []
-        hotspots=[h for h in raw_hotspots if not h.get("suspect_artificial")]
-        filtered_artificial=len(raw_hotspots)-len(hotspots)
+        raw_hotspots=hotspots if hotspots is not None else []
+        real_hotspots=[h for h in raw_hotspots if not h.get("suspect_artificial")]
+        filtered_artificial=len(raw_hotspots)-len(real_hotspots)
         # Provenance: only keys actually present count as real data.
-        # Defaults below are neutral computation stand-ins — they must NOT
+        # Defaults are neutral computation stand-ins — they must NOT
         # inflate confidence (previous bug: confidence ~86% with zero inputs).
         has_sat = satellite.get("ndvi") is not None
         has_wx = weather.get("temperature") is not None
         has_terr = terrain.get("slope") is not None
-        has_firms = bool(hotspots)
-        has_comm = community > 0
+        has_firms = bool(real_hotspots)
+        has_comm = (community or 0) > 0
         # sources_available: nguồn nào caller đã chạm API thành công (kể cả trả
         # 0 cháy / 0 report — đó là tín hiệu thật, KHÔNG phải thiếu nguồn).
         # None = suy từ nội dung như cũ (giữ tương thích unit tests).
@@ -47,33 +50,13 @@ class FireRiskEngine:
         else:
             missing = [k for k in ("satellite", "weather", "terrain", "firms", "community")
                        if not sources_available.get(k, False)]
-        ndvi=satellite.get("ndvi", 0.6) if has_sat else 0.6
-        ndmi=satellite.get("ndmi", 0.3); nbr=satellite.get("nbr", 0.2)
-        temp=weather.get("temperature", 30) if has_wx else 30
-        humidity=weather.get("humidity", 60); rainfall=weather.get("rainfall", 5); wind=weather.get("wind_speed", 10)
-        slope=terrain.get("slope", 10) if has_terr else 10
-        elevation=terrain.get("elevation", 300)
-        # Sec20 weighted scoring — not hard-coded NBR alone
-        # Fuel dryness (NDVI/NDMI) 30%, Weather 20%, FIRMS 15%, Wind 10%, Rainfall 10%, Terrain 10%, Historical/community 5%
-        fuel_score = max(0, min(100, (0.7-ndvi)*120 + (0.4-ndmi)*80))
-        # NBR is burn evidence, not fuel alone — weight it only as part of fuel if available, not standalone
-        if nbr is not None and nbr < -0.1: fuel_score = min(100, fuel_score + 5)  # slight bump, not dominant
-        weather_score = max(0, min(100, (temp-28)*4 + (60-humidity)*0.8))
-        firms_score = 70 if hotspots else 10
-        wind_score = min(100, wind*3)
-        rain_score = max(0, min(100, (10-rainfall)*6))
-        terrain_score = min(100, slope*2)
-        hist_score = 50 + (20 if historical else 0) + (community*5)
-        base = int(fuel_score*WEIGHTS["fuel_dryness"] + weather_score*WEIGHTS["weather_danger"] + firms_score*WEIGHTS["firms_proximity"] + wind_score*WEIGHTS["wind"] + rain_score*WEIGHTS["rainfall_deficit"] + terrain_score*WEIGHTS["terrain"] + hist_score*WEIGHTS["historical_community"])
-        factors={}
-        if fuel_score>60: factors["Fuel Dryness"]="+30%"
-        if weather_score>60: factors["Weather danger"]="+20%"
-        if firms_score>50: factors["FIRMS proximity"]="+15%"
-        if wind>18: factors["Wind"]="+10%"
-        if rainfall<2: factors["Rainfall deficit"]="+10%"
-        if slope>20: factors["Terrain"]="+10%"
-        # NBR not used alone — only as evidence
-        if nbr is not None and nbr < -0.25: factors["NBR burn scar"]="detected"
+        r = compute_score(
+            input_from_legacy(satellite, weather, terrain, hotspots, community, historical, sources_available),
+            origin="LIVE", renormalize=False,
+        )
+        base = r.score if r.score is not None else 5
+        ndvi = satellite.get("ndvi", 0.6) if has_sat else 0.6
+        ndmi = satellite.get("ndmi", 0.3)
         dry = (0.7 - ndvi)*50 + (0.4 - ndmi)*30
         base=min(100, max(5, int(base + _seed(administrative_unit_id,"base").uniform(-3,3))))
         level=score_to_level(base)
@@ -83,10 +66,12 @@ class FireRiskEngine:
         confidence = max(30, min(97, base_conf + _seed(administrative_unit_id, "conf").randint(-3, 3)))
         # label
         label=FIRE_WARNING_LABELS[level]
+        slope = terrain.get("slope", 10) if has_terr else 10
+        elevation = terrain.get("elevation", 300)
         return {
             "risk_score": base, "warning_level": level.value, "label": label,
-            "eco_level": f"EcoGL AI Fire Risk Level {level.value}", # Sec10 internal, not official
-            "confidence": confidence, "factors": factors, "missing": missing,
+            "confidence": confidence, "factors": r.factors, "missing": missing,
+            "data_completeness": r.data_completeness,
             "filtered_artificial": filtered_artificial,
             "elevation": elevation, "slope": slope,
             "vegetation_dryness": int(max(0,min(100, 50 + dry))), "fuel_condition": "HIGH" if dry>15 else "MODERATE",

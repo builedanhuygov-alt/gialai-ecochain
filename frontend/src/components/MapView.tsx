@@ -12,6 +12,7 @@ import AssetDrawer, { HoverPreview, groupNearby, haversineKm, stripHtml } from '
 import type { DrawerItem } from './AssetDrawer'
 import { getMode } from './ModeSwitch'
 import { findAlertAtExactCoordinates, findFireEventById, fireEventMapTarget, formatAdministrativeLocation, getCommunityReportCoordinates, getFireMarkerCoordinates, isLiveSourceStatus } from '../utils/truthfulData'
+import { coverageWord, dataSourceFromStatus } from '../utils/statusModel'
 
 // Icon/label asset dùng chung cho marker + drawer + legend.
 // RC B2: legend render từ đúng các hằng số này (không hardcode riêng,
@@ -70,11 +71,19 @@ const TILE_FIX = (url: string) => url.replace(/[\r\n]/g, "").trim()
 
 // (Trạm cố định đã thay bằng điểm CẤP cháy từng xã — vector, không lệch khi zoom)
 
-export default function MapView({ onSelect, fill }: { onSelect?: (type:string, id:string)=>void; fill?: boolean }) {
+export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts, fireAlertsStatus: suppliedFireAlertsStatus }: {
+  onSelect?: (type:string, id:string)=>void
+  fill?: boolean
+  fireAlerts?: any[]
+  fireAlertsStatus?: string
+}) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const onSelectRef = useRef(onSelect)
   onSelectRef.current = onSelect
+  const fireAlertsRef = useRef<any[]>([])
+  const selectedFireMarkerRef = useRef<any>(null)
+  const watchFireRef = useRef<(alert: any) => Promise<void>>(async () => {})
   const [_base] = useState<'streets'|'satellite'>('streets')
   void _base
   // Priority 1: Default Esri World Imagery (ổn định nhất) — không google_s
@@ -272,16 +281,15 @@ export default function MapView({ onSelect, fill }: { onSelect?: (type:string, i
     window.dispatchEvent(new CustomEvent('ecochain-select-area', { detail:{ area: f.ten_xa, lat: lngLat[1], lon: lngLat[0] } }))
     onSelectRef.current?.('commune', f.ten_xa || ('ma-' + f.ma_xa))
     try{
-      const [fr, ds] = await Promise.all([
+      const [fr] = await Promise.all([
         fetch(TILE_FIX(`${API}/api/fire/risk?administrative_unit_id=${encodeURIComponent(f.ten_xa||('ma-'+f.ma_xa))}&lat=${lngLat[1].toFixed(4)}&lon=${lngLat[0].toFixed(4)}`)).then(r=>r.json()).catch(()=> null),
-        fetch(TILE_FIX(`${API}/api/disaster/summary?administrative_unit_id=${encodeURIComponent(f.ten_xa||('ma-'+f.ma_xa))}&lat=${lngLat[1].toFixed(4)}&lon=${lngLat[0].toFixed(4)}`)).then(r=>r.json()).catch(()=> null),
       ])
       if(!fr) throw new Error('unavailable')
       const j = fr
       const lv = j.warning_level || 'I'
       const ev = j.evidence || {}
       const n = Array.isArray(ev.hotspots) ? ev.hotspots.length : (ev.hotspots ?? 0)
-      const sigs = (ds?.signals || []).filter((s:any)=> s.risk_type !== 'FIRE').slice(0,4)
+      const sigs: string[] = []
       const frt = (j as any).forecast_rating || null
       patchDiagnosis({
         loading: false, level: lv, label: LEVEL_VI[lv] || '',
@@ -353,8 +361,23 @@ export default function MapView({ onSelect, fill }: { onSelect?: (type:string, i
     const flat = coordinates.lat
     const hotspotId = a.hotspot_id || `firms-${Number(flat).toFixed(5)}-${Number(flon).toFixed(5)}`
     setSelectedSignalId(hotspotId)
-    if(map && flon && flat){
+    window.dispatchEvent(new CustomEvent('ecochain-highlight-fire-signal', { detail:{ eventId: hotspotId } }))
+    if(map && Number.isFinite(flon) && Number.isFinite(flat)){
       try{ map.flyTo({ center:[flon, flat], zoom:12, duration:animDur(600) }) }catch{}
+      try{ selectedFireMarkerRef.current?.remove() }catch{}
+      const selectedElement = document.createElement('div')
+      selectedElement.className = 'mk-pop marker-signal-selected'
+      selectedElement.setAttribute('role', 'img')
+      selectedElement.setAttribute('aria-label', `Tín hiệu FIRMS đang chọn ${hotspotId}`)
+      selectedElement.textContent = '!'
+      Object.assign(selectedElement.style, {
+        width:'24px', height:'24px', display:'grid', placeItems:'center', boxSizing:'border-box',
+        border:'3px solid #78350F', borderRadius:'50%', background:'#FDE68A', color:'#451A03',
+        fontSize:'14px', fontWeight:'900', boxShadow:'0 0 0 5px rgba(245,158,11,.28), 0 2px 8px rgba(0,0,0,.45)',
+        zIndex:'20', transform:'scale(1.15)', transition:'transform 180ms ease-out', pointerEvents:'none',
+      })
+      selectedFireMarkerRef.current = new (maplibregl as any).Marker({ element:selectedElement, anchor:'center' })
+        .setLngLat([flon, flat]).addTo(map)
       const akey = `alert:${hotspotId}`
       const reference = a.village_reference
       let referenceNote = ''
@@ -399,6 +422,25 @@ export default function MapView({ onSelect, fill }: { onSelect?: (type:string, i
       ? { ...prev, status, rating }
       : prev)
   }
+  watchFireRef.current = watchFire
+
+  useEffect(()=>{
+    const onWatchSignal = (event: Event)=>{
+      const detail = (event as CustomEvent).detail || {}
+      const alert = fireAlertsRef.current.find((item:any) => item.hotspot_id === detail.eventId || item.event_id === detail.eventId)
+        || (Number.isFinite(detail.lat) && Number.isFinite(detail.lon) ? {
+          hotspot_id: detail.eventId,
+          latitude: detail.lat,
+          longitude: detail.lon,
+          acq_date: detail.acq_date,
+          acq_time: detail.acq_time,
+          source_details: { status: detail.sourceStatus },
+        } : null)
+      if(alert) void watchFireRef.current(alert)
+    }
+    window.addEventListener('ecochain-watch-fire', onWatchSignal)
+    return ()=> window.removeEventListener('ecochain-watch-fire', onWatchSignal)
+  },[])
 
   // Header search → fly to commune / coords
   useEffect(()=>{
@@ -716,7 +758,11 @@ export default function MapView({ onSelect, fill }: { onSelect?: (type:string, i
   const [health, setHealth] = useState<any>(null)
   void health
   const [villages, setVillages] = useState<any[]>([])
-  const [fireAlerts, setFireAlerts] = useState<any[]>([])
+  const [localFireAlerts, setLocalFireAlerts] = useState<any[]>([])
+  const [localFireAlertsStatus, setLocalFireAlertsStatus] = useState('LOADING')
+  const fireAlerts = suppliedFireAlerts ?? localFireAlerts
+  const fireAlertsStatus = suppliedFireAlerts === undefined ? localFireAlertsStatus : (suppliedFireAlertsStatus || 'LOADING')
+  fireAlertsRef.current = fireAlerts
   const [communityReports, setCommunityReports] = useState<any[]>([])
   const communityMarkersRef = useRef(new Map<string, any>())
   const [selectedSignalId, setSelectedSignalId] = useState<string | null>(null)
@@ -866,15 +912,11 @@ export default function MapView({ onSelect, fill }: { onSelect?: (type:string, i
     window.addEventListener('keydown', onKey)
     return ()=> window.removeEventListener('keydown', onKey)
   },[])
-  // P6: một từ trạng thái duy nhất cho cả pill top + ticker đáy.
-  const coverage = (()=>{
-    if(mode==='demo') return { word:'DEMO', color:'#F59E0B' }
-    const live = [sourceLive.firms, sourceLive.gee, sourceLive.sentinel2].filter(s=> s==='LIVE').length
-    const known = [sourceLive.firms, sourceLive.gee, sourceLive.sentinel2].filter(Boolean).length
-    if(known > 0 && live === known) return { word:'ĐẦY ĐỦ', color:'#10B981' }
-    if(live > 0) return { word:'MỘT PHẦN', color:'#F59E0B' }
-    return { word:'NGOẠI TUYẾN', color:'#EF4444' }
-  })()
+  // Data-source coverage only — never labeled as SYSTEM LIVE/OFFLINE.
+  const coverage = coverageWord(dataSourceFromStatus(
+    sourceLive.firms || fireAlertsStatus || liveStatus,
+    mode === 'demo',
+  ))
   // Trigger resize sau khi DOM mount (fix height 0)
   useEffect(()=>{
     if(!mapRef.current) return
@@ -1325,7 +1367,7 @@ export default function MapView({ onSelect, fill }: { onSelect?: (type:string, i
       const m=e.detail?.mode||getMode()
       setMode(m)
       setTourOpen(false)
-      loadAlerts()
+      if(suppliedFireAlerts === undefined) loadAlerts()
     }
     const onTour=(e:any)=>{
       const a=e.detail?.action
@@ -1336,10 +1378,14 @@ export default function MapView({ onSelect, fill }: { onSelect?: (type:string, i
     window.addEventListener('ecochain-mode', onMode)
     window.addEventListener('ecochain-tour', onTour)
     // Nearby village points are references only; FIRMS coordinates remain the event location.
-    const loadAlerts=()=> fetch(TILE_FIX(`${API}/api/villages/fire-alert?t=${Date.now()}`), { cache:'no-store' }).then(r=>r.json()).then(j=>{
+    const loadAlerts=()=> fetch(TILE_FIX(`${API}/api/villages/fire-alert?t=${Date.now()}`), { cache:'no-store' }).then(r=>{
+      if(!r.ok) throw new Error(`HTTP ${r.status}`)
+      return r.json()
+    }).then(j=>{
       const alerts = isLiveSourceStatus(j?.status) && Array.isArray(j?.alerts) ? j.alerts : []
       const events = isLiveSourceStatus(j?.status) && Array.isArray(j?.events) ? j.events : []
-      setFireAlerts(alerts)
+      setLocalFireAlerts(alerts)
+      setLocalFireAlertsStatus(isLiveSourceStatus(j?.status) ? j.status : j?.status || 'UNAVAILABLE')
       const requestedEvent = new URLSearchParams(window.location.search).get('event')
       if(requestedEvent){
         const matchingAlert = alerts.find((alert:any)=> alert.hotspot_id === requestedEvent)
@@ -1356,17 +1402,17 @@ export default function MapView({ onSelect, fill }: { onSelect?: (type:string, i
         console.warn(msg)
         if(Notification && Notification.permission==='granted') new Notification('FIRMS · Tín hiệu cần xác minh', { body: msg })
       }
-    }).catch(()=> setFireAlerts([]))
+    }).catch(()=> { setLocalFireAlerts([]); setLocalFireAlertsStatus('UNAVAILABLE') })
     const loadCommunityReports=()=> fetch(`${API}/api/citizen/fire-reports?limit=100`, { cache:'no-store' })
       .then(r=> r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then(j=> setCommunityReports(Array.isArray(j?.reports) ? j.reports : []))
       .catch(()=> setCommunityReports([]))
-    loadAlerts()
+    if(suppliedFireAlerts === undefined) loadAlerts()
     loadCommunityReports()
     window.addEventListener('ecochain-community-report-created', loadCommunityReports)
-    const int=setInterval(()=>{ if(getMode()==='live') loadAlerts() }, 60000)
+    const int=suppliedFireAlerts === undefined ? setInterval(()=>{ if(getMode()==='live') loadAlerts() }, 60000) : null
     if(Notification && Notification.permission==='default') Notification.requestPermission()
-    return ()=>{ clearInterval(int); window.removeEventListener('ecochain-mode', onMode); window.removeEventListener('ecochain-tour', onTour); window.removeEventListener('ecochain-community-report-created', loadCommunityReports) }
+    return ()=>{ if(int) clearInterval(int); selectedFireMarkerRef.current?.remove(); window.removeEventListener('ecochain-mode', onMode); window.removeEventListener('ecochain-tour', onTour); window.removeEventListener('ecochain-community-report-created', loadCommunityReports) }
   },[])
 
   return (
@@ -1669,9 +1715,18 @@ export default function MapView({ onSelect, fill }: { onSelect?: (type:string, i
           <div style={{fontSize:10, color:'#64748B', marginTop:7}}>Tín hiệu vệ tinh không đồng nghĩa cháy đã được xác nhận.</div>
         </div>
       )}
-      {fireAlerts.length===0 && villages.length>0 && (
+      {suppliedFireAlerts !== undefined && fireAlertsStatus === 'LOADING' && (
+        <div role="status" style={{position:'absolute',top:112,left:12,zIndex:12,background:'#fff',border:'1px solid #E2E8E5',borderRadius:8,padding:'10px 12px',fontSize:12}}>Đang tải tín hiệu FIRMS…</div>
+      )}
+      {suppliedFireAlerts !== undefined && fireAlertsStatus !== 'LOADING' && !isLiveSourceStatus(fireAlertsStatus) && (
+        <div role="alert" style={{position:'absolute',top:112,left:12,zIndex:12,background:'#fff',border:'1px solid #F5D08A',borderRadius:8,padding:'10px 12px',fontSize:12}}>FIRMS {fireAlertsStatus} · Không có dữ liệu khả dụng.</div>
+      )}
+      {suppliedFireAlerts !== undefined && isLiveSourceStatus(fireAlertsStatus) && fireAlerts.length === 0 && (
+        <div style={{position:'absolute',bottom:'max(64px, calc(64px + env(safe-area-inset-bottom, 0px)))',left:12,zIndex:10,background:'#fff',border:'1px solid #E2E8E5',borderRadius:8,padding:'10px 12px',fontSize:11,maxWidth:'min(420px,90vw)'}}>Không có tín hiệu cần xác minh trong phạm vi này. Điều đó không xác nhận rằng khu vực không có cháy.</div>
+      )}
+      {suppliedFireAlerts === undefined && isLiveSourceStatus(fireAlertsStatus) && fireAlerts.length===0 && villages.length>0 && (
         <div style={{position:'absolute', bottom:'max(64px, calc(64px + env(safe-area-inset-bottom, 0px)))', left:12, background:'#fff', border:'1px solid #E2E8E5', borderRadius:12, padding:'10px 14px', fontSize:11, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', maxWidth:'min(420px, 90vw)'}}>
-          ✓ {villages.length} điểm tham chiếu đang theo dõi (mẫu, không đầy đủ thôn/xã). Không có cháy trong 20km
+          ✓ {villages.length} điểm tham chiếu đang theo dõi (mẫu, không đầy đủ thôn/xã). Không ghi nhận tín hiệu FIRMS trong 20 km.
         </div>
       )}
       {/* M11: info-panel chừa gutter phải cho nav (ẩn ở Clean Mode) */}

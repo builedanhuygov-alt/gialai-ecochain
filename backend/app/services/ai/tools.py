@@ -101,8 +101,7 @@ async def create_verification_recommendation(area: str="Gia Lai", reason: str="H
 
 async def create_mission(area: str="Gia Lai", priority: str="HIGH") -> Dict:
     from app.database import SessionLocal
-    from app.models.phase7 import Plan
-    # Minimal mission creation
+    # Minimal mission creation (field missions API owns persistence)
     return {"tool": "create_mission", "status": "LIVE", "data": {"mission_id": "mission-"+str(int(time.time())), "area": area, "priority": priority, "status": "RECOMMENDED"}}
 
 async def run_fire_simulation(temp_delta: float=3, rain_delta: float=-30, wind_delta: float=20) -> Dict:

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Clock3, Flame, MapPin, Radio, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Clock3, Flame, MapPin, Radio, RotateCw, ShieldCheck } from 'lucide-react'
 import MapView from '../components/MapView'
 import { API_BASE, photoUrl } from '../services/api'
 import {
@@ -21,20 +21,36 @@ const LIFECYCLE = [
   ['DONG_SU_CO', 'Đóng sự cố'],
 ] as const
 
-function formatAcquisitionTime(value: unknown): string | null {
+export function eventCountLabel(status: string, count: number): string {
+  if (status === 'LOADING') return '…'
+  return isLiveSourceStatus(status) ? String(count) : '—'
+}
+
+export function formatAcquisitionTime(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 2359) {
+    value = String(value).padStart(4, '0')
+  }
   if (typeof value !== 'string') return null
-  const match = value.match(/^(\d{2})(\d{2})$/)
-  return match ? `${match[1]}:${match[2]} UTC` : value
+  const digits = value.trim()
+  const match = digits.match(/^(\d{1,2})(\d{2})$/)
+  if (!match) return digits || null
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  if (hours > 23 || minutes > 59) return null
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} UTC`
 }
 
 function useFireEventFeed() {
-  const [feed, setFeed] = useState<{ status: string; events: any[]; error: string | null }>({
-    status: 'LOADING', events: [], error: null,
+  const [feed, setFeed] = useState<{ status: string; events: any[]; alerts: any[]; error: string | null }>({
+    status: 'LOADING', events: [], alerts: [], error: null,
   })
   const [health, setHealth] = useState<any>(null)
+  const [healthStatus, setHealthStatus] = useState<'LOADING'|'AVAILABLE'|'UNAVAILABLE'>('LOADING')
+  const [reloadVersion, setReloadVersion] = useState(0)
 
   useEffect(() => {
     let active = true
+    setFeed({ status: 'LOADING', events: [], alerts: [], error: null })
     fetch(`${API}/api/villages/fire-alert`, { cache: 'no-store' })
       .then(async response => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -42,28 +58,36 @@ function useFireEventFeed() {
       })
       .then(payload => {
         if (!active) return
+        if (!payload || typeof payload !== 'object' || typeof payload.status !== 'string') {
+          throw new Error('Phản hồi FIRMS không đúng định dạng.')
+        }
         if (!isLiveSourceStatus(payload?.status)) {
-          setFeed({ status: payload?.status || 'UNAVAILABLE', events: [], error: null })
+          setFeed({ status: payload.status, events: [], alerts: [], error: null })
           return
         }
-        setFeed({ status: payload.status, events: buildEventListFromAlerts(payload), error: null })
+        setFeed({
+          status: payload.status,
+          events: buildEventListFromAlerts(payload),
+          alerts: Array.isArray(payload.alerts) ? payload.alerts : [],
+          error: null,
+        })
       })
       .catch(error => {
-        if (active) setFeed({ status: 'UNAVAILABLE', events: [], error: String(error) })
+        if (active) setFeed({ status: 'UNAVAILABLE', events: [], alerts: [], error: String(error) })
       })
     fetch(`${API}/api/health/geospatial`, { cache: 'no-store' })
       .then(response => response.ok ? response.json() : null)
-      .then(payload => { if (active) setHealth(payload) })
-      .catch(() => { if (active) setHealth(null) })
+      .then(payload => { if (active) { setHealth(payload); setHealthStatus(payload ? 'AVAILABLE' : 'UNAVAILABLE') } })
+      .catch(() => { if (active) { setHealth(null); setHealthStatus('UNAVAILABLE') } })
     return () => { active = false }
-  }, [])
+  }, [reloadVersion])
 
-  return { ...feed, health }
+  return { ...feed, health, healthStatus, retry: () => setReloadVersion(version => version + 1) }
 }
 
 function StatusPill({ status }: { status: string }) {
-  const live = ['LIVE', 'CACHED'].includes(status)
-  return <span className={`fi-status${live ? ' live' : ''}`}><i />{status}</span>
+  const stateClass = status === 'LIVE' ? 'live' : status === 'CACHED' ? 'cached' : status === 'STALE' ? 'stale' : ''
+  return <span className={`fi-status${stateClass ? ` ${stateClass}` : ''}`}><i />{status}</span>
 }
 
 function EvidenceRow({ label, state, detail }: { label: string; state: 'yes' | 'missing' | 'unavailable'; detail: string }) {
@@ -283,51 +307,126 @@ function InvestigationStyles() {
     .fi-timeline-item time{font-variant-numeric:tabular-nums;color:var(--fi-green);font-weight:700;}
     .fi-timeline-item small{grid-column:2;color:var(--fi-muted);font-size:10px;}
     .fi-list-layout{display:grid;grid-template-columns:minmax(260px,.72fr) minmax(0,1.5fr);gap:12px;margin-top:14px;}
+    .fi-mobile-tabs{display:none;}
+    .fi-system-status{font-size:11px;font-weight:700;color:var(--fi-muted);}
     .fi-feed-panel{background:#fff;border:1px solid var(--fi-line);border-radius:7px;min-width:0;overflow:hidden;}
     .fi-feed-head{padding:12px 14px;border-bottom:1px solid var(--fi-line);display:flex;justify-content:space-between;align-items:center;gap:8px;}
     .fi-feed-head h2{font-size:13px;margin:0;}
     .fi-status{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:800;color:var(--fi-muted);}
     .fi-status i{width:7px;height:7px;background:#9aa8a2;border-radius:50%;}
     .fi-status.live{color:#176b52;}.fi-status.live i{background:#2b8a65;}
+    .fi-status.cached,.fi-status.stale{color:#85620f;}.fi-status.cached i,.fi-status.stale i{background:#c08a1c;}
     .fi-event-list{max-height:62vh;overflow:auto;}
-    .fi-event-link{display:block;padding:12px 14px;border-bottom:1px solid #edf1ef;color:inherit;text-decoration:none;}
-    .fi-event-link:hover,.fi-event-link[aria-current="page"]{background:#f2f7f4;}
+    .fi-event-row{border-bottom:1px solid #edf1ef;}
+    .fi-event-row.selected{background:#f2f7f4;box-shadow:inset 3px 0 #176b52;}
+    .fi-event-link{display:block;width:100%;min-height:44px;padding:12px 14px;border:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer;}
+    .fi-event-link:hover,.fi-event-link[aria-pressed="true"]{background:#f2f7f4;}
     .fi-event-link strong{font-size:12px;display:block;overflow-wrap:anywhere;}
     .fi-event-link span{display:block;font-size:10px;color:var(--fi-muted);margin-top:4px;}
+    .fi-event-link .fi-select-hint{color:var(--fi-green);font-weight:700;}
+    .fi-details-link{display:inline-flex;align-items:center;min-height:36px;margin:0 14px 8px;padding:0 8px;color:var(--fi-green);font-size:11px;font-weight:700;text-decoration:none;}
     .fi-map-panel{height:min(67vh,720px);min-height:460px;overflow:hidden;border:1px solid var(--fi-line);background:#e6ece8;}
     .fi-empty-state{padding:24px 14px;font-size:12px;color:var(--fi-muted);line-height:1.5;}
-    @media(max-width:900px){.fi-investigation-grid,.fi-list-layout{grid-template-columns:1fr}.fi-event-list{max-height:300px}.fi-map-panel{height:55vh;min-height:360px}}
+    .fi-skeleton{height:54px;margin:9px 12px;border-radius:5px;background:linear-gradient(90deg,#eef2ef 25%,#e3eae5 37%,#eef2ef 63%);background-size:400% 100%;animation:fi-shimmer 1.4s ease infinite;}
+    @keyframes fi-shimmer{to{background-position:-100% 0}}
+    @media(max-width:900px){.fi-investigation-grid,.fi-list-layout{grid-template-columns:1fr}.fi-mobile-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:12px;padding:3px;border:1px solid var(--fi-line);border-radius:8px;background:#fff}.fi-mobile-tabs button{min-height:44px;border:0;border-radius:6px;background:transparent;color:var(--fi-muted);font:inherit;font-size:12px;font-weight:700}.fi-mobile-tabs button.active{background:#e8f1ec;color:var(--fi-green)}.fi-feed-panel.mobile-hidden,.fi-map-panel.mobile-hidden{display:none}.fi-event-list{max-height:calc(100vh - 260px)}.fi-map-panel{height:calc(100vh - 260px);min-height:360px}.fi-page-head{align-items:flex-start}}
     @media(max-width:540px){.fire-intel{padding:12px}.fi-data-grid{grid-template-columns:1fr}.fi-evidence-row{grid-template-columns:20px minmax(0,1fr)}.fi-evidence-state{grid-column:2}.fi-page-head h1{font-size:21px}.fi-timeline-item{grid-template-columns:1fr}.fi-timeline-item small{grid-column:1}}
   `}</style>
 }
 
 export function EventsList() {
-  const { status, events, error } = useFireEventFeed()
+  const { status, events, alerts, error, health, healthStatus, retry } = useFireEventFeed()
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [mobilePane, setMobilePane] = useState<'list' | 'map'>('list')
+  const eventRefs = useRef(new Map<string, HTMLElement>())
+  const systemStatus = healthStatus === 'LOADING' ? 'ĐANG KIỂM TRA' : healthStatus === 'UNAVAILABLE' ? 'CHƯA RÕ' : health.summary?.all_live ? 'LIVE' : 'DEGRADED'
+  const observation = events
+    .map(event => ({ date: event.detection.acq_date, time: formatAcquisitionTime(event.detection.acq_time) }))
+    .filter(item => typeof item.date === 'string' && item.date)
+    .sort((left, right) => `${right.date} ${right.time || ''}`.localeCompare(`${left.date} ${left.time || ''}`))[0]
+
+  const selectEvent = (event: any) => {
+    const eventId = String(event.hotspot_id || event.event_id)
+    setSelectedEventId(eventId)
+    window.dispatchEvent(new CustomEvent('ecochain-watch-fire', {
+      detail: {
+        eventId,
+        lat: event.lat,
+        lon: event.lon,
+        acq_date: event.detection?.acq_date,
+        acq_time: event.detection?.acq_time,
+        sourceStatus: event.detection?.source_status,
+      },
+    }))
+    if (window.matchMedia('(max-width: 900px)').matches) setMobilePane('map')
+  }
+
+  useEffect(() => {
+    const highlight = (event: Event) => {
+      const eventId = (event as CustomEvent).detail?.eventId
+      if (typeof eventId !== 'string') return
+      const matchingEvent = events.find(item => item.hotspot_id === eventId || item.event_id === eventId)
+      if (!matchingEvent) return
+      const stableId = String(matchingEvent.hotspot_id || matchingEvent.event_id)
+      setSelectedEventId(stableId)
+      requestAnimationFrame(() => eventRefs.current.get(stableId)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }))
+    }
+    window.addEventListener('ecochain-highlight-fire-signal', highlight)
+    return () => window.removeEventListener('ecochain-highlight-fire-signal', highlight)
+  }, [events])
+
   return (
     <div className="fire-intel"><InvestigationStyles />
       <main className="fi-investigation">
         <header className="fi-page-head">
-          <div><div className="fi-eyebrow">THEO DÕI ĐIỂM NGHI NGỜ</div><h1>Thông tin sự kiện</h1><p>Phát hiện FIRMS là tín hiệu quan sát, không phải vụ cháy đã xác nhận.</p></div>
-          <StatusPill status={status === 'LOADING' ? 'ĐANG TẢI' : status} />
+          <div>
+            <div className="fi-eyebrow">THEO DÕI ĐIỂM NGHI NGỜ</div>
+            <h1>Event Intelligence</h1>
+            <p>{status === 'LOADING' ? 'Đang tải dữ liệu FIRMS…' : isLiveSourceStatus(status) ? `${events.length} phát hiện FIRMS · ${alerts.length} tín hiệu trong quy trình xác minh.` : 'Phát hiện FIRMS là tín hiệu quan sát, không phải vụ cháy đã xác nhận.'}</p>
+            {status !== 'LOADING' && isLiveSourceStatus(status) && <small className="fi-freshness">Nguồn FIRMS {status}{observation ? ` · Quan sát gần nhất ${observation.date}${observation.time ? ` ${observation.time}` : ''}` : ' · Chưa có thời điểm quan sát'}</small>}
+          </div>
+          <div className="fi-head-actions">
+            <span className="fi-system-status">● Hệ thống {systemStatus}</span>
+            <StatusPill status={status === 'LOADING' ? 'ĐANG TẢI' : status} />
+            {status !== 'LOADING' && <button className="fi-button" onClick={retry} aria-label="Tải lại danh sách FIRMS"><RotateCw size={14} /> Thử lại</button>}
+          </div>
         </header>
+        <div className="fi-mobile-tabs" role="group" aria-label="Chế độ xem tín hiệu">
+          <button className={mobilePane === 'list' ? 'active' : ''} aria-pressed={mobilePane === 'list'} onClick={() => setMobilePane('list')}>Danh sách ({eventCountLabel(status, events.length)})</button>
+          <button className={mobilePane === 'map' ? 'active' : ''} aria-pressed={mobilePane === 'map'} onClick={() => setMobilePane('map')}>Bản đồ ({eventCountLabel(status, alerts.length)})</button>
+        </div>
         <div className="fi-list-layout">
-          <section className="fi-feed-panel" aria-label="FIRMS events">
-            <div className="fi-feed-head"><h2>Danh sách phát hiện</h2><span>{events.length}</span></div>
+          <section className={`fi-feed-panel${mobilePane === 'map' ? ' mobile-hidden' : ''}`} aria-label="Danh sách phát hiện FIRMS">
+            <div className="fi-feed-head"><h2>Phát hiện FIRMS</h2><span aria-live="polite">{eventCountLabel(status, events.length)}</span></div>
             <div className="fi-event-list">
-              {status === 'LOADING' && <div className="fi-empty-state">Đang tải dữ liệu FIRMS…</div>}
-              {status !== 'LOADING' && events.length === 0 && <div className="fi-empty-state">{error ? 'FIRMS unavailable — không tạo sự kiện giả.' : status === 'LIVE' || status === 'CACHED' || status === 'STALE' ? 'Chưa có dữ liệu phát hiện.' : `FIRMS ${status} — không tạo sự kiện giả.`}</div>}
-              {events.map(event => (
-                <Link className="fi-event-link" to={`/events/${encodeURIComponent(event.event_id)}`} key={event.event_id}>
-                  <strong>{event.status} · {event.event_id}</strong>
-                  <span>{event.detection.acq_date || 'Chưa có ngày'}{formatAcquisitionTime(event.detection.acq_time) ? ` · ${formatAcquisitionTime(event.detection.acq_time)}` : ''}</span>
-                  <span>{typeof event.lat === 'number' && typeof event.lon === 'number' ? `${event.lat.toFixed(6)}, ${event.lon.toFixed(6)}` : 'Chưa có dữ liệu tọa độ'}</span>
-                  <span>{formatAdministrativeLocation(event.location)}</span>
-                  {event.villageReference && <span>Điểm tham chiếu gần nhất: {event.villageReference.name}{event.distanceKm != null ? ` · ${event.distanceKm} km` : ''}</span>}
-                </Link>
-              ))}
+              {status === 'LOADING' && <div aria-label="Đang tải danh sách FIRMS" aria-busy="true"><div className="fi-skeleton" /><div className="fi-skeleton" /><div className="fi-skeleton" /></div>}
+              {status !== 'LOADING' && events.length === 0 && (
+                <div className="fi-empty-state" role={error ? 'alert' : undefined}>
+                  {error ? `Không thể tải dữ liệu FIRMS: ${error}` : isLiveSourceStatus(status) ? 'Không có tín hiệu trong khoảng thời gian đã chọn.' : `FIRMS ${status} — không có dữ liệu khả dụng.`}
+                </div>
+              )}
+              {events.map(event => {
+                const stableId = String(event.hotspot_id || event.event_id)
+                return (
+                  <article className={`fi-event-row${selectedEventId === stableId ? ' selected' : ''}`} key={stableId}
+                    ref={element => { if (element) eventRefs.current.set(stableId, element); else eventRefs.current.delete(stableId) }}>
+                    <button className="fi-event-link" type="button" aria-pressed={selectedEventId === stableId} onClick={() => selectEvent(event)}>
+                      <strong>{event.status} · {event.event_id}</strong>
+                      <span>{event.detection.acq_date || 'Chưa có ngày'}{formatAcquisitionTime(event.detection.acq_time) ? ` · ${formatAcquisitionTime(event.detection.acq_time)}` : ''}</span>
+                      <span>{typeof event.lat === 'number' && typeof event.lon === 'number' ? `${event.lat.toFixed(6)}, ${event.lon.toFixed(6)}` : 'Chưa có dữ liệu tọa độ'}</span>
+                      <span>{formatAdministrativeLocation(event.location)}</span>
+                      {event.villageReference && <span>Điểm tham chiếu gần nhất: {event.villageReference.name}{event.distanceKm != null ? ` · ${event.distanceKm} km` : ''}</span>}
+                      <span className="fi-select-hint">Chọn để xem trên bản đồ</span>
+                    </button>
+                    <Link className="fi-details-link" to={`/events/${encodeURIComponent(event.event_id)}`}>Chi tiết</Link>
+                  </article>
+                )
+              })}
             </div>
           </section>
-          <div className="fi-map-panel"><MapView fill /></div>
+          <div className={`fi-map-panel${mobilePane === 'list' ? ' mobile-hidden' : ''}`}>
+            <MapView fill fireAlerts={alerts} fireAlertsStatus={status} />
+          </div>
         </div>
       </main>
     </div>

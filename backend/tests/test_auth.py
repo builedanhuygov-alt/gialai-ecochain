@@ -71,7 +71,7 @@ def test_register_login_me():
     assert c.post("/api/auth/refresh", json={"refresh_token": refresh3}).status_code == 401
 
     # enforcement: anonymous → 401, viewer → 403 on admin routes
-    assert c.post("/api/kill-switch", json={"global": True}).status_code == 401
+    assert c.delete("/api/assets/some-id").status_code == 401
     r = c.post("/api/auth/login", data={"username": "viewer1", "password": "secret123"})
     vheaders = {"Authorization": f"Bearer {r.json()['access_token']}"}
-    assert c.post("/api/kill-switch", json={"global": True}, headers=vheaders).status_code == 403
+    assert c.delete("/api/assets/some-id", headers=vheaders).status_code == 403
