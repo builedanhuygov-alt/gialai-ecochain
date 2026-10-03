@@ -22,76 +22,14 @@ describe('api client', () => {
     mockFetch(false, { detail: 'boom' }, 500)
     await expect(api.geeStatus()).resolves.toEqual({ connected: false, reason: 'NOT_CONNECTED' })
     await expect(api.alerts()).resolves.toEqual([])
-    await expect(api.incidents()).resolves.toEqual([])
   })
 
-  it('riskProfile falls back to a default profile', async () => {
-    mockFetch(false, {}, 503)
-    const p = await api.riskProfile('x')
-    expect(p.overall_level).toBe('HIGH')
-  })
-
-  it('alertList returns [] when backend is down', async () => {
-    mockFetch(false, {}, 500)
-    await expect(api.alertList()).resolves.toEqual([])
-  })
-
-  it('alertList passes through alerts on success', async () => {
+  it('alerts passes through on success, [] when down', async () => {
     const rows = [{ id: 'a1', level: 'CRITICAL', status: 'ACTIVE', title: 'Cháy' }]
     mockFetch(true, rows)
-    await expect(api.alertList()).resolves.toEqual(rows)
-  })
-
-  it('alertDetail throws on 404 so the page can show "not found"', async () => {
-    mockFetch(false, { detail: 'Alert not found' }, 404)
-    await expect(api.alertDetail('missing')).rejects.toThrow('404')
-  })
-
-  it('ackAlert posts acknowledge and returns new status', async () => {
-    mockFetch(true, { id: 'a1', status: 'ACKNOWLEDGED' })
-    await expect(api.ackAlert('a1')).resolves.toEqual({ id: 'a1', status: 'ACKNOWLEDGED' })
-  })
-
-  it('simWhatIf returns simulation result', async () => {
-    const sim = { simulation_id: 's1', result: { affected: { villages: 12, roads: 3 } } }
-    mockFetch(true, sim)
-    await expect(api.simWhatIf('Flood', { rainfall: 20 })).resolves.toEqual(sim)
-  })
-
-  it('simResponse returns risk for an intervention', async () => {
-    mockFetch(true, { intervention: 'Pre-position team', risk: 'MODERATE' })
-    await expect(api.simResponse('Pre-position team')).resolves.toEqual({ intervention: 'Pre-position team', risk: 'MODERATE' })
-  })
-
-  it('scenarioCreate + scorecard wire WhatIfEngine', async () => {
-    mockFetch(true, { id: 'sc1', name: 'Mưa lớn', type: 'DISASTER', version: 1 })
-    await expect(api.scenarioCreate('Mưa lớn', 'DISASTER', { rainfall_pct: 30 })).resolves.toEqual({ id: 'sc1', name: 'Mưa lớn', type: 'DISASTER', version: 1 })
-    mockFetch(true, { risk: 62, cost: 40, co2: 55, forest: 70, logistics: 60, resilience: 65 })
-    const s = await api.scenarioScorecard('sc1')
-    expect(s.risk).toBe(62)
-  })
-
-  it('scenariosCompare returns server-side comparison', async () => {
-    mockFetch(true, { scenarios: [{ id: 'sc1', risk: 62 }], baseline: 'sc1' })
-    await expect(api.scenariosCompare(['sc1'])).resolves.toEqual({ scenarios: [{ id: 'sc1', risk: 62 }], baseline: 'sc1' })
-  })
-
-  it('simCascade returns temporal + spatial chain', async () => {
-    mockFetch(true, { cascade: ['EXTREME RAIN', 'FLOOD'], temporal: { 'T+0': 'Event' } })
-    const c = await api.simCascade('Flood')
-    expect(c.cascade).toContain('FLOOD')
-  })
-
-  it('nlWhatIf parses a Vietnamese question into params', async () => {
-    mockFetch(true, { scenario_id: 'sc9', params: { rainfall: '+30%' }, requires_confirmation: true })
-    const r = await api.nlWhatIf('Mưa lớn 30% thì sao?')
-    expect(r.params.rainfall).toBe('+30%')
-  })
-
-  it('scenariosList falls back to [] and twinStates to null', async () => {
+    await expect(api.alerts()).resolves.toEqual(rows)
     mockFetch(false, {}, 500)
-    await expect(api.scenariosList()).resolves.toEqual([])
-    await expect(api.twinStates('gia-lai')).resolves.toBeNull()
+    await expect(api.alerts()).resolves.toEqual([])
   })
 
   it('proposals feed passes through, confirm posts vote', async () => {
@@ -112,73 +50,69 @@ describe('api client', () => {
     await expect(api.sendFeedback({ category: 'bug', message: 'Nút X không bấm được' })).resolves.toEqual({ id: 7, status: 'OPEN' })
   })
 
-  it('learning passes through lesson records, [] when down', async () => {
-    mockFetch(true, [{ prediction: 'High Fire Risk', prediction_correct: false }])
-    await expect(api.learning()).resolves.toEqual([{ prediction: 'High Fire Risk', prediction_correct: false }])
-    mockFetch(false, {}, 500)
-    await expect(api.learning()).resolves.toEqual([])
-  })
-
-  it('ops APIs: audit, agents, demo, register', async () => {
-    mockFetch(true, [{ action: 'X', resource_type: 'y' }])
-    await expect(api.auditLog()).resolves.toEqual([{ action: 'X', resource_type: 'y' }])
-    mockFetch(true, [{ agent: 'ForestGuard', enabled: true }])
-    await expect(api.agentsStatus()).resolves.toEqual([{ agent: 'ForestGuard', enabled: true }])
-    mockFetch(true, { agent: 'ForestGuard', status: 'PAUSED' })
-    await expect(api.toggleAgent('ForestGuard', false)).resolves.toEqual({ agent: 'ForestGuard', status: 'PAUSED' })
-    mockFetch(true, { demo: '3-5 min', steps: [] })
-    await expect(api.runDemo()).resolves.toEqual({ demo: '3-5 min', steps: [] })
-    mockFetch(true, { status: 'Demo reset — production untouched' })
-    await expect(api.resetDemo()).resolves.toEqual({ status: 'Demo reset — production untouched' })
-    mockFetch(true, { id: 1, username: 'newbie', role: 'viewer', is_active: true })
-    await expect(api.registerUser('newbie', 'secret123')).resolves.toEqual({ id: 1, username: 'newbie', role: 'viewer', is_active: true })
-  })
   it('uploadProposalPhoto sends multipart and returns hash info', async () => {
     const { uploadProposalPhoto } = await import('./api')
     mockFetch(true, { photo_id: 1, is_duplicate: false, hash: 'abc' })
     const f = new File([new Uint8Array([1,2,3])], 'a.jpg', { type: 'image/jpeg' })
     await expect(uploadProposalPhoto('p1', f, 'u1')).resolves.toEqual({ photo_id: 1, is_duplicate: false, hash: 'abc' })
   })
-  it('missions + plans command board APIs', async () => {
-    mockFetch(true, [{ id: 'm1', goal: 'Bảo vệ rừng', scope: 'Province', status: 'ACTIVE' }])
-    await expect(api.missions()).resolves.toEqual([{ id: 'm1', goal: 'Bảo vệ rừng', scope: 'Province', status: 'ACTIVE' }])
+
+  it('missions list/create fall back honestly', async () => {
+    mockFetch(true, [{ id: 'm1', area: 'Xa A', status: 'NEW' }])
+    await expect(api.missions()).resolves.toEqual([{ id: 'm1', area: 'Xa A', status: 'NEW' }])
     mockFetch(false, {}, 500)
     await expect(api.missions()).resolves.toEqual([])
-    mockFetch(true, { mission_id: 'm2', goal: 'Mới' })
-    await expect(api.createMission({ goal: 'Mới' })).resolves.toEqual({ mission_id: 'm2', goal: 'Mới' })
-    mockFetch(true, { id: 'p1', goal: 'G', tasks: [] })
-    await expect(api.planDetail('p1')).resolves.toEqual({ id: 'p1', goal: 'G', tasks: [] })
+    mockFetch(true, { id: 'm2', status: 'NEW' })
+    await expect(api.createMission({ area: 'Xa A' })).resolves.toEqual({ id: 'm2', status: 'NEW' })
   })
 
-  it('dashboard KPIs come from real endpoints, null when down', async () => {
+  it('mission result + status patch through', async () => {
+    mockFetch(true, { id: 'm1', outcome: 'FALSE_ALARM' })
+    await expect(api.missionResult('m1', { outcome: 'FALSE_ALARM' })).resolves.toEqual({ id: 'm1', outcome: 'FALSE_ALARM' })
+    mockFetch(true, { id: 'm1', status: 'IN_PROGRESS' })
+    await expect(api.missionStatus('m1', 'IN_PROGRESS')).resolves.toEqual({ id: 'm1', status: 'IN_PROGRESS' })
+  })
+
+  it('mission recommendations + decisions through, null when down', async () => {
+    mockFetch(true, { recommendations: [{ tieu_de: 'ĐỀ XUẤT KIỂM TRA THỰC ĐỊA' }], count: 1 })
+    await expect(api.missionRecommendations()).resolves.toEqual({ recommendations: [{ tieu_de: 'ĐỀ XUẤT KIỂM TRA THỰC ĐỊA' }], count: 1 })
+    mockFetch(true, { decision: 'XAC_NHAN', mission_id: 'm9' })
+    await expect(api.missionDecide({ decision: 'XAC_NHAN', area: 'X' })).resolves.toEqual({ decision: 'XAC_NHAN', mission_id: 'm9' })
+    mockFetch(true, { decisions: [], count: 0 })
+    await expect(api.missionDecisions()).resolves.toEqual({ decisions: [], count: 0 })
+    mockFetch(true, { deleted: 'd1' })
+    await expect(api.missionDecisionDelete('d1')).resolves.toEqual({ deleted: 'd1' })
+    mockFetch(false, {}, 500)
+    await expect(api.missionRecommendations()).resolves.toBeNull()
+    await expect(api.missionDecisions()).resolves.toBeNull()
+  })
+
+  it('fire-risk calculate posts inputs and returns a score', async () => {
+    mockFetch(true, { score: 62, level: 'IV', origin: 'LIVE' })
+    const r = await api.fireRiskCalculate({ temperature: 36, humidity: 25 })
+    expect(r.score).toBe(62)
+  })
+
+  it('fire-risk backtest/grid return null when backend is down', async () => {
+    mockFetch(false, {}, 500)
+    await expect(api.fireRiskBacktest()).resolves.toBeNull()
+    await expect(api.fireRiskGrid()).resolves.toBeNull()
+    mockFetch(true, { precision: 0.5, origin: 'DEMO / SIMULATED' })
+    await expect(api.fireRiskBacktest({ threshold: 60 })).resolves.toEqual({ precision: 0.5, origin: 'DEMO / SIMULATED' })
+  })
+
+  it('forest stats come from real endpoints, null when down', async () => {
     const stats = { areas_monitored: 5, pending_signals: 2, origin: 'REAL / VERIFIED' }
     mockFetch(true, stats)
     await expect(api.forestStats()).resolves.toEqual(stats)
-    mockFetch(true, { total_scores: 3, critical_alerts: 1, origin: 'REAL / VERIFIED' })
-    await expect(api.riskOverview()).resolves.toEqual({ total_scores: 3, critical_alerts: 1, origin: 'REAL / VERIFIED' })
     mockFetch(false, {}, 500)
     await expect(api.forestStats()).resolves.toBeNull()
-    await expect(api.riskOverview()).resolves.toBeNull()
-    await expect(api.riskHistory('Gia Lai')).resolves.toBeNull()
   })
 
   it('API_BASE never falls back to localhost', async () => {
     const { API_BASE } = await import('./api')
     expect(API_BASE).not.toContain('localhost')
     expect(API_BASE.startsWith('https://')).toBe(true)
-  })
-
-  it('approvals center: list, approve, reject, governance counts', async () => {    mockFetch(true, [{ id: 'a1', plan_id: 'p1', action: 'CREATE_OFFICIAL_ALERT', status: 'PENDING' }])
-    await expect(api.approvals()).resolves.toEqual([{ id: 'a1', plan_id: 'p1', action: 'CREATE_OFFICIAL_ALERT', status: 'PENDING' }])
-    mockFetch(true, { id: 'a1', status: 'APPROVED' })
-    await expect(api.approveApproval('a1')).resolves.toEqual({ id: 'a1', status: 'APPROVED' })
-    mockFetch(true, { id: 'a1', status: 'REJECTED' })
-    await expect(api.rejectApproval('a1')).resolves.toEqual({ id: 'a1', status: 'REJECTED' })
-    mockFetch(true, { ai_decisions: 3, human_decisions: 1, pending_approvals: 2 })
-    await expect(api.governance()).resolves.toEqual({ ai_decisions: 3, human_decisions: 1, pending_approvals: 2 })
-    mockFetch(false, {}, 500)
-    await expect(api.approvals()).resolves.toEqual([])
-    await expect(api.governance()).resolves.toBeNull()
   })
 
   it('AI endpoints connect: health, fire-risk, what-if, pccc', async () => {
@@ -208,5 +142,11 @@ describe('api client', () => {
   it('responsePlan posts fire point and returns a plan', async () => {
     mockFetch(true, { risk_summary: { level: 'IV' }, tactical_recommendations: ['x'] })
     await expect(api.responsePlan({ lat: 13.9, lon: 108.3 })).resolves.toEqual({ risk_summary: { level: 'IV' }, tactical_recommendations: ['x'] })
+  })
+
+  it('firesim posts scenario sliders and returns ellipses + impact', async () => {
+    const sim = { ros: { ros_kmh: 1.2 }, spread: { steps: [{ hour: 1.0 }] }, impact: { area_affected_ha: 10 } }
+    mockFetch(true, sim)
+    await expect(api.firesim({ lon: 109.02, lat: 14.06, wind_speed_kmh: 20 })).resolves.toEqual(sim)
   })
 })

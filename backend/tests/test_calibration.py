@@ -3,8 +3,7 @@ import os
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["DEMO_MODE"] = "true"
 from app.services.fire_risk_engine import FireRiskEngine, score_to_level
-from app.services.agents.carbon_guard import carbon_guard
-from app.services.agents.disaster_guard import disaster_guard
+from app.services.fire_risk import compute_score, FireRiskInput
 from app.services.earth_engine.change_detection import risk_from_change
 
 eng = FireRiskEngine()
@@ -39,20 +38,34 @@ def test_thresholds_unified_20_40_60_80():
     assert score_to_level(81).value == "V"
 
 
-def test_carbon_flags_estimated_inputs():
-    r = carbon_guard.analyze("unit-x")
-    assert set(r["estimated_inputs"]) == {"forest_area_ha", "ndvi", "ndvi_change"}
-    assert r["confidence"] <= 65
-    r2 = carbon_guard.analyze("unit-x", forest_area_ha=1200, ndvi=0.65, ndvi_change=-0.05)
-    assert r2["estimated_inputs"] == []
-    assert r2["confidence"] > 65
+def test_compute_score_flags_estimated_inputs():
+    r = compute_score(FireRiskInput(), origin="DEMO / SIMULATED")
+    assert r.score is None and r.level is None
+    assert r.data_completeness == 0.0
+    assert set(r.missing) == {"fuel_dryness", "weather_danger", "firms_proximity",
+                              "wind", "rainfall_deficit", "terrain", "historical_community"}
+    assert r.origin == "DEMO / SIMULATED"
+    r2 = compute_score(FireRiskInput(
+        ndvi=0.3, ndmi=0.2, temperature=36, humidity=25, rainfall=0,
+        wind_speed=20, slope=25, hotspot_count=1, firms_observed=True,
+        community_count=3, community_observed=True,
+        historical_fire=True, historical_observed=True), origin="LIVE")
+    assert r2.estimated_inputs == []
+    assert r2.data_completeness == 1.0
+    assert r2.score is not None and r2.level in ("IV", "V")
+    assert r2.origin == "LIVE"
 
 
-def test_disaster_reports_estimated_inputs():
-    r = disaster_guard.analyze("unit-x", "FLOOD", None, {})
-    assert "rainfall" in r["estimated_inputs"] and "elevation" in r["estimated_inputs"]
-    r2 = disaster_guard.analyze("unit-x", "FLOOD", None, {"rainfall": 120, "elevation": 60})
-    assert r2["estimated_inputs"] == []
+def test_compute_score_partial_renormalizes_weights():
+    full = compute_score(FireRiskInput(
+        ndvi=0.3, ndmi=0.2, temperature=36, humidity=25, rainfall=0,
+        wind_speed=20, slope=25, hotspot_count=1, firms_observed=True,
+        community_count=3, community_observed=True,
+        historical_fire=True, historical_observed=True))
+    part = compute_score(FireRiskInput(temperature=36, humidity=25))
+    assert abs(sum(part.weights_used.values()) - 1.0) < 1e-9
+    assert 0.0 < part.data_completeness < 1.0
+    assert full.score is not None and part.score is not None
 
 
 # ── Real Gia Lai grounding ──────────────────────────────────────────

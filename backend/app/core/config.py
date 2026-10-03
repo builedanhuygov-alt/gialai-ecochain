@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     # LLM AI Agent — Gemini / Groq (PCCC scenario generation)
     gemini_api_key: Optional[str] = Field(default=None, alias="GEMINI_API_KEY")
     groq_api_key: Optional[str] = Field(default=None, alias="GROQ_API_KEY")
+    deepseek_api_key: Optional[str] = Field(default=None, alias="DEEPSEEK_API_KEY")
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     cdse_client_id: Optional[str] = Field(default=None, alias="CDSE_CLIENT_ID")
     cdse_client_secret: Optional[str] = Field(default=None, alias="CDSE_CLIENT_SECRET")

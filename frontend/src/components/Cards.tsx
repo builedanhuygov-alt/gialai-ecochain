@@ -1,7 +1,8 @@
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { Link } from 'react-router-dom'
 
-export function MetricCard({ label, value, unit, trend, dir, icon }: any) {
+export function MetricCard({ label, value, unit, trend, dir, icon, source }: any) {
   return (
     <motion.div className="metric" whileHover={{ y:-2, boxShadow:'0 8px 24px rgba(15,30,26,0.10)' }} transition={{ duration:0.18, ease:[0.16,1,0.3,1] as any }} style={{ willChange:'transform' }}>
       <div className="metric-top">
@@ -9,8 +10,8 @@ export function MetricCard({ label, value, unit, trend, dir, icon }: any) {
         <div className="metric-icon">{icon}</div>
       </div>
       <div className="metric-value">{value}<span className="unit">{unit}</span></div>
-      <div className={`trend ${dir}`}>{dir==='up'?<TrendingUp size={14}/>:dir==='down'?<TrendingDown size={14}/>:<Minus size={14}/>} {trend}<span className="muted"> vs previous month</span></div>
-      <div className="source"><span className="dot live"/> VERIFIED · 2h ago</div>
+      <div className={`trend ${dir}`}>{dir==='up'?<TrendingUp size={14}/>:dir==='down'?<TrendingDown size={14}/>:<Minus size={14}/>} {trend || 'Chưa có xu hướng'}</div>
+      <div className="source">{source || 'Nguồn chưa xác định · thời điểm cập nhật chưa có'}</div>
       <style>{`
         .metric{ background:#fff; border:1px solid #E2E8E5; border-radius:16px; padding:16px; box-shadow:0 1px 2px rgba(15,30,26,0.06); transition: box-shadow var(--motion-normal) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard); }
         .metric:hover{ border-color:#CBD5D1; }
@@ -32,18 +33,14 @@ export function MetricCard({ label, value, unit, trend, dir, icon }: any) {
 export function AIInsightCard() {
   return (
     <div className="ai-card">
-      <div className="ai-head">GỢI Ý AI <span className="conf">Tin cậy 89%</span></div>
-      <div className="ai-title">Nguy cơ cháy rừng tăng trong khu vực đã chọn.</div>
+      <div className="ai-head">ĐÁNH GIÁ AI <span className="conf">CHƯA CÓ KẾT QUẢ</span></div>
+      <div className="ai-title">Chưa có phân tích AI gắn với dữ liệu hiện hành.</div>
       <div className="ai-why">
-        <div>Nguyên nhân chính:</div>
-        <ul>
-          <li>khô hạn thực bì</li><li>xu hướng nhiệt độ</li><li>bất thường vệ tinh</li><li>tiền sử sự cố</li>
-        </ul>
+        Chưa đủ bằng chứng có nguồn và thời điểm để đưa ra kết luận hoặc khuyến nghị.
       </div>
-      <div className="ai-meta">Nguồn: Sentinel-2 · Thời tiết · Báo cáo đã xác minh · 2 giờ trước</div>
       <div className="ai-actions">
-        <button className="btn primary">Xem bằng chứng</button>
-        <button className="btn ghost">Mô phỏng kịch bản</button>
+        <button className="btn primary" onClick={()=> window.dispatchEvent(new CustomEvent('ecochain-open-ai', { detail:{} }))}>Mở trợ lý AI</button>
+        <Link className="btn ghost" to="/firesim">Mở mô phỏng</Link>
       </div>
       <style>{`
         .ai-card{ background:#fff; border:1px solid #E2E8E5; border-radius:16px; padding:16px; }

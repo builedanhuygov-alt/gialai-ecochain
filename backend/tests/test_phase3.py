@@ -1,12 +1,16 @@
-"""Phase 3 acceptance — Sec61."""
-import os, json
+"""Fire early-warning acceptance — kept scope only.
+
+Covers: fire risk endpoints (single formula), unified alerts, community
+fire reports, audit trail. Deleted-scope endpoints (disaster multi-hazard,
+carbon, risk/*, rankings, achievements) are gone and must stay gone.
+"""
+import os
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["DEMO_MODE"] = "true"
 
 from fastapi.testclient import TestClient
 from app.database import Base, engine, init_db
 from app.main import create_app
-from app.core.enums import ProposalStatus
 
 def setup():
     Base.metadata.drop_all(bind=engine)
@@ -19,111 +23,40 @@ def setup():
 
 def test_phase3():
     c=setup()
-    # areas
-    areas=c.get("/api/forest/areas").json()
-    unit=[a for a in areas if a["level"]=="COMMUNE"][0]["id"]
 
-    # DisasterGuard fire/flood/landslide/drought/heat
-    for rt in ["FIRE","FLOOD","LANDSLIDE","DROUGHT","HEAT"]:
-        r=c.post("/api/disaster/analyze", json={"administrative_unit_id": unit, "risk_type": rt, "inputs": {"temperature": 35, "rainfall": 10, "slope": 20}})
-        assert r.status_code==200, r.text
-        j=r.json()
-        assert 0<=j["score"]<=100 and 0<=j["confidence"]<=100
-        assert j["level"] in ["LOW","MODERATE","ELEVATED","HIGH","CRITICAL"]
-        assert "explanation" in j and j["model_version"]=="v1.0"
+    # Fire risk via the single formula (engine delegates to compute_score)
+    r=c.get("/api/fire/brief")
+    assert r.status_code in (200, 422), r.text
 
-    # data fusion ALL
-    r=c.post("/api/disaster/analyze", json={"administrative_unit_id": unit, "risk_type":"ALL","inputs":{"temperature":36,"rainfall":5},"community_verified": True})
-    assert r.status_code==200
-    assert "fused" in r.json()
+    # Unified alerts — honest empty list when nothing active
+    r=c.get("/api/alerts-unified")
+    assert r.status_code==200 and isinstance(r.json(), list)
 
-    # CarbonGuard foundation
-    r=c.post("/api/carbon/analyze", json={"administrative_unit_id": unit, "forest_area_ha": 1200, "ndvi": 0.65})
-    assert r.status_code==200
-    assert "estimated_carbon_stock_t" in r.json()
-    assert "not credit certification" in r.json().get("disclaimer","").lower() or "Estimated carbon" in r.json().get("explanation","")
-    # carbon time series via direct guard
-    from app.services.agents.carbon_guard import carbon_guard
-    ts=carbon_guard.time_series(unit, ["2026-01","2026-03","2026-06"])
-    assert len(ts)==3
-
-    # RiskEngine overall
-    # need risk signals via disaster + forest
-    c.post("/api/disaster/analyze", json={"administrative_unit_id": unit, "risk_type":"FIRE"})
-    c.post("/api/disaster/analyze", json={"administrative_unit_id": unit, "risk_type":"FLOOD"})
-    from app.services.risk_engine import risk_engine
-    from app.database import SessionLocal
-    db=SessionLocal()
-    signals={"fire":{"score":75,"confidence":80,"explanation":"hot"},"flood":{"score":30,"confidence":60,"explanation":"low"}}
-    rs=risk_engine.compute(db, unit, signals)
-    assert 0<=rs.overall_score<=100
-    assert rs.confidence != rs.overall_score or True
-    # history + early warning
-    h=risk_engine.history_trend(db, unit, "FIRE")
-    assert "trend" in h
-    ew=risk_engine.early_warning(db, unit)
-    # may be None, ok
-
-    # AlertEngine + multi-agent cross check — force HIGH to ensure alert
-    r=c.post("/api/disaster/analyze", json={"administrative_unit_id": unit, "risk_type":"FIRE","inputs":{"temperature":38,"rainfall":0,"ndvi_change":-0.15,"historical_fire": True}})
-    # high risk creates alert
-    alerts=c.get("/api/alerts").json()
-    assert len(alerts)>=1
-    aid=alerts[0]["id"]
-    r=c.get(f"/api/alerts/{aid}")
-    assert r.status_code==200
-    assert "incident" in r.json()
-    # human override — requires login; actor identity comes from JWT, not body
-    from tests.helpers import auth_headers
-    h = auth_headers(c)
-    r=c.post(f"/api/alerts/{aid}/acknowledge", json={})
-    assert r.status_code==401
-    r=c.post(f"/api/alerts/{aid}/acknowledge", json={}, headers=h)
-    assert r.status_code==200 and r.json()["status"]=="ACKNOWLEDGED"
-    r=c.post(f"/api/alerts/{aid}/verify", json={"action":"ESCALATE","reason":"test"}, headers=h)
-    assert r.status_code==200
-    r=c.post(f"/api/alerts/{aid}/resolve", json={}, headers=h)
-    assert r.json()["status"]=="RESOLVED"
-
-    # Risk overview / areas / profile
-    assert c.get("/api/risk/overview").status_code==200
-    assert c.get("/api/risk/areas").status_code==200
-    r=c.get(f"/api/risk/{unit}")
-    assert r.status_code==200 and "radar" in r.json()
-    assert c.get(f"/api/risk/history/{unit}").status_code==200
-
-    # heatmap / search / profiles
-    assert c.get("/api/heatmap").status_code==200
-    assert c.get("/api/search?q=Gia").status_code==200
-    assert c.get(f"/api/profiles/{unit}").status_code==200
-
-    # Ranking 5 types
-    for t in ["SAFETY","RESPONSE","FOREST","COMMUNITY","PREPAREDNESS"]:
-        r=c.get(f"/api/rankings/{t}")
-        assert r.status_code==200 and len(r.json())>=1
-    assert c.get("/api/rankings").status_code==200
-
-    # Recognition evidence-based
-    r=c.post("/api/achievements", json={"name":"Forest Guardian Commune","administrative_unit_id": unit, "evidence": {"reports": 10}})
-    assert r.status_code==200
-    # without evidence should fail
-    r=c.post("/api/achievements", json={"name":"Forest Guardian Commune","administrative_unit_id": unit})
+    # Community fire-report flow (validation, no fake data)
+    r=c.post("/api/citizen/fire-report", json={})
     assert r.status_code==400
-    assert len(c.get("/api/achievements").json())>=1
+    r=c.post("/api/citizen/fire-report", json={
+        "description": "smoke seen near the ridge",
+        "latitude": 13.9, "longitude": 108.3, "reporter": "tester"})
+    assert r.status_code==200, r.text
+    body=r.json()
+    assert body["location"] == {"latitude": 13.9, "longitude": 108.3}
+    assert body["status"] in ("SUBMITTED", "COMMUNITY_REPORT_RECEIVED")
+    rep_id=body["report_id"]
+    r=c.get("/api/citizen/fire-reports")
+    assert r.status_code==200 and r.json()["count"]>=1
+    assert c.get(f"/api/citizen/fire-reports/{rep_id}").status_code==200
+    assert c.get("/api/citizen/fire-reports/does-not-exist").status_code==404
 
-    # disaster critical table
-    assert c.get("/api/disaster").status_code==200
-    # carbon list
-    assert c.get("/api/carbon").status_code==200
-    # data quality present
-    r=c.post("/api/disaster/analyze", json={"administrative_unit_id": unit, "risk_type":"FIRE"})
-    assert r.json().get("data_quality") or True  # guard returns source
+    # Audit trail readable
+    assert c.get("/api/forest/audit").status_code==200
 
-    # confidence separate from score already checked
-    # model versioning
-    assert r.json().get("model_version")=="v1.0"
-
-    # audit log
-    assert len(c.get("/api/forest/audit").json())>=1
+    # Deleted scope really gone
+    for dead in ["/api/risk/overview", "/api/disaster/analyze",
+                 "/api/carbon/analyze", "/api/predictive/forecast",
+                 "/api/digital-twin", "/api/what-if",
+                 "/api/eudr/continuous-monitor", "/api/logistics/routes"]:
+        r=c.get(dead) if dead != "/api/disaster/analyze" else c.post(dead, json={})
+        assert r.status_code==404, dead
 
     print("Phase3 checklist passed")

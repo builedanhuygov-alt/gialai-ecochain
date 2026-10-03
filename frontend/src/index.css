@@ -1,3 +1,4 @@
+@import "./motion/tokens.css";
 :root{ --bg:#F8FAF9; --surface:#fff; --border:#E2E8E5; --text:#0F1E1A; --muted:#64748B; --primary:#0F766E; }
 *{ box-sizing:border-box; }
 html,body,#root{ height:100%; }
@@ -5,7 +6,19 @@ body{ margin:0; font-family: Inter, system-ui, -apple-system, sans-serif; backgr
 a{ color:inherit; }
 h1,h2,h3{ margin:0; }
 button{ cursor:pointer; transition: background var(--motion-fast,160ms) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-out), box-shadow var(--motion-normal) var(--ease-standard); }
-button:active{ transform: scale(0.98); }
+button:active{ transform: scale(0.97); }
+/* Apple-style motion utilities (transform/opacity only, GPU-cheap) */
+@keyframes rise-in{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:none; } }
+.rise-in{ animation:rise-in 280ms cubic-bezier(0.32,0.72,0,1); }
+@keyframes pop-in{ from{ opacity:0; transform:scale(0.95); } to{ opacity:1; transform:scale(1); } }
+.pop-in{ animation:pop-in 220ms cubic-bezier(0.32,0.72,0,1); }
+@keyframes badge-pop{ 0%{ opacity:0; transform:scale(0.6); } 60%{ opacity:1; transform:scale(1.08); } 100%{ opacity:1; transform:scale(1); } }
+.badge-pop{ animation:badge-pop 220ms cubic-bezier(0.32,0.72,0,1); transform-origin:center; }
+.lift{ transition:transform 200ms cubic-bezier(0.4,0,0.2,1), box-shadow 200ms cubic-bezier(0.4,0,0.2,1); }
+.lift:hover{ transform:translateY(-2px); box-shadow:var(--elev-2); }
+.chip-x{ transition:background-color 200ms cubic-bezier(0.4,0,0.2,1), color 200ms cubic-bezier(0.4,0,0.2,1), border-color 200ms cubic-bezier(0.4,0,0.2,1); }
+.cta-lift{ transition:transform 200ms cubic-bezier(0.32,0.72,0,1), box-shadow 200ms cubic-bezier(0.32,0.72,0,1), background-color 200ms cubic-bezier(0.4,0,0.2,1); }
+.cta-lift:hover{ transform:translateY(-1px); box-shadow:0 6px 20px rgba(11,20,18,0.25); }
 button:focus-visible{ outline:2px solid #0F766E; outline-offset:2px; }
 .skeleton{ background: linear-gradient(90deg, #E2E8E5 25%, #F1F5F3 37%, #E2E8E5 63%); background-size:400% 100%; animation: shimmer 1.4s var(--ease-standard) infinite; }
 @keyframes shimmer{ 0%{ background-position:100% 0 } 100%{ background-position:-100% 0 } }

@@ -1,0 +1,45 @@
+name,asset_type,source,gps_status,latitude,longitude,contact_status,photos_1km,viewer_tier,action
+Chi cục Kiểm lâm tỉnh Gia Lai,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Chi cục Kiểm lâm tỉnh Gia Lai — Phòng Xử lý vi phạm về lâm nghiệp,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Đội Kiểm lâm cơ động và PCCCR số 1,team,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Đội Kiểm lâm cơ động và PCCCR số 2,team,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Đội Kiểm lâm cơ động và PCCCR số 3,team,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực An Khê,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực An Lão,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực An Nhơn,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Ayun Pa,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Chư Păh,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Chư Prông,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Chư Sê,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Đak Đoa,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Đức Cơ,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Hoài Ân,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Hoài Nhơn,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Ia Grai,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Ia Pa,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Kbang,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Kông Chro,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Mang Yang,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Phù Cát,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Phù Mỹ,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Phú Túc,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Tây Sơn,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Tuy Phước - Quy Nhơn,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Vân Canh,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Hạt Kiểm lâm khu vực Vĩnh Thạnh,station,registry-csv,MISSING,,,PARTIAL,0,none,FIELD_VERIFICATION_REQUIRED: survey GPS
+Ayun Hạ,reservoir,DB:water_assets,VERIFIED,13.565,108.243,PARTIAL,0,satellite,none
+Ia Mơr,reservoir,DB:water_assets,VERIFIED,13.25,107.65,PARTIAL,0,satellite,none
+Biển Hồ (T'Nưng),lake,DB:water_assets,VERIFIED,14.053,108.0,PARTIAL,0,satellite,none
+Ia Ring (Vòng Ia),irrigation,DB:water_assets,VERIFIED,13.722,108.106,PARTIAL,0,satellite,none
+An Khê,hydro,DB:water_assets,VERIFIED,13.985,108.665,PARTIAL,0,satellite,none
+Ka Nak,hydro,DB:water_assets,VERIFIED,14.238,108.563,PARTIAL,0,satellite,none
+Plei Krông,hydro,DB:water_assets,VERIFIED,14.408,107.868,PARTIAL,0,satellite,none
+Ialy,hydro,DB:water_assets,VERIFIED,14.225,107.828,PARTIAL,0,satellite,none
+Định Bình,reservoir,DB:water_assets,VERIFIED,14.032,108.79,PARTIAL,0,satellite,none
+Hội Sơn,reservoir,DB:water_assets,VERIFIED,14.062,109.02,PARTIAL,0,satellite,none
+Thuận Ninh,reservoir,DB:water_assets,VERIFIED,13.91,108.835,PARTIAL,0,satellite,none
+Vạn Hội,reservoir,DB:water_assets,VERIFIED,14.288,108.972,PARTIAL,0,satellite,none
+Đồng Mít,reservoir,DB:water_assets,VERIFIED,14.398,108.875,PARTIAL,0,satellite,none
+Núi Một,reservoir,DB:water_assets,VERIFIED,13.84,108.965,PARTIAL,0,satellite,none
+Hồ Bầu Cạn,lake,DB:water_assets,VERIFIED,13.801,107.925,PARTIAL,0,satellite,verify capacity
+Hồ Ia Hrung,lake,DB:water_assets,VERIFIED,13.992,107.881,PARTIAL,0,satellite,verify capacity

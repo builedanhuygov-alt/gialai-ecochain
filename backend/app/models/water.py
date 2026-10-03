@@ -38,4 +38,14 @@ class WaterAsset(Base):
     has_streetview: Mapped[bool] = mapped_column(Boolean, default=False)
     # extension (not in the original spec): resolved commune code for joins
     commune_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Module D — contact directory. organization = manager (cột sẵn có).
+    # Tất cả NULL tới khi kiểm lâm nhập — KHÔNG điền giả.
+    contact_person: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    verification_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Module 360 (M1/M5): viewer metadata — NULL until real media exists.
+    preview_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    capture_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    capture_source: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

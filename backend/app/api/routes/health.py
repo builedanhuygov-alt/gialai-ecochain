@@ -6,6 +6,15 @@ from app.services.scheduler.scheduler import scheduler_service
 
 router = APIRouter()
 
+# Sec-keepalive: endpoint siêu nhẹ cho cron/UptimeRobot ping chống cold-start
+# (serverless Vercel sẽ sleep khi idle — ping định kỳ giữ ấm instance).
+# Cố ý KHÔNG chạm DB/GEE/LLM để ping rẻ + nhanh (<50ms warm).
+@router.get("/ping")
+def ping():
+    import time
+    return {"status": "ok", "ts": int(time.time())}
+
+
 @router.get("/health")
 def health():
     s = get_settings()

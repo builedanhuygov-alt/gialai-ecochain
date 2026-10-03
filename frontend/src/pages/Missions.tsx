@@ -1,204 +1,372 @@
-import { useEffect, useState } from 'react'
-import { useLocation, Link } from 'react-router-dom'
-import { api } from '../services/api'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { api, API_BASE } from '../services/api'
 
-type Mission = { id: string; goal: string; scope?: string; status?: string }
-type Plan = { id: string; goal: string; approval_status?: string; execution_status?: string }
-type Task = { id: string; name: string; agent?: string; status?: string }
+type Mission = {
+  id: string; area: string; cell_id?: string | null; zone?: string | null
+  latitude?: number | null; longitude?: number | null
+  risk_at_creation?: number | null; priority?: string; inspection_priority?: number | null
+  decision?: string | null; decided_by?: string | null
+  due_at?: string | null; status?: string; assignee?: string | null
+  created_by?: string | null; checklist_steps?: string[]; checklist_done?: number[]
+  created_at?: string | null
+  result?: { outcome: string; note?: string | null; match_result?: string | null;
+    vegetation?: string | null; smoke_heat?: string | null; human_activity?: string | null;
+    water_source?: string | null; access?: string | null } | null
+}
 
-const statusColor = (s?: string) =>
-  s === 'COMPLETED' || s === 'APPROVED' || s === 'RUNNING' ? '#0F766E'
-  : s === 'FAILED' || s === 'REJECTED' ? '#DC2626' : '#F59E0B'
+type DeXuat = {
+  tieu_de: string; area: string; zone?: string; latitude: number; longitude: number
+  risk: number | null; priority: number | null; muc: string; han: string; han_text: string
+  ly_do: string[]; hotspot?: { khoang_cach_km: number; do_tin_cay?: string } | null
+  top_yeu_to: string[]; viec_theo_yeu_to: { viec: string; ly_do: string }[]
+  checklist: string[]; origin: string
+}
+
+const token = ()=>{ try{ return sessionStorage.getItem('ecogl_admin_token') }catch{ return null } }
+const authHeaders = (): Record<string, string> => token() ? { Authorization: `Bearer ${token()}` } : {}
+
+async function authed(path: string, init?: RequestInit){
+  const r = await fetch(`${API_BASE}${path}`, {
+    ...init, headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(init?.headers || {}) },
+  })
+  const j = await r.json().catch(()=> ({}))
+  if(!r.ok) throw new Error(j.detail || `HTTP ${r.status}`)
+  return j
+}
+
+const btn = (bg: string, color = '#fff'): any => ({ background: bg, color, border: bg === '#fff' ? '1px solid #E2E8E5' : 0,
+  borderRadius: 999, padding: '12px 18px', fontSize: 14, fontWeight: 700, minHeight: 44, cursor: 'pointer' })
 
 export default function Missions(){
-  const [tab, setTab] = useState<'missions'|'plans'|'field'>('missions')
   const [missions, setMissions] = useState<Mission[]>([])
-  const [plans, setPlans] = useState<Plan[]>([])
+  const [dexuats, setDexuats] = useState<DeXuat[]>([])
+  const [nhatKy, setNhatKy] = useState<any[]>([])
+  const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [goal, setGoal] = useState('')
-  const [planGoal, setPlanGoal] = useState('')
-  const [openPlan, setOpenPlan] = useState<string | null>(null)
-  const [detail, setDetail] = useState<any>(null)
-  const [sim, setSim] = useState<any>(null)
-  const [rec, setRec] = useState<any>(null)
-  const location = useLocation() as any
-  const incomingArea: string = location.state?.area || ''
+  const [filter, setFilter] = useState('ALL')
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [detail, setDetail] = useState<Mission | null>(null)
+  const [msg, setMsg] = useState('')
+  const [area, setArea] = useState('')
+  const [lat, setLat] = useState('')
+  const [lon, setLon] = useState('')
+  const [risk, setRisk] = useState('')
+  const [priority, setPriority] = useState('NORMAL')
+  const [outcome, setOutcome] = useState('FALSE_ALARM')
+  const [note, setNote] = useState('')
+  const [rlat, setRlat] = useState('')
+  const [rlon, setRlon] = useState('')
+  const [photoHash, setPhotoHash] = useState('')
+  const [thucVat, setThucVat] = useState('')
+  const [khoiNhiet, setKhoiNhiet] = useState('')
+  const [hoatDong, setHoatDong] = useState('')
+  const [nguonNuoc, setNguonNuoc] = useState('')
+  const [tiepCan, setTiepCan] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
-  // Prefill từ khu vực user chọn ở bản đồ/Dashboard — không mất ngữ cảnh.
-  useEffect(()=>{
-    if(incomingArea && !goal) setGoal(`Bảo vệ rừng ${incomingArea} mùa khô`)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[incomingArea])
-
-  // field checklist (per-device, honest local-only)
-  const [steps, setSteps] = useState<boolean[]>(()=>{
-    try{ return JSON.parse(localStorage.getItem('ecogl_mission_042') || '{"steps":[false,false,false,false]}').steps }catch{ return [false,false,false,false] }
-  })
-  const [started, setStarted] = useState(()=> localStorage.getItem('ecogl_mission_started') === '1')
-  const [log, setLog] = useState<string[]>(()=>{
-    try{ return JSON.parse(localStorage.getItem('ecogl_mission_log') || '[]') }catch{ return [] }
-  })
-  useEffect(()=>{ try{
-    localStorage.setItem('ecogl_mission_042', JSON.stringify({ steps }))
-    localStorage.setItem('ecogl_mission_started', started ? '1' : '0')
-    localStorage.setItem('ecogl_mission_log', JSON.stringify(log.slice(-10)))
-  }catch{} },[steps, started, log])
-  const pushLog = (m: string)=> setLog(l => [...l.slice(-9), `${new Date().toLocaleTimeString('vi-VN')} ${m}`])
-
-  const refresh = async ()=>{
+  const load = async ()=>{
     setLoading(true)
     try{
-      const [m, p] = await Promise.all([api.missions(), api.plans()])
-      setMissions(Array.isArray(m) ? m : [])
-      setPlans(Array.isArray(p) ? p : [])
-      setError('')
-    }catch(e:any){ setError(String(e.message || e)) }
-    finally{ setLoading(false) }
+      const d: any = await api.missions()
+      setMissions(Array.isArray(d) ? d : (d?.missions || []))
+      const rec: any = await api.missionRecommendations()
+      setDexuats(rec?.recommendations || [])
+      const log: any = await api.missionDecisions()
+      setNhatKy(log?.decisions || [])
+      const s = await fetch(`${API_BASE}/api/missions-stats/summary`).then(r=> r.ok ? r.json() : null).catch(()=> null)
+      setStats(s)
+    }catch{ setMissions([]) }
+    setLoading(false)
   }
-  useEffect(()=>{ refresh() },[])
-
-  const create = async ()=>{
-    if(!goal.trim()) return
-    try{
-      await api.createMission({ goal: goal.trim(), scope: incomingArea || 'Province' })
-      setGoal('')
-      refresh()
-    }catch(e:any){ setError(String(e.message || e).slice(0, 200)) }
-  }
-
-  const createP = async ()=>{
-    if(!planGoal.trim()) return
-    try{
-      await api.createPlan(planGoal.trim())
-      setPlanGoal('')
-      refresh()
-    }catch(e:any){ setError(String(e.message || e).slice(0, 200)) }
-  }
+  useEffect(()=>{ load() },[])
 
   const open = async (id: string)=>{
-    if(openPlan === id){ setOpenPlan(null); setDetail(null); setSim(null); setRec(null); return }
-    setOpenPlan(id); setDetail(null); setSim(null); setRec(null)
-    try{ setDetail(await api.planDetail(id)) }catch(e:any){ setError(String(e.message || e).slice(0, 200)) }
+    if(openId === id){ setOpenId(null); setDetail(null); return }
+    setOpenId(id); setMsg('')
+    try{ setDetail(await authed(`/api/missions/${id}`)) }catch(e: any){ setMsg(String(e.message || e)) }
   }
 
-  const act = async (kind: 'delegate'|'simulate'|'recommend', id: string)=>{
+  const quyetDinh = async (dx: DeXuat, decision: string)=>{
+    setMsg('')
     try{
-      const r: any = kind === 'delegate' ? await api.delegatePlan(id)
-        : kind === 'simulate' ? await api.simulatePlan(id) : await api.recommendPlan(id)
-      if(kind === 'simulate') setSim(r)
-      if(kind === 'recommend') setRec(r)
-      if(kind === 'delegate'){ setDetail(await api.planDetail(id)); refresh() }
-    }catch(e:any){ setError(String(e.message || e).slice(0, 200)) }
+      const j = await authed('/api/missions/recommendations/decide', { method: 'POST',
+        body: JSON.stringify({ decision, area: dx.area, zone: dx.zone, latitude: dx.latitude,
+          longitude: dx.longitude, risk: dx.risk, priority: dx.priority, muc: dx.muc }) })
+      setMsg(decision === 'XAC_NHAN' ? `Đã tạo nhiệm vụ ${j.mission_id}.` : `Đã ghi quyết định ${decision}.`)
+      load()
+    }catch(e: any){ setMsg(`Không ghi được (cần kiểm lâm/admin): ${String(e.message || e)}`) }
   }
 
-  const doneCount = (ts: Task[])=> ts.filter(t => t.status === 'COMPLETED' || t.status === 'DONE').length
-  const activeMissions = missions.filter(m => m.status !== 'COMPLETED').length
+  const xoaNhatKy = async (id: string)=>{
+    setMsg('')
+    try{
+      await authed(`/api/missions/decisions/${id}`, { method: 'DELETE' })
+      setMsg('Đã xóa mục nhật ký.')
+      load()
+    }catch(e: any){ setMsg(`Không xóa được (cần admin): ${String(e.message || e)}`) }
+  }
 
+  const create = async ()=>{
+    setMsg('')
+    if(!area.trim()){ setMsg('Nhập khu vực mục tiêu.'); return }
+    try{
+      await authed('/api/missions', { method: 'POST', body: JSON.stringify({
+        area: area.trim(),
+        latitude: lat === '' ? null : Number(lat),
+        longitude: lon === '' ? null : Number(lon),
+        risk_at_creation: risk === '' ? null : Number(risk),
+        priority,
+      })})
+      setArea(''); setLat(''); setLon(''); setRisk('')
+      load()
+    }catch(e: any){ setMsg(`Không tạo được (cần admin/kiểm lâm): ${String(e.message || e)}`) }
+  }
+
+  const setStatus = async (id: string, status: string)=>{
+    setMsg('')
+    try{
+      const d = await authed(`/api/missions/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
+      setDetail(d)
+      load()
+    }catch(e: any){ setMsg(String(e.message || e)) }
+  }
+
+  const tick = async (id: string, idx: number, done: number[])=>{
+    const next = done.includes(idx) ? done.filter(i=> i !== idx) : [...done, idx]
+    try{
+      const d = await authed(`/api/missions/${id}/checklist`, { method: 'PATCH', body: JSON.stringify({ done: next }) })
+      setDetail((cur: any)=> cur ? { ...cur, checklist_done: d.checklist_done } : cur)
+    }catch(e: any){ setMsg(String(e.message || e)) }
+  }
+
+  const uploadPhoto = async (f: File)=>{
+    setUploading(true); setMsg('')
+    try{
+      const fd = new FormData()
+      fd.append('file', f)
+      fd.append('source', 'field')
+      fd.append('uploader_id', 'field-web')
+      if(detail?.latitude != null) fd.append('lat', String(detail.latitude))
+      if(detail?.longitude != null) fd.append('lng', String(detail.longitude))
+      const r = await fetch(`${API_BASE}/api/evidence`, { method: 'POST', body: fd })
+      const j = await r.json().catch(()=> ({}))
+      if(!r.ok) throw new Error(j.detail || `HTTP ${r.status}`)
+      setPhotoHash(j.file_hash || '')
+      setMsg(j.is_duplicate ? 'Ảnh trùng với ảnh đã có — vẫn dùng được nhưng đã gắn cờ.' : 'Đã tải ảnh, lấy hash để gửi kết quả.')
+    }catch(e: any){ setMsg(`Tải ảnh thất bại: ${String(e.message || e)}`) }
+    setUploading(false)
+  }
+
+  const submitResult = async (id: string)=>{
+    setMsg('')
+    try{
+      const d = await authed(`/api/missions/${id}/result`, { method: 'POST', body: JSON.stringify({
+        outcome, note: note || undefined,
+        latitude: rlat === '' ? null : Number(rlat),
+        longitude: rlon === '' ? null : Number(rlon),
+        photo_hash: photoHash || undefined,
+        vegetation: thucVat || undefined, smoke_heat: khoiNhiet || undefined,
+        human_activity: hoatDong || undefined, water_source: nguonNuoc || undefined,
+        access: tiepCan || undefined,
+      })})
+      setDetail(d); setNote(''); setPhotoHash('')
+      load()
+    }catch(e: any){ setMsg(String(e.message || e)) }
+  }
+
+  const shown = missions.filter(m=> filter === 'ALL' || m.status === filter)
   return (
-    <div style={{display:'flex', flexDirection:'column', gap:16}}>
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8}}>
-        <h1>Missions {missions.length > 0 && <span style={{fontSize:12, background:'#0F766E', color:'#fff', padding:'2px 8px', borderRadius:999}}>{activeMissions} đang chạy</span>}</h1>
-        <div style={{display:'flex', gap:6}}>
-          {([['missions','Nhiệm vụ'],['plans','Kế hoạch AI'],['field','Thực địa']] as const).map(([v, label])=> (
-            <button key={v} onClick={()=> setTab(v)} style={{padding:'6px 12px', borderRadius:999, border:'1px solid #E2E8E5', background: tab===v ? '#0B1412' : '#fff', color: tab===v ? '#fff' : '#000'}}>{label}</button>
-          ))}
-        </div>
+    <div className="page" style={{maxWidth: 960, margin: '0 auto', padding: 16}}>
+      <h1>Nhiệm vụ thực địa</h1>
+      <p style={{fontSize: 13, color: '#64748B'}}>
+        AI chỉ đề xuất — không tự giao nhiệm vụ, không tự phát cảnh báo.
+      </p>
+      <div role="alert" style={{ background: '#FEF2F2', border: '2px solid #DC2626', borderRadius: 12,
+        padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#991B1B', marginTop: 8 }}>
+        Cảnh báo chính thức: CHƯA CÓ — chỉ cơ quan có thẩm quyền mới ban hành.
       </div>
 
-      {loading && <div className="card">Đang tải nhiệm vụ...</div>}
-      {error && <div className="card" style={{borderColor:'#F59E0B'}}>⚠ {error}</div>}
-
-      {tab === 'missions' && !loading && (
-        <>
-          {incomingArea && <div style={{fontSize:12, color:'#0F766E', background:'#DCFCE7', borderRadius:8, padding:'6px 10px'}}>📍 Từ bản đồ: <b>{incomingArea}</b> — phạm vi nhiệm vụ sẽ gắn khu vực này</div>}
-          <div style={{display:'flex', gap:8}}>
-            <input value={goal} onChange={e=> setGoal(e.target.value)} placeholder="Mục tiêu nhiệm vụ mới, vd: Bảo vệ rừng Ia Mơr mùa khô..." aria-label="Mục tiêu mới" style={{flex:1, border:'1px solid #E2E8E5', borderRadius:999, padding:'8px 14px', fontSize:13}} onKeyDown={e=> { if(e.key === 'Enter') create() }} />
-            <button onClick={create} style={{background:'#0F766E', color:'#fff', border:0, borderRadius:999, padding:'8px 16px', fontWeight:700}}>Tạo</button>
-          </div>
-          {missions.length === 0 && <div className="card">Chưa có nhiệm vụ nào — tạo mới ở trên.</div>}
-          {missions.map(m=> (
-            <div key={m.id} className="card" style={{borderLeft:`4px solid ${statusColor(m.status)}`}}>
-              <div style={{display:'flex', justifyContent:'space-between', gap:8}}>
-                <b>{m.goal}</b>
-                <span style={{fontSize:11, background:'#F1F5F3', padding:'2px 8px', borderRadius:999, whiteSpace:'nowrap'}}>{m.status} · {m.scope}</span>
-              </div>
-              <div style={{fontSize:11, color:'#64748B', marginTop:4}}>id {String(m.id).slice(0,8)}</div>
+      <section aria-label="Đề xuất kiểm tra" style={{background: '#fff', border: '1px solid #E2E8E5', borderRadius: 12, padding: 12, marginTop: 12}}>
+        <b style={{fontSize: 14}}>ĐỀ XUẤT KIỂM TRA THỰC ĐỊA {dexuats.length > 0 && `(${dexuats.length})`}</b>
+        <div style={{fontSize: 12, color: '#64748B', marginTop: 4}}>
+          Điều kiện: Risk ≥ 55 HOẶC điểm nóng ≤ 3 km. Ưu tiên chỉ để sắp thứ tự, không phải xác suất cháy.
+        </div>
+        {dexuats.length === 0 && <div style={{fontSize: 13, color: '#64748B', marginTop: 8}}>Chưa có đề xuất nào.</div>}
+        {dexuats.map((dx, i)=> (
+          <div key={i} style={{border: '1px solid #E2E8E5', borderRadius: 10, padding: 10, marginTop: 8}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap'}}>
+              <b>{dx.area}{dx.zone ? ` · ${dx.zone}` : ''}</b>
+              <span style={{fontSize: 12, fontWeight: 800, color: dx.muc === 'CAO' ? '#DC2626' : '#D97706'}}>
+                ƯU TIÊN {dx.muc} · {dx.priority}/100
+              </span>
             </div>
-          ))}
-        </>
+            <div style={{fontSize: 12, color: '#475569', marginTop: 4}}>
+              Risk {dx.risk ?? '—'}{dx.hotspot ? ` · điểm nóng cách ${dx.hotspot.khoang_cach_km} km (tin cậy ${dx.hotspot.do_tin_cay || 'không rõ'})` : ''} · {dx.han_text}
+            </div>
+            <div style={{fontSize: 12, marginTop: 4}}>Lý do: {dx.ly_do.join(' · ')}</div>
+            {dx.top_yeu_to.length > 0 && <div style={{fontSize: 12, color: '#475569'}}>Yếu tố: {dx.top_yeu_to.join(', ')}</div>}
+            {dx.viec_theo_yeu_to.map((v, k)=> (
+              <div key={k} style={{fontSize: 12, marginTop: 2}}>• <b>{v.viec}</b> — {v.ly_do}</div>
+            ))}
+            <div style={{display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap'}}>
+              <button onClick={()=> quyetDinh(dx, 'XAC_NHAN')} style={btn('#0F766E')}>XÁC NHẬN</button>
+              <button onClick={()=> quyetDinh(dx, 'TU_CHOI')} style={btn('#fff', '#000')}>TỪ CHỐI</button>
+              <button onClick={()=> quyetDinh(dx, 'CAN_THEM_DU_LIEU')} style={btn('#fff', '#000')}>CẦN THÊM DỮ LIỆU</button>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      {stats && (
+        <section aria-label="Thống kê" style={{background: '#fff', border: '1px solid #E2E8E5', borderRadius: 12, padding: 12, marginTop: 8}}>
+          <b style={{fontSize: 13}}>Thống kê</b>
+          <div style={{display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13, marginTop: 6}}>
+            <span>Tổng: <b>{stats.missions_total}</b></span>
+            <span>Xác nhận cháy: <b>{stats.results?.CONFIRMED_FIRE || 0}</b></span>
+            <span>Báo động giả: <b>{stats.results?.FALSE_ALARM || 0}</b></span>
+            <span>Khớp mô hình–thực địa: <b>{stats.model_field?.MATCH ?? '—'}</b></span>
+            <span>Lệch: <b>{stats.model_field?.MISMATCH ?? '—'}</b></span>
+          </div>
+          <div style={{fontSize: 11, color: '#64748B', marginTop: 4}}>Chỉ dùng để chỉnh trọng số sau này — không tự đổi mô hình.</div>
+        </section>
       )}
 
-      {tab === 'plans' && !loading && (
-        <>
-          <div style={{display:'flex', gap:8}}>
-            <input value={planGoal} onChange={e=> setPlanGoal(e.target.value)} placeholder="Mục tiêu kế hoạch AI, vd: Giảm gián đoạn chuỗi cà phê mùa mưa..." aria-label="Kế hoạch mới" style={{flex:1, border:'1px solid #E2E8E5', borderRadius:999, padding:'8px 14px', fontSize:13}} onKeyDown={e=> { if(e.key === 'Enter') createP() }} />
-            <button onClick={createP} style={{background:'#0B1412', color:'#fff', border:0, borderRadius:999, padding:'8px 16px', fontWeight:700}}>Lập kế hoạch</button>
-          </div>
-          {plans.length === 0 && <div className="card">Chưa có kế hoạch nào.</div>}
-          {plans.map(p=> (
-            <div key={p.id} className="card">
-              <button onClick={()=> open(p.id)} style={{all:'unset', cursor:'pointer', width:'100%'}} aria-expanded={openPlan === p.id}>
-                <div style={{display:'flex', justifyContent:'space-between', gap:8}}>
-                  <b>{p.goal}</b>
-                  <span style={{fontSize:11, background:'#F1F5F3', padding:'2px 8px', borderRadius:999, whiteSpace:'nowrap'}}>{p.approval_status} · {p.execution_status} {openPlan === p.id ? '▴' : '▾'}</span>
+      <section aria-label="Tạo nhiệm vụ" style={{background: '#fff', border: '1px solid #E2E8E5', borderRadius: 12, padding: 12, marginTop: 8}}>
+        <b style={{fontSize: 13}}>Tạo nhiệm vụ (admin/kiểm lâm)</b>
+        <div style={{display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8}}>
+          <input value={area} onChange={e=> setArea(e.target.value)} placeholder="Khu vực (vd: Ô c012_031)" aria-label="Khu vực"
+            style={{flex: '2 1 200px', border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
+          <input value={lat} onChange={e=> setLat(e.target.value)} placeholder="Vĩ độ" aria-label="Vĩ độ"
+            style={{flex: '1 1 90px', border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
+          <input value={lon} onChange={e=> setLon(e.target.value)} placeholder="Kinh độ" aria-label="Kinh độ"
+            style={{flex: '1 1 90px', border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
+          <input value={risk} onChange={e=> setRisk(e.target.value)} placeholder="Điểm 0–100" aria-label="Điểm lúc tạo"
+            style={{flex: '1 1 90px', border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
+          <select value={priority} onChange={e=> setPriority(e.target.value)} aria-label="Mức ưu tiên"
+            style={{border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}}>
+            {[{v:'LOW',l:'Thấp'},{v:'NORMAL',l:'Thường'},{v:'HIGH',l:'Cao'},{v:'CRITICAL',l:'Nguy kịch'}].map(p=> <option key={p.v} value={p.v}>{p.l}</option>)}
+          </select>
+          <button onClick={create} style={btn('#0F766E')}>Tạo</button>
+        </div>
+      </section>
+
+      {msg && <div role="status" style={{marginTop: 8, fontSize: 13, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 12px'}}>{msg}</div>}
+
+      <div style={{display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap'}}>
+        {[{v:'ALL',l:'Tất cả'},{v:'NEW',l:'Mới'},{v:'ASSIGNED',l:'Đã giao'},{v:'IN_PROGRESS',l:'Đang kiểm tra'},{v:'DONE',l:'Xong'}].map(s=> (
+          <button key={s.v} onClick={()=> setFilter(s.v)}
+            style={{padding: '10px 14px', minHeight: 44, borderRadius: 999, border: '1px solid #E2E8E5', background: filter === s.v ? '#0B1412' : '#fff', color: filter === s.v ? '#fff' : '#000', fontSize: 13}}>
+            {s.l}
+          </button>
+        ))}
+      </div>
+
+      {loading && <p>Đang tải…</p>}
+      {!loading && shown.length === 0 && (
+        <div style={{background: '#fff', border: '1px solid #E2E8E5', borderRadius: 12, padding: 24, textAlign: 'center', marginTop: 8}}>
+          <div style={{fontSize: 14, fontWeight: 700}}>Chưa có nhiệm vụ</div>
+          <div style={{fontSize: 13, color: '#64748B', marginTop: 6}}>Khi có ô nguy cơ cao, kiểm lâm tạo nhiệm vụ kiểm tra tại đây.</div>
+          <Link to="/" style={{display: 'inline-block', marginTop: 12, background: '#0F766E', color: '#fff', padding: '12px 20px', minHeight: 44, borderRadius: 999, fontSize: 13, fontWeight: 700, textDecoration: 'none'}}>Về bản đồ</Link>
+        </div>
+      )}
+      {shown.map(m=> (
+        <div key={m.id} style={{background: '#fff', border: '1px solid #E2E8E5', borderRadius: 12, padding: 12, marginTop: 8}}>
+          <button onClick={()=> open(m.id)} aria-expanded={openId === m.id}
+            style={{all: 'unset', cursor: 'pointer', width: '100%', display: 'block', minHeight: 44}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', gap: 8}}>
+              <b>{m.area}</b>
+              <span style={{fontSize: 11, padding: '2px 8px', borderRadius: 999, background: '#F1F5F9'}}>{tenTrangThai(m.status)}</span>
+            </div>
+            <div style={{fontSize: 12, color: '#64748B', marginTop: 4}}>
+              {[m.priority, m.assignee ? `→ ${m.assignee}` : '', typeof m.risk_at_creation === 'number' ? `điểm lúc tạo: ${m.risk_at_creation}` : '',
+                typeof m.inspection_priority === 'number' ? `ưu tiên kiểm tra: ${m.inspection_priority}` : ''].filter(Boolean).join(' · ')}
+            </div>
+          </button>
+          {openId === m.id && detail && detail.id === m.id && (
+            <div style={{marginTop: 10, borderTop: '1px solid #E2E8E5', paddingTop: 10}}>
+              <div style={{fontSize: 12, fontWeight: 800}}>DANH SÁCH VIỆC</div>
+              {(detail.checklist_steps || []).map((s: string, i: number)=> (
+                <label key={i} style={{display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginTop: 6, minHeight: 44}}>
+                  <input type="checkbox" checked={(detail.checklist_done || []).includes(i)}
+                    onChange={()=> tick(detail.id, i, detail.checklist_done || [])} style={{width: 20, height: 20}} /> {s}
+                </label>
+              ))}
+              <div style={{display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap'}}>
+                {detail.status === 'NEW' && <button onClick={()=> setStatus(detail.id, 'ASSIGNED')} style={btn('#0F766E')}>Nhận nhiệm vụ</button>}
+                {detail.status === 'ASSIGNED' && <button onClick={()=> setStatus(detail.id, 'IN_PROGRESS')} style={btn('#0F766E')}>Bắt đầu kiểm tra</button>}
+              </div>
+              {detail.status === 'IN_PROGRESS' && !detail.result && (
+                <div style={{marginTop: 10, background: '#F8FAF9', borderRadius: 8, padding: 10}}>
+                  <div style={{fontSize: 12, fontWeight: 800}}>GỬI KẾT QUẢ THỰC ĐỊA</div>
+                  <div style={{display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6}}>
+                    <select value={outcome} onChange={e=> setOutcome(e.target.value)} aria-label="Kết quả"
+                      style={{border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13, minHeight: 44}}>
+                      <option value="FALSE_ALARM">Báo động giả</option>
+                      <option value="CONFIRMED_FIRE">Xác nhận cháy</option>
+                      <option value="RESOLVED">Đã xử lý xong</option>
+                    </select>
+                    <input value={rlat} onChange={e=> setRlat(e.target.value)} placeholder="Vĩ độ tại chỗ" aria-label="Vĩ độ tại chỗ"
+                      style={{flex: '1 1 100px', border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
+                    <input value={rlon} onChange={e=> setRlon(e.target.value)} placeholder="Kinh độ tại chỗ" aria-label="Kinh độ tại chỗ"
+                      style={{flex: '1 1 100px', border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
+                  </div>
+                  <input value={thucVat} onChange={e=> setThucVat(e.target.value)} placeholder="Thực vật (vd: thảm khô, cỏ tranh)" aria-label="Thực vật"
+                    style={{width: '100%', marginTop: 6, border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
+                  <input value={khoiNhiet} onChange={e=> setKhoiNhiet(e.target.value)} placeholder="Khói/nhiệt (vd: không thấy khói)" aria-label="Khói nhiệt"
+                    style={{width: '100%', marginTop: 6, border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
+                  <input value={hoatDong} onChange={e=> setHoatDong(e.target.value)} placeholder="Hoạt động con người (vd: không)" aria-label="Hoạt động con người"
+                    style={{width: '100%', marginTop: 6, border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
+                  <input value={nguonNuoc} onChange={e=> setNguonNuoc(e.target.value)} placeholder="Nguồn nước (vd: hồ cách 2km)" aria-label="Nguồn nước"
+                    style={{width: '100%', marginTop: 6, border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
+                  <input value={tiepCan} onChange={e=> setTiepCan(e.target.value)} placeholder="Tiếp cận (vd: đường đất vào được)" aria-label="Tiếp cận"
+                    style={{width: '100%', marginTop: 6, border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
+                  <input value={note} onChange={e=> setNote(e.target.value)} placeholder="Ghi chú hiện trường" aria-label="Ghi chú"
+                    style={{width: '100%', marginTop: 6, border: '1px solid #E2E8E5', borderRadius: 8, padding: '8px 10px', fontSize: 13}} />
+                  <div style={{display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center'}}>
+                    <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display: 'none'}}
+                      onChange={e=> { const f = e.target.files?.[0]; if(f) uploadPhoto(f); e.target.value = '' }} />
+                    <button onClick={()=> fileRef.current?.click()} disabled={uploading} style={btn('#fff', '#000')}>{uploading ? 'Đang tải…' : '📷 Chụp/tải ảnh GPS'}</button>
+                    {photoHash && <span style={{fontSize: 11, color: '#0F766E'}}>Ảnh đã gắn (hash {photoHash.slice(0, 10)}…)</span>}
+                  </div>
+                  <button onClick={()=> submitResult(detail.id)} style={{...btn('#0F766E'), marginTop: 8}}>Gửi kết quả</button>
                 </div>
-                {p.approval_status === 'PENDING' && <div style={{marginTop:6}}><Link to="/actions" style={{fontSize:12, color:'#0F766E', fontWeight:700}}>→ Sang trang Quản trị để duyệt</Link></div>}
-              </button>
-              {openPlan === p.id && detail && (
-                <div style={{marginTop:10, borderTop:'1px solid #F1F5F9', paddingTop:10}}>
-                  <div style={{fontSize:12, color:'#64748B'}}>Tiến độ task: {doneCount(detail.tasks || [])}/{detail.tasks?.length ?? 0}</div>
-                  <div style={{height:8, background:'#F1F5F9', borderRadius:999, margin:'6px 0 10px'}}>
-                    <div style={{width:`${detail.tasks?.length ? (doneCount(detail.tasks) / detail.tasks.length) * 100 : 0}%`, height:'100%', borderRadius:999, background:'#0F766E'}} />
+              )}
+              {detail.result && (
+                <div style={{marginTop: 10, fontSize: 13, background: detail.result.outcome === 'FALSE_ALARM' ? '#F1F5F9' : '#FEF2F2', borderRadius: 8, padding: 10}}>
+                  <b>Kết quả: {detail.result.outcome}</b>
+                  {detail.result.note && <div style={{marginTop: 4}}>{detail.result.note}</div>}
+                  <div style={{marginTop: 6, fontWeight: 800}}>
+                    AI PREDICTED vs FIELD OBSERVED → {detail.result.match_result === 'MATCH' ? 'MODEL–FIELD MATCH' : 'MODEL–FIELD MISMATCH'}
                   </div>
-                  {(detail.tasks || []).map((t: Task)=> (
-                    <div key={t.id} style={{display:'flex', gap:8, fontSize:13, padding:'4px 0'}}>
-                      <span>{t.status === 'COMPLETED' || t.status === 'DONE' ? '✅' : '⬜'}</span>
-                      <span style={{flex:1}}>{t.name}</span>
-                      <span style={{fontSize:11, color:'#64748B'}}>{t.agent} · {t.status}</span>
-                    </div>
-                  ))}
-                  <div style={{display:'flex', gap:6, marginTop:10, flexWrap:'wrap'}}>
-                    <button onClick={()=> act('delegate', p.id)} style={btn}>Giao việc cho agent</button>
-                    <button onClick={()=> act('simulate', p.id)} style={btn}>Mô phỏng phương án</button>
-                    <button onClick={()=> act('recommend', p.id)} style={btn}>Xin khuyến nghị AI</button>
-                  </div>
-                  {sim && <div style={{marginTop:8, fontSize:12, background:'#EFF6FF', borderRadius:8, padding:8}}>Mô phỏng: {JSON.stringify(sim.simulations ?? sim).slice(0, 300)}</div>}
-                  {rec && <div style={{marginTop:8, fontSize:12, background:'#F0FDF4', borderRadius:8, padding:8}}>Khuyến nghị: {JSON.stringify(rec).slice(0, 300)}</div>}
-                  {detail.evidence && <div style={{marginTop:8, fontSize:11, color:'#64748B'}}>Nguồn: {(detail.evidence.sources || []).join(', ')} · Tin cậy: {detail.evidence.confidence}</div>}
+                  <div style={{fontSize: 11, color: '#64748B'}}>Chỉ để thống kê, chưa tự đổi trọng số.</div>
                 </div>
               )}
             </div>
-          ))}
-        </>
-      )}
-
-      {tab === 'field' && (
-        <div style={{background:'#fff', border:'1px solid #E2E8E5', borderRadius:16, padding:16}}>
-          <h3>NHIỆM VỤ #042 — Xác minh bất thường rừng {started && <span style={{fontSize:11, background:'#DCFCE7', padding:'2px 8px', borderRadius:999}}>ĐANG THỰC HIỆN</span>}</h3>
-          <div>📍 Gia Lai · Ưu tiên CAO · checklist lưu trên máy này</div>
-          <div style={{marginTop:8, display:'grid', gap:6, fontSize:13}}>
-            {['Đến vị trí','Chụp ảnh','Thu thập bằng chứng','Xác minh'].map((s, i)=> (
-              <label key={s}><input type="checkbox" checked={steps[i]} onChange={()=> { setSteps(x => x.map((v, j)=> j === i ? !v : v)); pushLog(`${steps[i] ? 'Bỏ tick' : 'Xong'}: ${s}`) }} /> {s}</label>
-            ))}
-          </div>
-          <button onClick={()=> { setStarted(true); pushLog('Bắt đầu nhiệm vụ') }} disabled={started} style={{marginTop:10, background:'#0B1412', color:'#fff', padding:'8px 12px', borderRadius:999, border:0, width:'100%'}}>{started ? 'ĐANG THỰC HIỆN...' : 'BẮT ĐẦU NHIỆM VỤ'}</button>
-          <div style={{marginTop:10, display:'flex', gap:6, flexWrap:'wrap'}}>
-            <button onClick={()=> pushLog('Đã chụp ảnh bằng chứng')}>📷 Ảnh</button>
-            <button onClick={()=> pushLog('Đã quay video hiện trường')}>🎥 Video</button>
-            <button onClick={()=> {
-              if(!navigator.geolocation){ pushLog('Trình duyệt không hỗ trợ vị trí'); return }
-              navigator.geolocation.getCurrentPosition(()=> pushLog('Đã gắn vị trí hiện tại'), ()=> pushLog('Bị từ chối quyền vị trí'))
-            }}>📍 Vị trí</button>
-            <button onClick={()=> pushLog('🚨 Đã gửi tín hiệu khẩn cấp')}>🚨 Khẩn cấp</button>
-          </div>
-          {log.length > 0 && <div style={{marginTop:10, fontSize:12, background:'#F8FAF9', borderRadius:8, padding:8}}>{log.map((l, i)=> <div key={i}>{l}</div>)}</div>}
+          )}
         </div>
-      )}
+      ))}
 
-      <style>{`.card{background:#fff; border:1px solid #E2E8E5; border-radius:16px; padding:16px}`}</style>
+      <section aria-label="Nhật ký quyết định" style={{background: '#fff', border: '1px solid #E2E8E5', borderRadius: 12, padding: 12, marginTop: 12}}>
+        <b style={{fontSize: 14}}>NHẬT KÝ QUYẾT ĐỊNH</b>
+        {nhatKy.length === 0 && <div style={{fontSize: 13, color: '#64748B', marginTop: 6}}>Chưa có quyết định nào.</div>}
+        {nhatKy.map((d: any)=> (
+          <div key={d.id} style={{display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, borderTop: '1px solid #F1F5F9', padding: '6px 0', marginTop: 4}}>
+            <span>{d.timestamp ? String(d.timestamp).slice(0, 16).replace('T', ' ') : ''} · {d.area} · {d.action} · {d.detail}</span>
+            <button onClick={()=> xoaNhatKy(d.id)} aria-label={`Xóa mục ${d.id}`}
+              style={{border: '1px solid #E2E8E5', background: '#fff', borderRadius: 999, padding: '10px 14px', minHeight: 44, fontSize: 12}}>Xóa</button>
+          </div>
+        ))}
+      </section>
     </div>
   )
 }
 
-const btn = { fontSize:12, padding:'6px 12px', borderRadius:999, border:'1px solid #E2E8E5', background:'#fff' } as const
+function tenTrangThai(s?: string): string {
+  if(s === 'NEW') return 'Mới'
+  if(s === 'ASSIGNED') return 'Đã giao'
+  if(s === 'IN_PROGRESS') return 'Đang kiểm tra'
+  if(s === 'DONE') return 'Xong'
+  return s || '—'
+}

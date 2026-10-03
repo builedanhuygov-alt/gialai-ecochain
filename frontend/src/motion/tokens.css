@@ -1,13 +1,73 @@
+/* P12 Motion tokens — single source of truth (Apple/Linear/Notion calm).
+   Fast 120–150ms · Medium 180–250ms · Large 300–500ms.
+   ONE easing everywhere: ease-out. Sheet spring is the only exception (P14).
+   All keyframes animate transform/opacity ONLY (GPU-cheap, no layout). */
 :root{
-  --motion-fast: 160ms;
-  --motion-normal: 260ms;
-  --motion-slow: 380ms;
+  --motion-fast: 140ms;
+  --motion-medium: 220ms;
+  --motion-normal: 220ms; /* legacy alias of medium */
+  --motion-slow: 450ms;
+  --motion-large: 450ms; /* alias of slow */
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1); /* P14 bottom sheet only */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* THE easing */
+  --elev-1: 0 1px 2px rgba(2,6,12,0.07);
+  --elev-2: 0 1px 2px rgba(2,6,12,0.06), 0 8px 24px rgba(2,6,12,0.12);
+  --elev-3: 0 1px 2px rgba(2,6,12,0.06), 0 12px 32px rgba(2,6,12,0.18);
 }
+
+/* P2 drawer — slide + fade, 220ms out-curve */
+@keyframes drawer-in { from{ opacity:0; transform:translateX(26px); } to{ opacity:1; transform:none; } }
+@keyframes drawer-out { from{ opacity:1; transform:none; } to{ opacity:0; transform:translateX(26px); } }
+.anim-drawer-in{ animation: drawer-in var(--motion-medium) var(--ease-out); }
+.anim-drawer-out{ animation: drawer-out 180ms var(--ease-out); }
+/* P2 asset switch — cross-fade nội dung, shell đứng yên */
+@keyframes swap-in { from{ opacity:0; transform:translateY(5px); } to{ opacity:1; transform:none; } }
+.anim-swap{ animation: swap-in 180ms var(--ease-out); }
+/* P14 bottom sheet — spring nhẹ duy nhất */
+@keyframes sheet-in { from{ opacity:0; transform:translateY(56px); } to{ opacity:1; transform:none; } }
+@keyframes sheet-out { from{ opacity:1; transform:none; } to{ opacity:0; transform:translateY(56px); } }
+/* P5 tooltip — fade 150ms, trễ 60ms để không nảy tức thì */
+@keyframes tip-in { from{ opacity:0; transform:translateY(3px); } to{ opacity:1; transform:none; } }
+.anim-tip{ opacity:0; animation: tip-in 150ms var(--ease-out) 60ms backwards; }
+/* P11 popover — fade + scale 140ms */
+@keyframes pop-in { from{ opacity:0; transform:scale(0.97) translateY(-3px); } to{ opacity:1; transform:none; } }
+.anim-pop{ animation: pop-in 140ms var(--ease-out); transform-origin: top right; }
+/* P3 marker — ring nở MỘT lần 450ms + glow tĩnh (không nhấp nháy) */
+@keyframes ring-once {
+  0%{ box-shadow: 0 0 0 0 rgba(14,165,183,0.55), 0 2px 6px rgba(0,0,0,0.3); }
+  100%{ box-shadow: 0 0 0 15px rgba(14,165,183,0), 0 2px 6px rgba(0,0,0,0.3); }
+}
+.marker-selected{
+  outline: 3px solid #0EA5E9 !important; outline-offset: 2px;
+  z-index: 30;
+  animation: ring-once 450ms var(--ease-out);
+}
+/* P6 level swap + P8/P10/P13 fades — 200ms */
+@keyframes level-in { from{ opacity:0; transform:translateY(7px); } to{ opacity:1; transform:none; } }
+.anim-level{ animation: level-in 200ms var(--ease-out); }
+@keyframes fc-fade { from{ opacity:0; } to{ opacity:1; } }
+.anim-fade{ animation: fc-fade 200ms var(--ease-out); }
+/* P9 skeleton shimmer (transform/background-position only) */
+@keyframes skel-slide { 0%{ background-position: 100% 0; } 100%{ background-position: -100% 0; } }
+.skel-shimmer{
+  background: linear-gradient(90deg, #16211d 25%, #24352e 37%, #16211d 63%);
+  background-size: 400% 100%;
+  animation: skel-slide 1.3s linear infinite;
+}
+/* P1 elevation utilities */
+.elev-1{ box-shadow: var(--elev-1); }
+.elev-2{ box-shadow: var(--elev-2); }
+.elev-3{ box-shadow: var(--elev-3); }
+
+@media (max-width: 640px){
+  /* P14 sheet dùng spring, P2 desktop dùng ease-out */
+  .anim-drawer-in{ animation-name: sheet-in; animation-duration: 260ms; animation-timing-function: var(--ease-spring); }
+  .anim-drawer-out{ animation-name: sheet-out; animation-duration: 200ms; animation-timing-function: var(--ease-out); }
+}
+
 @media (prefers-reduced-motion: reduce){
-  :root{ --motion-fast: 0ms; --motion-normal: 0ms; --motion-slow: 0ms; }
+  :root{ --motion-fast: 0ms; --motion-medium: 0ms; --motion-normal: 0ms; --motion-slow: 0ms; --motion-large: 0ms; }
   *{ animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

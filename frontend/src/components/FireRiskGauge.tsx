@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useScope } from '../store/useScope'
 import { API_BASE } from '../services/api'
+import { hienThi } from '../utils/hienThi'
 
 const LEVELS = [
   { lv:'I', label:'Thấp', color:'bg-sky-500', text:'text-sky-600', bg:'bg-sky-50', border:'border-sky-200' },
@@ -11,13 +12,26 @@ const LEVELS = [
 ]
 
 const API = API_BASE.replace(/\/$/, '')
+// Mã nguồn thiếu (backend) -> tiếng Việt hiển thị.
+const tenNguonThieu = (k: string): string => ({
+  satellite: 'vệ tinh', weather: 'thời tiết', terrain: 'địa hình', firms: 'điểm nóng',
+  community: 'cộng đồng', fuel_dryness: 'thảm khô', weather_danger: 'thời tiết',
+  firms_proximity: 'điểm nóng', wind: 'gió', rainfall_deficit: 'mưa',
+  historical_community: 'lịch sử/cộng đồng',
+}[k] || k)
+const trangThaiTram = (s: string): string => {
+  const t = String(s || '').toUpperCase()
+  if(t === 'LIVE') return 'TRỰC TIẾP'
+  if(t === 'UNAVAILABLE') return 'KHÔNG CÓ'
+  if(t === 'DEMO' || t === 'DEMO DATA') return 'GIẢ LẬP'
+  return hienThi(s)
+}
 // Tọa độ đại diện từng khu vực để AI lấy vệ tinh/thời tiết/FIRMS đúng ô
 const AREA_COORDS: [string, number, number][] = [
   ['Chư Prông', 13.55, 107.65], ['Ia Mơr', 13.55, 107.65], ['Kon Ka Kinh', 14.25, 108.45],
   ['An Khê', 13.98, 108.65], ['Hội Sơn', 13.92, 108.68], ['Quy Nhơn', 13.78, 109.21],
 ]
-const coordsFor = (area:string): [number, number] => {
-  for(const [k, lat, lon] of AREA_COORDS) if(area.includes(k)) return [lat, lon]
+const coordsFor = (area:string): [number, number] => {  for(const [k, lat, lon] of AREA_COORDS) if(area.includes(k)) return [lat, lon]
   return [13.9, 108.3]
 }
 
@@ -26,7 +40,8 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
   const [level, setLevel] = useState('I')
   const [flash, setFlash] = useState(false)
   const [score, setScore] = useState<number | null>(null)
-  const [conf, setConf] = useState<number | null>(null)
+  const [, setConf] = useState<number | null>(null)
+  const [rating, setRating] = useState<any>(null)
   const [factors, setFactors] = useState<string[]>([])
   const [missing, setMissing] = useState<string[]>([])
   const [inputs, setInputs] = useState<string>('')
@@ -56,10 +71,13 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
       const j = await r.json()
       if(j.warning_level){ setLevel(j.warning_level); setManual(false) }
       setScore(j.risk_score ?? null); setConf(j.confidence ?? null)
+      setRating(j.forecast_rating || null)
       setFactors(Object.keys(j.factors || {}))
       setMissing(Array.isArray(j.missing) ? j.missing : [])
       const ev = j.evidence || {}
-      setInputs(`NDVI ${ev.satellite?.ndvi ?? '?'} · ${ev.weather?.temperature ?? '?'}°C · FIRMS ${Array.isArray(ev.hotspots) ? ev.hotspots.length : (ev.hotspots ?? 0)} điểm`)
+      const nHot = Array.isArray(ev.hotspots) ? ev.hotspots.length : (ev.hotspots ?? 0)
+      const cov = j.forecast_rating?.data_coverage_status
+      setInputs(`FIRMS ${nHot} điểm · ${hienThi(ev.weather?.temperature)}°C${cov ? ` · Độ phủ ${cov}` : ''}`)
       setStatus(j.status || 'LIVE')
     }catch{ setStatus('UNAVAILABLE') }
     setLoading(false)
@@ -100,23 +118,31 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
       {/* AI vệ tinh: đầu vào + trạng thái thật */}
       <div className="flex items-center gap-2 text-[10px] text-slate-500">
         <span>🛰️ {loading ? 'AI đang phân tích vệ tinh...' : inputs || 'Chờ AI vệ tinh'}</span>
-        <span className={`px-2 py-0.5 rounded-full font-bold ${status==='LIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>{status}</span>
+        <span className={`px-2 py-0.5 rounded-full font-bold ${status==='LIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>{trangThaiTram(status)}</span>
         {manual && <span className="px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-500 border border-slate-200">Chọn tay (admin)</span>}
-        {!isAdmin && <span className="px-2 py-0.5 rounded-full font-bold bg-slate-50 text-slate-400 border border-slate-200" title="Chỉ admin/host được chỉnh tay">🔒 AI tính</span>}
-        <button onClick={()=> analyze(scope.commune || scope.village || '', scope.lat, scope.lon)} className="ml-auto underline hover:text-slate-700">Tính lại</button>
+        {!isAdmin && <span className="px-2 py-0.5 rounded-full font-bold bg-slate-50 text-slate-400 border border-slate-200" title="Chỉ admin/host được chỉnh tay">🔒 CẤP theo khu vực</span>}
+        <button onClick={()=> analyze(scope.commune || scope.village || '', scope.lat, scope.lon)} className="ml-auto underline hover:text-slate-700">Cập nhật</button>
       </div>
-      {(score !== null || conf !== null) && (
+      {rating ? (
         <div className="text-[11px] text-slate-600 leading-relaxed">
-          <div className="flex items-center gap-2 flex-wrap">
-            {score !== null && <span>Risk <b>{score}/100</b></span>}
-            {conf !== null && <span>Tin cậy <b>{conf}%</b></span>}
+          <div>⚠ <b>{hienThi(rating.major_risk_driver)}</b></div>
+          <div>✅ {(rating.recommended_action || [])[0] || ''}</div>
+          <div className="mt-0.5 break-words">
+            <span>Độ phủ: <b>{hienThi(rating.data_coverage_status)}</b></span>
+            {missing.length > 0 && <span title="Nguồn thiếu"> · thiếu: {missing.map(tenNguonThieu).join(', ')}</span>}
           </div>
+        </div>
+      ) : score !== null && (
+        <div className="text-[11px] text-slate-600 leading-relaxed">
+          <div className="font-bold text-slate-800">AI đã tính Cấp {level}{score !== null ? ` · điểm ${score}/100` : ''}</div>
+          <div className="mt-0.5 text-amber-700">Chưa phát hành bản tin chính thức — cần bổ sung bằng chứng và xác minh thực địa.</div>
           {(factors.length > 0 || missing.length > 0) && (
             <div className="mt-0.5 break-words">
               {factors.length > 0 && <span>· {factors.join(', ')}</span>}
-              {missing.length > 0 && <span title="Nguồn thiếu — tin cậy đã hạ tương ứng"> · thiếu: {missing.join(', ')}</span>}
+              {missing.length > 0 && <span title="Nguồn thiếu"> · còn thiếu: {missing.map(tenNguonThieu).join(', ')}</span>}
             </div>
           )}
+          <div className="mt-0.5 text-slate-500">CẦN XÁC MINH THỰC ĐỊA</div>
         </div>
       )}
 
@@ -127,7 +153,7 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
             key={l.lv}
             onClick={isAdmin ? ()=> { setLevel(l.lv); setManual(true); onSelect?.(l.lv) } : undefined}
             disabled={!isAdmin}
-            title={isAdmin ? 'Admin: chọn tay để thử kịch bản (AI tính lại khi đổi khu vực)' : 'Cấp do AI tính theo khu vực — chỉ admin/host được chỉnh tay'}
+            title={isAdmin ? 'Admin: chọn tay để thử kịch bản (tự cập nhật khi đổi khu vực)' : 'Cấp theo khu vực — chỉ admin/host được chỉnh tay'}
             className={`flex-1 rounded-full text-[11px] font-bold transition-all flex items-center justify-center relative z-10 ${level===l.lv ? 'text-white shadow-md' : 'text-slate-600 hover:bg-white/60'}`}
             style={level===l.lv ? {background: l.color.replace('bg-','')} : {}}
           >
@@ -151,17 +177,17 @@ export default function FireRiskGauge({ compact=false, onSelect }: { compact?:bo
       {/* Labels */}
       <div className="grid grid-cols-5 gap-1 mt-3">
         {LEVELS.map(l=>(
-          <div key={l.lv} onClick={isAdmin ? ()=> { setLevel(l.lv); setManual(true) } : undefined} title={isAdmin ? 'Admin: chọn tay' : 'Cấp do AI tính — chỉ admin/host được chỉnh tay'} className={`text-center py-1.5 rounded-xl border text-[10px] leading-tight transition-all ${level===l.lv ? `${l.bg} ${l.border} ${l.text} font-bold shadow-sm` : 'bg-white border-slate-100 text-slate-500 hover:border-slate-200'} ${isAdmin ? 'cursor-pointer' : ''}`}>
+          <div key={l.lv} onClick={isAdmin ? ()=> { setLevel(l.lv); setManual(true) } : undefined} title={isAdmin ? 'Admin: chọn tay' : 'Cấp theo khu vực — chỉ admin/host được chỉnh tay'} className={`text-center py-1.5 rounded-xl border text-[10px] leading-tight transition-all ${level===l.lv ? `${l.bg} ${l.border} ${l.text} font-bold shadow-sm` : 'bg-white border-slate-100 text-slate-500 hover:border-slate-200'} ${isAdmin ? 'cursor-pointer' : ''}`}>
             <div className="font-extrabold">{l.lv}</div>
             <div className="hidden sm:block text-[9px] mt-0.5 leading-none">{l.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Flash warning IV/V */}
+      {/* Flash warning IV/V — tĩnh, không pulse liên tục (gov ops calm) */}
       {flash && (
-        <div className="mt-3 bg-red-50 border border-red-200 rounded-xl px-3 py-2 flex items-center gap-2 animate-pulse">
-          <span className="w-2 h-2 bg-red-600 rounded-full animate-ping" />
+        <div className="mt-3 bg-red-50 border border-red-200 rounded-xl px-3 py-2 flex items-center gap-2">
+          <span className="w-2 h-2 bg-red-600 rounded-full" />
           <span className="text-xs font-extrabold text-red-700 tracking-wide">CẢNH BÁO: Kích hoạt kịch bản giám sát AI khẩn cấp</span>
         </div>
       )}

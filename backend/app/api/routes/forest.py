@@ -304,64 +304,29 @@ def history(administrative_unit_id: str, db: Session = Depends(get_db)):
 
 @router.post("/proposals/{proposal_id}/photos")
 def upload_photo(proposal_id: str, file: UploadFile = File(...), uploader_id: str = Form(...), lat: Optional[float] = Form(None), lng: Optional[float] = Form(None), db: Session = Depends(get_db)):
-    import uuid
-    from app.services.photo_service import MAX_UPLOAD_BYTES, make_variants
+    """Proposal photos via the unified EvidenceService (Module A refactor —
+    same contract as before, plus verification_status/source keys)."""
+    from app.services import evidence as ev
     p = db.get(DataProposal, proposal_id)
     if not p:
         raise HTTPException(status_code=404, detail="Proposal not found")
     data = file.file.read()
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 5MB)")
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty file")
-    try:
-        full_jpeg, thumb_jpeg, w, h_px = make_variants(data)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    digest = compute_hash(data)
-    ph = compute_perceptual_hash(data)
-    existing = db.query(PhotoEvidence).all()
-    existing_hashes = [e.file_hash for e in existing]
-    existing_phashes = [e.perceptual_hash for e in existing if e.perceptual_hash]
-    dup, _ = is_duplicate(digest, existing_hashes, ph, existing_phashes)
-    # geo check
     payload = json.loads(p.payload) if p.payload else {}
     geometry = payload.get("geometry")
     # try unit geometry fallback
     if not geometry:
         unit = db.get(AdministrativeUnit, p.administrative_unit_id)
         geometry = unit.geometry_dict() if unit else {"type": "Polygon", "coordinates": [[[108,13],[109,13],[109,14],[108,14],[108,13]]]}
-    geo_ok = check_geo_consistency(lat, lng, geometry)
-    pid = str(uuid.uuid4())
-    photo = PhotoEvidence(
-        id=pid,
-        proposal_id=proposal_id,
-        uploader_id=uploader_id,
-        file_path=f"db://photo_evidences/{pid}",
-        file_hash=digest,
-        perceptual_hash=ph,
-        data=full_jpeg,
-        thumb=thumb_jpeg,
-        content_type="image/jpeg",
-        width=w,
-        height=h_px,
-        location_lat=lat,
-        location_lng=lng,
-        is_duplicate=dup,
-        duplicate_of=_ if dup else None,
-        ai_analysis_status="PENDING",
-    )
-    db.add(photo)
+    out = ev.save_evidence(db, source="proposal", source_id=proposal_id, data=data,
+                           uploader_id=uploader_id, lat=lat, lng=lng, geometry=geometry)
     # maybe trigger community verify re-eval
-    db.flush()
     from app.services.community import maybe_auto_verify
     auto = maybe_auto_verify(db, proposal_id)
-    db.commit()
-    db.refresh(photo)
-    base = f"/api/forest/proposals/{proposal_id}/photos/{photo.id}/file"
-    return {"photo_id": photo.id, "is_duplicate": dup, "geo_check": geo_ok,
-            "auto_verify": auto, "hash": digest, "url": base, "thumb_url": base + "?thumb=1",
-            "width": photo.width, "height": photo.height}
+    base = f"/api/forest/proposals/{proposal_id}/photos/{out['id']}/file"
+    return {"photo_id": out["id"], "is_duplicate": out["is_duplicate"], "geo_check": out["geo_check"],
+            "auto_verify": auto, "hash": out["file_hash"], "url": base, "thumb_url": base + "?thumb=1",
+            "width": out["width"], "height": out["height"],
+            "verification_status": out["verification_status"], "source": out["source"]}
 
 
 @router.get("/proposals/{proposal_id}/photos/{photo_id}/file")

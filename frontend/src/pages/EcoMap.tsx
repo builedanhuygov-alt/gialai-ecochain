@@ -1,40 +1,22 @@
+import { useState } from 'react'
 import MapView from '../components/MapView'
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { API_BASE } from '../services/api'
-const API = API_BASE
+import WhatIfPanel from '../components/WhatIfPanel'
+
 export default function EcoMap(){
-  const [fire, setFire]= useState<any>(null)
-  const [selected, setSelected]= useState<any>(null)
-  useEffect(()=>{
-    fetch(`${API}/api/fire/risk?administrative_unit_id=GiaLai&lat=13.9&lon=108.3`).then(r=>r.json()).then(j=> setFire(j)).catch(()=>{})
-  },[])
+  const [showWhatIf, setShowWhatIf] = useState(false)
   return (
     <div style={{margin:-24, height:'calc(100vh - 64px)', position:'relative'}}>
-      <MapView onSelect={(type,id)=> setSelected({type,id})} />
-      {/* Hero fire risk overlay Sec37 — màu theo đúng CẤP I-V */}
-      {fire && (()=>{
-        const lv = fire.warning_level || 'IV'
-        const bg: Record<string,string> = { I:'#0EA5E9', II:'#10B981', III:'#F59E0B', IV:'#F97316', V:'#DC2626' }
-        const badge = bg[lv] || '#F97316'
-        return (
-        <div style={{position:'absolute', top:80, left:'50%', transform:'translateX(-50%)', background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:16, padding:'12px 16px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', border:'1px solid #FDBA74', display:'flex', gap:12, alignItems:'center', zIndex:5}}>
-          <span style={{background:badge, color:'#fff', padding:'4px 8px', borderRadius:999, fontSize:12, fontWeight:800}}>🔥 CẤP {lv}</span>
-          <span style={{fontSize:13, fontWeight:600}}>Rừng Gia Lai · Rủi ro {fire.risk_score}/100 · Tin cậy {fire.confidence}%</span>
-          <Link to="/events/1" style={{background:'#0F766E', color:'#fff', padding:'6px 10px', borderRadius:999, fontSize:12, textDecoration:'none'}}>Xem trí tuệ →</Link>
-        </div>
-        )
-      })()}
-      {selected && (
-        <div style={{position:'absolute', bottom:20, left:20, background:'rgba(255,255,255,0.96)', backdropFilter:'blur(12px)', borderRadius:16, padding:16, minWidth:300, boxShadow:'0 8px 24px rgba(0,0,0,0.12)'}}>
-          <div style={{fontWeight:700, fontSize:13}}>FOREST FIRE INTELLIGENCE</div>
-          <div style={{fontSize:13, marginTop:6}}>AI Risk: {fire?.risk_score ?? 82}/100 · Official: {fire?.official?.level ?? 'III'} · AI: {fire?.warning_level ?? 'IV'}</div>
-          <div style={{fontSize:12, color:'#64748B', marginTop:6}}>Vì sao: Nhiệt độ ↑ · Ẩm ↓ · NDMI ↓ · FIRMS hotspot ✓</div>
-          <div style={{display:'flex', gap:6, marginTop:10}}>
-            <Link to="/events/1" style={{background:'#0B1412', color:'#fff', padding:'6px 10px', borderRadius:999, fontSize:12, textDecoration:'none'}}>Điều tra</Link>
-            <Link to="/what-if" style={{background:'#fff', border:'1px solid #E2E8E5', padding:'6px 10px', borderRadius:999, fontSize:12, textDecoration:'none', color:'inherit'}}>Mô phỏng</Link>
-            <Link to="/missions" style={{background:'#0F766E', color:'#fff', padding:'6px 10px', borderRadius:999, fontSize:12, textDecoration:'none'}}>Tạo nhiệm vụ</Link>
-          </div>
+      <MapView />
+      <button onClick={()=> setShowWhatIf(v=> !v)} aria-expanded={showWhatIf}
+        title="Thử điều kiện khô/nóng hơn (THỬ NGHIỆM)"
+        style={{position:'absolute', top:12, right:12, zIndex:20, background:'#0B1412', color:'#fff',
+          border:0, borderRadius:999, padding:'8px 14px', fontSize:12, fontWeight:700, cursor:'pointer'}}>
+        Điều gì nếu… {showWhatIf ? '▴' : '▾'}
+      </button>
+      {showWhatIf && (
+        <div style={{position:'absolute', top:52, right:12, zIndex:20, width:'min(340px, calc(100vw - 24px))',
+          maxHeight:'calc(100% - 64px)', overflow:'auto'}}>
+          <WhatIfPanel />
         </div>
       )}
     </div>

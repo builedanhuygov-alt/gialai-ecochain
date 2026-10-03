@@ -245,6 +245,8 @@ async def hotspots_live(day_range: int = Query(default=1, ge=1, le=7), source: s
     """NASA FIRMS Area query — Gia Lai BBox 107.0,12.9,109.6,15.0 — requires NASA_FIRMS_MAP_KEY env"""
     from app.services.firms_service import fetch_firms_gialai, GIALAI_BBOX
     data=await fetch_firms_gialai(day_range=day_range, source=source)
+    from app.services.village_fire import attach_admin_locations
+    data["fires"] = attach_admin_locations(data.get("fires", []), data.get("status"))
     # Enrich with metadata for frontend consistency
     data["metadata"]={"source": data.get("source"), "provider":"NASA FIRMS", "timestamp": time.time(), "status": data.get("status"), "satellite": data.get("satellite"), "cache_status": data.get("cache"), "bbox": GIALAI_BBOX, "api_url": data.get("api_url")}
     return data
