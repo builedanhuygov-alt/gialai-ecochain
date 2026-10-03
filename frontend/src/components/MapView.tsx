@@ -765,6 +765,14 @@ export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts
   fireAlertsRef.current = fireAlerts
   const [communityReports, setCommunityReports] = useState<any[]>([])
   const communityMarkersRef = useRef(new Map<string, any>())
+  const [showCommunity, setShowCommunity] = useState(true)
+  // D. Bản đồ nhiệt nguy cơ (risk grid)
+  const [showRiskGrid, setShowRiskGrid] = useState(false)
+  const [riskMeta, setRiskMeta] = useState<any>(null)
+  const [riskLoading, setRiskLoading] = useState(false)
+  const [riskError, setRiskError] = useState('')
+  const [riskCell, setRiskCell] = useState<any>(null)
+  const [missionMsg, setMissionMsg] = useState('')
   const [selectedSignalId, setSelectedSignalId] = useState<string | null>(null)
   // Nhãn thôn tham chiếu chỉ hiện khi zoom gần (>=9) — tránh đè nhau ở tầm tỉnh.
   const [mapZoom, setMapZoom] = useState(7.8)
@@ -858,7 +866,8 @@ export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts
     if(!map) return
     const renderReports=()=>{
       const visibleIds = new Set<string>()
-      for(const report of communityReports){
+      if(showCommunity){
+        for(const report of communityReports){
         const coordinates = getCommunityReportCoordinates(report)
         if(!coordinates || typeof report.report_id !== 'string') continue
         visibleIds.add(report.report_id)
@@ -877,7 +886,8 @@ export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts
           window.dispatchEvent(new CustomEvent('ecochain-open-community-report', { detail:{ reportId: report.report_id } }))
         })
         communityMarkersRef.current.set(report.report_id, new (maplibregl as any).Marker({ element: el }).setLngLat([coordinates.lon, coordinates.lat]).addTo(map))
-      }
+        }
+      } // end if(showCommunity)
       for(const [reportId, marker] of communityMarkersRef.current){
         if(visibleIds.has(reportId)) continue
         try{ marker.remove() }catch{}
@@ -889,13 +899,60 @@ export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts
     return ()=>{
       map.off('load', renderReports)
     }
-  }, [communityReports])
+  }, [communityReports, showCommunity])
   useEffect(()=>()=>{
     for(const marker of communityMarkersRef.current.values()){
       try{ marker.remove() }catch{}
     }
     communityMarkersRef.current.clear()
   },[])
+  // D. Risk grid layer: fetch viewport cells, paint by level, click -> panel.
+  useEffect(()=>{
+    const map = mapRef.current as any
+    const drop = ()=>{ try{
+      if(!map) return
+      if(map.getLayer('risk-grid-fill')) map.removeLayer('risk-grid-fill')
+      if(map.getLayer('risk-grid-line')) map.removeLayer('risk-grid-line')
+      if(map.getSource('risk-grid-src')) map.removeSource('risk-grid-src')
+    }catch{} }
+    if(!map || !showRiskGrid){ drop(); setRiskCell(null); return }
+    let cancelled = false
+    const load = async ()=>{
+      setRiskLoading(true); setRiskError(''); setMissionMsg('')
+      try{
+        const b = map.getBounds()
+        const bbox = `${b.getWest().toFixed(2)},${b.getSouth().toFixed(2)},${b.getEast().toFixed(2)},${b.getNorth().toFixed(2)}`
+        let r = await fetch(`${API}/api/fire-risk/grid?bbox=${bbox}&cell_km=5`)
+        if(r.status === 400) r = await fetch(`${API}/api/fire-risk/grid?bbox=${bbox}&cell_km=10`)
+        if(!r.ok) throw new Error(`HTTP ${r.status}`)
+        const j = await r.json()
+        if(cancelled) return
+setRiskMeta(j.meta || null)
+        drop()
+        map.addSource('risk-grid-src', { type:'geojson', data: j } as any)
+        map.addLayer({ id:'risk-grid-fill', type:'fill', source:'risk-grid-src', paint:{
+          'fill-color': ['match', ['get','level'], 'V', '#DC2626', 'IV', '#F97316', 'III', '#F59E0B', 'II', '#10B981', 'I', '#0EA5E9', '#9CA3AF'],
+          'fill-opacity': 0.42 } } as any)
+        map.addLayer({ id:'risk-grid-line', type:'line', source:'risk-grid-src', paint:{
+          'line-color':'#0B1412', 'line-width':0.5, 'line-opacity':0.25 } } as any)
+      }catch(e:any){ if(!cancelled) setRiskError(`Không tải được lưới nguy cơ (${String(e.message || e)})`) }
+      finally{ if(!cancelled) setRiskLoading(false) }
+    }
+    if(map.isStyleLoaded()) load()
+    else map.once('load', load)
+    return ()=>{ cancelled = true }
+  },[showRiskGrid])
+  useEffect(()=>{
+    const map = mapRef.current as any
+    if(!map || !showRiskGrid) return
+    const onClick = (e:any)=>{
+      const f = e?.features?.[0]
+      if(!f) return
+      setRiskCell(f.properties || null); setMissionMsg('')
+    }
+    try{ map.on('click', 'risk-grid-fill', onClick) }catch{}
+    return ()=>{ try{ map.off('click', 'risk-grid-fill', onClick) }catch{} }
+  },[showRiskGrid])
   // P6 deep-link ?asset=… — đọc 1 lần khi mount, resolve khi data sẵn sàng.
   useEffect(()=>{
     try{ const a = new URLSearchParams(window.location.search).get('asset'); if(a) pendingAssetRef.current = a }catch{}
@@ -1498,7 +1555,49 @@ export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts
         </div>
       )}
 
-      {/* Control Panel — Glassmorphism + Collapse/Expand, logic giữ nguyên */}
+      {/* Ô nguy cơ được bấm: điểm, giải thích, đề xuất, tạo nhiệm vụ */}
+      {riskCell && (
+        <div style={{position:'absolute', left:12, top:112, zIndex:10, width:300, maxWidth:'80vw', background:'rgba(255,255,255,0.97)', borderRadius:12, padding:12, boxShadow:'0 8px 24px rgba(0,0,0,0.2)', border:'1px solid #E2E8E5'}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <b style={{fontSize:12}}>🗺️ Ô {riskCell.cell_id}</b>
+            <button onClick={()=> { setRiskCell(null); setMissionMsg('') }} aria-label="Đóng" style={{border:0, background:'transparent', cursor:'pointer'}}>✕</button>
+          </div>
+          {riskCell.origin === 'DEMO / SIMULATED' && (
+            <div style={{marginTop:6, fontSize:11, fontWeight:800, color:'#92400E', background:'#FEF3C7', border:'1px solid #FCD34D', borderRadius:8, padding:'6px 8px'}}>DỮ LIỆU GIẢ LẬP</div>
+          )}
+          {riskCell.score === null || riskCell.score === undefined ? (
+            <div style={{fontSize:12, color:'#64748B', marginTop:6}}>Ô này chưa có dữ liệu.</div>
+          ) : (
+            <>
+              <div style={{fontSize:20, fontWeight:800, marginTop:6}}>{riskCell.score} <span style={{fontSize:13}}>CẤP {riskCell.level}</span></div>
+              {(riskCell.top_factors || []).length > 0 && (
+                <div style={{fontSize:11, marginTop:4}}>Do: {(riskCell.top_factors || []).join(' · ')}</div>
+              )}
+              {typeof riskCell.data_completeness === 'number' && (
+                <div style={{fontSize:11, color:'#64748B'}}>Độ đầy dữ liệu: {Math.round(riskCell.data_completeness * 100)}%</div>
+              )}
+              {Array.isArray(riskCell.advice) && riskCell.advice.slice(0, 3).map((a: string, i: number)=> (
+                <div key={i} style={{fontSize:11, marginTop:3}}>→ {a}</div>
+              ))}
+              <button onClick={async ()=>{
+                setMissionMsg('')
+                try{
+                  const r = await fetch(`${API}/api/missions`, { method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ area: `Ô ${riskCell.cell_id} (${riskCell.cx}, ${riskCell.cy})`,
+                      risk_at_creation: riskCell.score,
+                      priority: riskCell.level === 'V' ? 'CRITICAL' : riskCell.level === 'IV' ? 'HIGH' : 'NORMAL' }) })
+                  const j = await r.json().catch(()=> ({}))
+                  if(!r.ok) throw new Error(j.detail || `HTTP ${r.status}`)
+                  setMissionMsg(`Đã tạo nhiệm vụ ${j.id || ''} — xem ở trang Nhiệm vụ.`)
+                }catch(e:any){ setMissionMsg(`Không tạo được nhiệm vụ: ${String(e.message || e)}`) }
+              }} style={{marginTop:8, fontSize:12, background:'#0F766E', color:'#fff', border:0, borderRadius:999, padding:'8px 14px', cursor:'pointer', fontWeight:700}}>
+                + Tạo nhiệm vụ kiểm tra
+              </button>
+              {missionMsg && <div style={{fontSize:11, marginTop:6, color:'#0F766E'}}>{missionMsg}</div>}
+            </>
+          )}
+        </div>
+      )}
       {execView ? (
         <button onClick={()=> setExecView(false)} title="Hiện giao diện đầy đủ" style={{position:'absolute', top:64, left:12, zIndex:10, display:'flex', gap:6, alignItems:'center', background:'rgba(255,255,255,0.95)', border:'1px solid #E2E8E5', borderRadius:999, padding:'8px 16px', fontSize:12, fontWeight:800, cursor:'pointer', boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>👁 Hiện giao diện</button>
       ) : !showLayers ? (
@@ -1556,6 +1655,17 @@ export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts
             <button onClick={fitHotspots} style={{border:0, borderRadius:999, padding:'4px 10px', fontSize:11, fontWeight:700, cursor:'pointer'}}>Phóng tới</button>
           </div>
         )}
+        <div style={{fontSize:11, fontWeight:700, opacity:.9}}>Bản đồ nhiệt nguy cơ</div>
+        <label style={{display:'flex', gap:6, alignItems:'center', background: showRiskGrid?'rgba(16,185,129,0.25)':'rgba(255,255,255,0.08)', padding:'6px 8px', borderRadius:8, fontSize:12, border:'1px solid rgba(255,255,255,0.15)', cursor:'pointer', color:'#fff'}}>
+          <input type="checkbox" checked={showRiskGrid} onChange={()=> setShowRiskGrid(v=> !v)} /> 🗺️ Lưới nguy cơ (ô 5 km)
+        </label>
+        {riskLoading && <div style={{fontSize:11, opacity:.8}}>Đang tải lưới nguy cơ…</div>}
+        {riskError && <div style={{fontSize:11, background:'rgba(220,38,38,0.25)', padding:'6px 8px', borderRadius:8}}>{riskError}</div>}
+        {riskMeta && showRiskGrid && <div style={{fontSize:10, opacity:.75}}>{riskMeta.n_cells} ô · {riskMeta.fires} · {riskMeta.origin}</div>}
+        <label style={{display:'flex', gap:6, alignItems:'center', background: showCommunity?'rgba(16,185,129,0.25)':'rgba(255,255,255,0.08)', padding:'6px 8px', borderRadius:8, fontSize:12, border:'1px solid rgba(255,255,255,0.15)', cursor:'pointer', color:'#fff'}}>
+          <input type="checkbox" checked={showCommunity} onChange={()=> setShowCommunity(v=> !v)} /> 🟢 Báo cáo cộng đồng
+        </label>
+        <div style={{fontSize:10, opacity:.65}}>Điểm FIRMS bật/tắt ở mục “🔥 Điểm nhiệt FIRMS”.</div>
         {activeSat.ndvi && info?.layer === 'ndvi' && ndviValue(info.ndvi) !== null && (
           <div style={{fontSize:11, background:'rgba(255,255,255,0.08)', padding:'6px 8px', borderRadius:8}}>
             <div style={{display:'flex', justifyContent:'space-between'}}><span>🌿 NDVI khu vực</span><b>{ndviValue(info.ndvi)!.toFixed(2)}</b></div>
@@ -1658,6 +1768,16 @@ export default function MapView({ onSelect, fill, fireAlerts: suppliedFireAlerts
           {activeSat.hotspot && <div>🌡️ Nhiệt nhân tạo (loại khỏi cảnh báo)</div>}
           {activeSat.ndvi && <div>🌿 NDVI (raster)</div>}
           {activeSat.s1 && <div>📡 Sentinel-1 (raster)</div>}
+          {showRiskGrid && <div className="eleg-sec">BẢN ĐỒ NHIỆT NGUY CƠ</div>}
+          {showRiskGrid && LEVEL_ORDER.map(lv=> (
+            <div key={`rg-${lv}`} style={{display:'flex', gap:6, alignItems:'center'}}>
+              <span style={{width:10, height:10, borderRadius:2, background:LEVEL_COLORS[lv], display:'inline-block', flex:'none'}} />Nguy cơ {lv}
+            </div>
+          ))}
+          {showRiskGrid && <div>⬜ Ô xám — chưa có dữ liệu</div>}
+          {showRiskGrid && riskMeta?.origin === 'DEMO / SIMULATED' && (
+            <div style={{marginTop:6, padding:'6px 8px', background:'#FEF3C7', borderRadius:8, color:'#92400E', fontWeight:700}}>DỮ LIỆU GIẢ LẬP</div>
+          )}
           <div>⚠ Vùng trọng điểm (chưa cháy)</div>
           <div>🏠 Cháy nhà · 🏭 Cháy cơ sở</div>
           {assetVis.historical && <div>🔥 Từng cháy 2026 · 🏠 Sự cố tử vong</div>}
