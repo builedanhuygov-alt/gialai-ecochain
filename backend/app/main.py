@@ -111,6 +111,7 @@ def create_app() -> FastAPI:
     from app.api.routes.fire_risk import router as fire_risk_router
     from app.api.routes.phase5 import router as phase5_router
     from app.api.routes.community import router as community_router
+    from app.api.routes.missions import router as missions_router
     from app.api.routes.geospatial import router as geo_router
     from app.api.routes.fire import router as fire_router
     from app.api.routes.model_switch import router as model_router
@@ -133,6 +134,7 @@ def create_app() -> FastAPI:
     app.include_router(fire_risk_router, prefix="/api", tags=["FireRisk"])
     app.include_router(phase5_router, prefix="/api", tags=["Alerts"])
     app.include_router(community_router, prefix="/api", tags=["Community"])
+    app.include_router(missions_router, prefix="/api", tags=["Missions"])
     app.include_router(geo_router, prefix="/api", tags=["Geospatial"])
     app.include_router(fire_router, prefix="/api", tags=["Fire"])
     app.include_router(model_router, prefix="/api", tags=["ModelSwitch"])

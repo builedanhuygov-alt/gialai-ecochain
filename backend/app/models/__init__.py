@@ -8,6 +8,7 @@ from app.models.pipeline import (
 )
 from app.models.query_log import EEQueryLog, DataLineage, AutomationStatus
 from app.models.community import CommunityConfirmation, PhotoEvidence, FieldVerificationTask, CitizenReport, ReportConfirmation
+from app.models.mission import Mission, FieldResult
 from app.models.ops import ForestJob, MonitoredArea, Notification, AuditLog, QueryCacheEntry, QuotaLog
 from app.models.risk import RiskSignal, RiskScore, RiskHistory, Alert, Incident, IncidentEvidence, AgentRun, AgentResult, CarbonRecord, CarbonModel, RankingSnapshot, Achievement, TrustScore
 from app.models.fire import OfficialFireWarning, AIFirePrediction
@@ -31,6 +32,7 @@ __all__ = [
     "PhotoEvidence",
     "CitizenReport",
     "ReportConfirmation",
+    "Mission", "FieldResult",
     "FieldVerificationTask",
     "ForestJob",
     "MonitoredArea",
